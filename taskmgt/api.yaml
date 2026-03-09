@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: taskmgt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/ennui2342/taskmgt-api:latest
+          ports:
+            - containerPort: 8081
+          env:
+            - name: DATABASE_PATH
+              value: /data/tasks.db
+            - name: FILTERS_PATH
+              value: /data/filters.json
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /tasks?limit=1
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: taskmgt-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: taskmgt
+spec:
+  selector:
+    app: api
+  ports:
+    - port: 8081
+      targetPort: 8081

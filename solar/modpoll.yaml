@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: modpoll
+  labels:
+    app: modpoll
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: modpoll
+  template:
+    metadata:
+      labels:
+        app: modpoll
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: modpoll
+          image: helloysd/modpoll
+          command: ["modpoll", "--tcp=192.168.0.188", "--config=/etc/modpoll.cfg", "--mqtt-host=mosquitto", "--mqtt-topic-prefix=solar/"]
+          volumeMounts:
+          - name: modpoll-config-volume
+            mountPath: /etc/modpoll.cfg
+            subPath: modpoll.cfg
+      volumes:
+        - name: modpoll-config-volume
+          configMap:
+            name: modpoll-config

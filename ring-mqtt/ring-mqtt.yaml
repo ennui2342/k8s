@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ring-mqtt
+  namespace: home-assistant
+  labels:
+    app: ring-mqtt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ring-mqtt
+  template:
+    metadata:
+      labels:
+        app: ring-mqtt
+    spec:
+      containers:
+      - name: ring-mqtt
+        image: tsightler/ring-mqtt
+        ports:
+        - containerPort: 8554
+        volumeMounts:
+        - name: ring-mqtt-data
+          mountPath: /data
+      volumes:
+        - name: ring-mqtt-data
+          persistentVolumeClaim:
+            claimName: ring-mqtt-pvc-data
