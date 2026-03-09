@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: ghcr.io/ennui2342/taskmgt-frontend:latest
+          image: ghcr.io/ennui2342/taskmgt-frontend:latest # {"$imagepolicy": "flux-system:taskmgt-frontend"}
           ports:
             - containerPort: 80
           readinessProbe:
