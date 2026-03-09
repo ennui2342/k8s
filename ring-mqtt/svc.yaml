@@ -1,0 +1,14 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: ring-mqtt
+  namespace: home-assistant
+spec:
+  ports:
+  - name: ring-mqtt-rtsp
+    port: 8554
+    targetPort: 8554
+    nodePort: 30002
+  type: NodePort
+  selector:
+    app: ring-mqtt

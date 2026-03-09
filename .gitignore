@@ -1,0 +1,34 @@
+# Inactive / not-yet-cleaned-up service directories
+magic-mirror/
+openhab/
+resilosync/
+
+# Separate git repos (manage independently)
+indi-allsky/
+home-assistant/src/
+
+# Old / backup / draft files
+home-assistant/old/
+home-assistant/ha-ingress.yaml.old
+nfs/old/
+tick/old/
+openhab/old/
+**/*.old
+**/*.bak
+**/*.new
+
+# Scratch / dev notes (not manifests)
+nfs/a
+solar/a
+solar/b
+solar/todo
+solar/foxess.cfg
+tick/influx
+
+# npm artifacts
+node_modules/
+package.json
+package-lock.json
+
+# Claude per-project memory (local only)
+.claude/

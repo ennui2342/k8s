@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mosquitto
+  labels:
+    app: mosquitto
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mosquitto
+  template:
+    metadata:
+      labels:
+        app: mosquitto
+    spec:
+      containers:
+      - name: mosquitto
+        image: eclipse-mosquitto
+        ports:
+        - containerPort: 9001
+        - containerPort: 1883
+        volumeMounts:
+        - name: etc-localtime
+          mountPath: /etc/localtime
+          readOnly: true
+        - mountPath: /mosquitto/config/
+          name: config
+      volumes:
+      - name: etc-localtime
+        hostPath:
+          path: /usr/share/zoneinfo/Europe/London
+      - name: config
+        configMap:
+          name: mosquitto-config

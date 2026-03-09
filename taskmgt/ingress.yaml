@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: taskmgt
+  namespace: taskmgt
+  annotations:
+    kubernetes.io/ingress.class: traefik
+spec:
+  rules:
+    - host: tasks.k8s.ecafe.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
