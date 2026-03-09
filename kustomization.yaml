@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - cert-manager/
+  - grafana/
+  - home-assistant/
+  - mosquitto/
+  - nfs/
+  - ring-mqtt/
+  - solar/
+  - taskmgt/
+  - tick/
+  - website/
+  # tailscale/ intentionally excluded — managed via Helm/init.sh, no raw manifests
