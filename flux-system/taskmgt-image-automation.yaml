@@ -1,6 +1,6 @@
 ---
 # Watch ghcr.io/ennui2342/taskmgt-api for new tags
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageRepository
 metadata:
   name: taskmgt-api
@@ -10,7 +10,7 @@ spec:
   interval: 5m
 ---
 # Watch ghcr.io/ennui2342/taskmgt-frontend for new tags
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageRepository
 metadata:
   name: taskmgt-frontend
@@ -20,7 +20,7 @@ spec:
   interval: 5m
 ---
 # Select latest semver tag matching 1.YYYYMMDD.RUNNUMBER pattern
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImagePolicy
 metadata:
   name: taskmgt-api
@@ -32,7 +32,7 @@ spec:
     semver:
       range: ">=1.0.0"
 ---
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImagePolicy
 metadata:
   name: taskmgt-frontend
@@ -45,7 +45,7 @@ spec:
       range: ">=1.0.0"
 ---
 # Commit updated image tags back to this repo
-apiVersion: image.toolkit.fluxcd.io/v1beta1
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageUpdateAutomation
 metadata:
   name: taskmgt
