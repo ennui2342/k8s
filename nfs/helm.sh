@@ -1,1 +1,0 @@
-helm install nfs-subdir-external-provisioner nfs-subdir-external-provisioner/nfs-subdir-external-provisioner --set nfs.server=192.168.0.76 --set nfs.path=/mnt/md0/k8s --set storageClass.archiveOnDelete=false
