@@ -23,6 +23,8 @@ spec:
               value: /data/tasks.db
             - name: FILTERS_PATH
               value: /data/filters.json
+            - name: MQTT_HOST
+              value: mosquitto.default.svc.cluster.local
           volumeMounts:
             - name: data
               mountPath: /data
