@@ -66,8 +66,8 @@ spec:
       messageTemplate: |
         chore: update taskmgt image tags
 
-        {{range .Updated.Images -}}
-        - {{.}}
+        {{range .Changed.Changes -}}
+        - {{.OldValue}} -> {{.NewValue}}
         {{end -}}
     push:
       branch: main
