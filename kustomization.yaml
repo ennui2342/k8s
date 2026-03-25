@@ -11,5 +11,5 @@ resources:
   - solar/
   - taskmgt/
   - tick/
+  - tailscale/
   - website/
-  # tailscale/ intentionally excluded — managed via Helm/init.sh, no raw manifests
