@@ -30,9 +30,6 @@ kind: Service
 metadata:
   name: frontend
   namespace: taskmgt
-  annotations:
-    tailscale.com/expose: "true"
-    tailscale.com/hostname: "taskmgt"
 spec:
   selector:
     app: frontend
