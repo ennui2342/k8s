@@ -33,3 +33,39 @@ spec:
   resources:
     requests:
       storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: homeassistant-pv-media
+  namespace: home-assistant
+spec:
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: 100Gi
+  claimRef:
+    name: homeassistant-pvc-media
+    namespace: home-assistant
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-client
+  volumeMode: Filesystem
+  nfs:
+    path: /mnt/md0/k8s/homeassistant-media
+    server: 192.168.0.76
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: homeassistant-pvc-media
+  namespace: home-assistant
+  labels:
+    app: homeassistant-label
+spec:
+  volumeName: homeassistant-pv-media
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 100Gi

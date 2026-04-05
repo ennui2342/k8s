@@ -26,6 +26,8 @@ spec:
             readOnly: true
           - mountPath: /config
             name: homeassistant-pv-config
+          - mountPath: /media
+            name: homeassistant-pv-media
       restartPolicy: Always
       volumes:
         - name: etc-localtime
@@ -34,4 +36,7 @@ spec:
         - name: homeassistant-pv-config
           persistentVolumeClaim:
             claimName: homeassistant-pvc-config
+        - name: homeassistant-pv-media
+          persistentVolumeClaim:
+            claimName: homeassistant-pvc-media
 status: {}
