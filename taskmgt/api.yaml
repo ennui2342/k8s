@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: ghcr.io/ennui2342/taskmgt-api:1.20260405.42 # {"$imagepolicy": "flux-system:taskmgt-api"}
+          image: ghcr.io/ennui2342/taskmgt-api:1.20260416.43 # {"$imagepolicy": "flux-system:taskmgt-api"}
           ports:
             - containerPort: 8081
           env:
