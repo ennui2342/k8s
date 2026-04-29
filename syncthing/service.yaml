@@ -14,7 +14,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: syncthing-sync-tcp
+  name: syncthing-sync
   namespace: default
 spec:
   type: NodePort
@@ -26,17 +26,6 @@ spec:
     targetPort: 22000
     nodePort: 32200
     protocol: TCP
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: syncthing-sync-udp
-  namespace: default
-spec:
-  type: NodePort
-  selector:
-    app: syncthing
-  ports:
   - name: sync-udp
     port: 22000
     targetPort: 22000
