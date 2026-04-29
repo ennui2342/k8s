@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: syncthing
+  namespace: default
+  labels:
+    app: syncthing
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: syncthing
+  template:
+    metadata:
+      labels:
+        app: syncthing
+    spec:
+      containers:
+      - name: syncthing
+        image: lscr.io/linuxserver/syncthing:latest
+        env:
+        - name: TZ
+          value: Europe/London
+        - name: PUID
+          value: "911"
+        - name: PGID
+          value: "911"
+        ports:
+        - name: web-ui
+          containerPort: 8384
+          protocol: TCP
+        - name: sync-tcp
+          containerPort: 22000
+          protocol: TCP
+        - name: sync-udp
+          containerPort: 22000
+          protocol: UDP
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: config
+        persistentVolumeClaim:
+          claimName: syncthing-config-pvc
+      - name: data
+        persistentVolumeClaim:
+          claimName: syncthing-data-pvc
