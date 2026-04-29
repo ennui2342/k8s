@@ -29,5 +29,5 @@ spec:
   - name: sync-udp
     port: 22000
     targetPort: 22000
-    nodePort: 32200
+    nodePort: 32201
     protocol: UDP
