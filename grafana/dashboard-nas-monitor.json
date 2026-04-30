@@ -1,0 +1,316 @@
+{
+  "dashboard": {
+    "id": 4,
+    "panels": [
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "Kb3eTeiRk"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "max": 100,
+            "min": 0,
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "targets": [
+          {
+            "datasource": {
+              "type": "influxdb",
+              "uid": "Kb3eTeiRk"
+            },
+            "query": "SELECT mean(\"load\") FROM \"nas_30d\".\"nas_cpu\" WHERE $timeFilter GROUP BY time($__interval) fill(null)",
+            "rawQuery": true,
+            "refId": "A",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "CPU Load per Core (%)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "Kb3eTeiRk"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "max": 100,
+            "min": 0,
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        },
+        "id": 2,
+        "targets": [
+          {
+            "datasource": {
+              "type": "influxdb",
+              "uid": "Kb3eTeiRk"
+            },
+            "query": "SELECT mean(\"used\") / mean(\"size\") * 100 FROM \"nas_30d\".\"nas_storage\" WHERE \"description\"='Physical memory' AND $timeFilter GROUP BY time($__interval) fill(null)",
+            "rawQuery": true,
+            "refId": "A",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "Memory Usage (%)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "Kb3eTeiRk"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "max": 100,
+            "min": 0,
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        },
+        "id": 3,
+        "targets": [
+          {
+            "datasource": {
+              "type": "influxdb",
+              "uid": "Kb3eTeiRk"
+            },
+            "query": "SELECT mean(\"used\") / mean(\"size\") * 100 FROM \"nas_30d\".\"nas_storage\" WHERE \"description\"='/mnt/md0' AND $timeFilter GROUP BY time($__interval) fill(null)",
+            "rawQuery": true,
+            "refId": "A",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "/mnt/md0 Disk Usage (%)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "Kb3eTeiRk"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "Bps"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "bytes_out"
+              },
+              "properties": [
+                {
+                  "id": "custom.transform",
+                  "value": "negative-Y"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        },
+        "id": 4,
+        "targets": [
+          {
+            "datasource": {
+              "type": "influxdb",
+              "uid": "Kb3eTeiRk"
+            },
+            "query": "SELECT non_negative_derivative(mean(\"bytes_in\"), 1s) AS \"bytes_in\", non_negative_derivative(mean(\"bytes_out\"), 1s) AS \"bytes_out\" FROM \"nas_30d\".\"nas_network\" WHERE \"ifname\"='eth0' AND $timeFilter GROUP BY time($__interval) fill(null)",
+            "rawQuery": true,
+            "refId": "A",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "eth0 Network Throughput",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "Kb3eTeiRk"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 70
+                },
+                {
+                  "color": "red",
+                  "value": 90
+                }
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 16
+        },
+        "id": 5,
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "influxdb",
+              "uid": "Kb3eTeiRk"
+            },
+            "query": "SELECT last(\"used\") / last(\"size\") * 100 FROM \"nas_30d\".\"nas_storage\" WHERE \"description\"='/mnt/md0' AND $timeFilter",
+            "rawQuery": true,
+            "refId": "A",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "/mnt/md0 Disk Usage (current)",
+        "type": "gauge"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "Kb3eTeiRk"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 70
+                },
+                {
+                  "color": "red",
+                  "value": 90
+                }
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 16
+        },
+        "id": 6,
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "influxdb",
+              "uid": "Kb3eTeiRk"
+            },
+            "query": "SELECT last(\"used\") / last(\"size\") * 100 FROM \"nas_30d\".\"nas_storage\" WHERE \"description\"='Physical memory' AND $timeFilter",
+            "rawQuery": true,
+            "refId": "A",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "Memory Usage (current)",
+        "type": "gauge"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "Kb3eTeiRk"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "max": 100,
+            "min": 0,
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        },
+        "id": 7,
+        "targets": [
+          {
+            "datasource": {
+              "type": "influxdb",
+              "uid": "Kb3eTeiRk"
+            },
+            "query": "SELECT mean(\"used\") / mean(\"size\") * 100 FROM \"nas_30d\".\"nas_storage\" WHERE $timeFilter GROUP BY time($__interval), \"description\" fill(null)",
+            "rawQuery": true,
+            "refId": "A",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "All Storage Usage (%)",
+        "type": "timeseries"
+      }
+    ],
+    "refresh": "1m",
+    "schemaVersion": 36,
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "timezone": "browser",
+    "title": "NAS Monitor",
+    "uid": "nas-monitor",
+    "version": 1
+  },
+  "overwrite": true
+}

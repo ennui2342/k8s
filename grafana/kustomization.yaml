@@ -2,6 +2,8 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: monitoring
 resources:
+  - grafana-admin-secret.yaml
+  - grafana.yaml
+  - grafana-dashboards.yaml
   - ingress.yaml
   - pv.yaml
-  # grafana-template.yaml excluded — Helm-managed; grafana-values.yaml is Helm config, not k8s manifest
