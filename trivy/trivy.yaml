@@ -102,6 +102,7 @@ spec:
               trivy k8s \
                 --severity HIGH,CRITICAL \
                 --ignore-unfixed \
+                --components workload \
                 --report summary \
                 --quiet \
                 --timeout 20m \
