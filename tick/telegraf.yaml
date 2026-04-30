@@ -40,9 +40,6 @@ data:
       topic_tag = "topic"
       client_id = "telegraf"
       data_format = "json"
-      json_time_key = "dateTime"
-      json_time_format = "unix"
-      json_timezone = "Europe/London"
 
     [[inputs.snmp]]
       agents = ["udp://192.168.0.76:161"]
