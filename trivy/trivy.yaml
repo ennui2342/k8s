@@ -61,6 +61,8 @@ data:
         name = resource.get('Name', 'unknown')
         for result in resource.get('Results', []):
             image = result.get('Target', 'unknown')
+            if '(' not in image:
+                continue
             vulns = result.get('Vulnerabilities') or []
             if not vulns:
                 continue
