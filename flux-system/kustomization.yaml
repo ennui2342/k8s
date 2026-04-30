@@ -5,3 +5,19 @@ resources:
 - gotk-sync.yaml
 - taskmgt-image-automation.yaml
 - discord-alert.yaml
+- discord-webhook-secret.yaml
+patches:
+- path: gotk-patches.yaml
+  target:
+    kind: Deployment
+    name: kustomize-controller
+- patch: |
+    - op: add
+      path: /spec/decryption
+      value:
+        provider: sops
+        secretRef:
+          name: sops-age
+  target:
+    kind: Kustomization
+    name: flux-system

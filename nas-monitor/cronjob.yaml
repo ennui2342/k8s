@@ -31,25 +31,7 @@ spec:
                 exit 0
               fi
 
-              result=$(echo "$mdstat" | python3 -c "
-import re, sys
-mdstat = sys.stdin.read()
-issues = []
-if '(F)' in mdstat:
-    issues.append('Drive(s) marked as failed')
-for m in re.finditer(r'^(md\w+)\s*:(.+?)(?=^md|\Z)', mdstat, re.MULTILINE | re.DOTALL):
-    block = m.group(0)
-    name = m.group(1)
-    drive_count = len(re.findall(r'\w+\[\d+\]', block.split('\n')[0]))
-    s = re.search(r'\[([U_]+)\]', block)
-    if s:
-        u_count = s.group(1).count('U')
-        if u_count < drive_count:
-            issues.append(name + ': ' + str(u_count) + '/' + str(drive_count) + ' drives active')
-if issues:
-    print('\n'.join(issues))
-    sys.exit(1)
-")
+              result=$(echo "$mdstat" | python3 -c "import re,sys;m=sys.stdin.read();failed='(F)'in m;pairs=[(x.group(1),len(re.findall(r'\w+\[\d+\]',x.group(0).split('\n')[0])),re.search(r'\[([U_]+)\]',x.group(0)))for x in re.finditer(r'^(md\w+)\s*:(.+?)(?=^md|\Z)',m,re.M|re.S)];degraded=[(n,s.group(1).count('U'),dc)for n,dc,s in pairs if s and s.group(1).count('U')<dc];i=(['Drive(s) marked as failed']if failed else[])+[n+': '+str(u)+'/'+str(dc)+' drives active'for n,u,dc in degraded];print('\n'.join(i));sys.exit(bool(i))")
 
               if [ $? -eq 1 ]; then
                 payload=$(jq -n --arg msg "$result" \

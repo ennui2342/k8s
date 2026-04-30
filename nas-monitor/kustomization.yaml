@@ -3,3 +3,5 @@ kind: Kustomization
 namespace: monitoring
 resources:
   - cronjob.yaml
+  - discord-webhook-secret.yaml
+  - nas-ssh-key-secret.yaml
