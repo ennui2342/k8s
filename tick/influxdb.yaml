@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: influxdb
+  namespace: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: influxdb
+  namespace: monitoring
+data:
+  influxdb.conf: |
+    reporting-disabled = false
+    bind-address = ":8088"
+
+    [meta]
+      dir = "/var/lib/influxdb/meta"
+
+    [data]
+      dir = "/var/lib/influxdb/data"
+      wal-dir = "/var/lib/influxdb/wal"
+
+    [coordinator]
+    [retention]
+    [shard-precreation]
+    [monitor]
+    [subscriber]
+    [http]
+    [continuous_queries]
+    [logging]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: influxdb
+  namespace: monitoring
+spec:
+  type: ClusterIP
+  ports:
+  - name: api
+    port: 8086
+    targetPort: 8086
+  - name: rpc
+    port: 8088
+    targetPort: 8088
+  selector:
+    app: influxdb
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: influxdb
+  namespace: monitoring
+spec:
+  replicas: 1
+  serviceName: influxdb
+  selector:
+    matchLabels:
+      app: influxdb
+  template:
+    metadata:
+      labels:
+        app: influxdb
+    spec:
+      serviceAccountName: influxdb
+      containers:
+      - name: influxdb
+        image: influxdb:1.8.0
+        ports:
+        - name: api
+          containerPort: 8086
+        - name: rpc
+          containerPort: 8088
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: api
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: api
+          initialDelaySeconds: 5
+          timeoutSeconds: 1
+        volumeMounts:
+        - name: influxdb-data
+          mountPath: /var/lib/influxdb
+        - name: config
+          mountPath: /etc/influxdb
+      volumes:
+      - name: config
+        configMap:
+          name: influxdb
+  volumeClaimTemplates:
+  - metadata:
+      name: influxdb-data
+    spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: nfs-client
+      resources:
+        requests:
+          storage: 8Gi
