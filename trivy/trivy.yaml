@@ -176,7 +176,8 @@ spec:
                 --exit-code 1 \
                 --output /report/output.json \
                 --quiet \
-                --timeout 20m
+                --timeout 45m \
+                --parallel 10
               echo $? > /report/exit_code
             volumeMounts:
             - name: report
