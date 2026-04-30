@@ -1,0 +1,31 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ha-recording-cleanup
+  namespace: home-assistant
+spec:
+  schedule: "0 3 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: cleanup
+            image: alpine:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              count=$(find /media/recordings -type f -mtime +14 | wc -l | tr -d ' ')
+              find /media/recordings -type f -mtime +14 -delete
+              find /media/recordings -mindepth 1 -type d -empty -delete
+              echo "Deleted ${count} recording(s) older than 14 days"
+            volumeMounts:
+            - name: media
+              mountPath: /media
+          volumes:
+          - name: media
+            nfs:
+              server: 192.168.0.76
+              path: /mnt/md0/k8s/homeassistant-media
