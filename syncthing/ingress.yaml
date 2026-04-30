@@ -5,7 +5,6 @@ metadata:
   namespace: default
   annotations:
     kubernetes.io/ingress.class: traefik
-    cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   rules:
   - host: syncthing.k8s.ecafe.org
@@ -18,7 +17,3 @@ spec:
             name: syncthing
             port:
               number: 8384
-  tls:
-  - hosts:
-    - syncthing.k8s.ecafe.org
-    secretName: syncthing.k8s.ecafe.org-production
