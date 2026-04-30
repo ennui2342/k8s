@@ -105,7 +105,7 @@ spec:
                 --report summary \
                 --quiet \
                 --timeout 20m \
-                cluster > /report/output.txt 2>&1
+                > /report/output.txt 2>&1
               echo $? > /report/exit_code
               cat /report/output.txt
             volumeMounts:
