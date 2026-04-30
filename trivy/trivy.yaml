@@ -32,6 +32,52 @@ subjects:
   name: trivy
   namespace: monitoring
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trivy-notify-script
+  namespace: monitoring
+data:
+  notify.py: |
+    import json, subprocess, os, sys
+
+    exit_code = int(open('/report/exit_code').read().strip())
+    report = open('/report/output.txt').read()
+    webhook = os.environ['DISCORD_WEBHOOK']
+
+    if exit_code == 0:
+        print('No fixable HIGH/CRITICAL CVEs found')
+        sys.exit(0)
+
+    print('Vulnerabilities found, sending notifications...')
+
+    message = (
+        '⚠️ **Weekly CVE Scan** — fixable HIGH/CRITICAL vulnerabilities found\n'
+        '```\n' + report[:1700] + '\n```'
+    )
+    r = subprocess.run(
+        ['curl', '-sf', '-X', 'POST', webhook,
+         '-H', 'Content-Type: application/json',
+         '-d', json.dumps({'content': message})],
+        capture_output=True
+    )
+    if r.returncode != 0:
+        print('Discord notification failed', file=sys.stderr)
+    else:
+        print('Discord notification sent')
+
+    r = subprocess.run(
+        ['curl', '-sf', '-X', 'POST', 'http://api.taskmgt.svc.cluster.local:8081/tasks',
+         '-H', 'Content-Type: application/json',
+         '-d', json.dumps({'text': 'Review CVE scan — fixable HIGH/CRITICAL in cluster !1 #security #cve <cli.cve-scanner'})],
+        capture_output=True
+    )
+    if r.returncode != 0:
+        print('tm task creation failed', file=sys.stderr)
+    else:
+        data = json.loads(r.stdout)
+        print('tm task created:', data.get('id', '?'))
+---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -79,46 +125,15 @@ spec:
             - -c
             - |
               apk add --no-cache --quiet curl python3
-
-              EXIT_CODE=$(cat /report/exit_code)
-
-              if [ "$EXIT_CODE" -eq 0 ]; then
-                echo "No fixable HIGH/CRITICAL CVEs found - nothing to report"
-                exit 0
-              fi
-
-              echo "Vulnerabilities found - sending notifications"
-
-              python3 - << 'PYEOF'
-import json, subprocess, os, sys
-
-report = open('/report/output.txt').read()
-webhook = os.environ['DISCORD_WEBHOOK']
-
-message = '⚠️ **Weekly CVE Scan** — fixable HIGH/CRITICAL vulnerabilities found\n```\n' + report[:1700] + '\n```'
-payload = json.dumps({'content': message})
-
-r = subprocess.run(
-    ['curl', '-sf', '-X', 'POST', webhook, '-H', 'Content-Type: application/json', '-d', payload],
-    capture_output=True
-)
-if r.returncode != 0:
-    print('Discord notification failed', file=sys.stderr)
-
-r = subprocess.run(
-    ['curl', '-sf', '-X', 'POST', 'http://api.taskmgt.svc.cluster.local:8081/tasks',
-     '-H', 'Content-Type: application/json',
-     '-d', json.dumps({'text': 'Review CVE scan — fixable HIGH/CRITICAL in cluster !1 #security #cve <cli.cve-scanner'})],
-    capture_output=True
-)
-if r.returncode != 0:
-    print('tm task creation failed', file=sys.stderr)
-else:
-    print('tm task created:', json.loads(r.stdout).get('id', '?'))
-PYEOF
+              python3 /scripts/notify.py
             volumeMounts:
             - name: report
               mountPath: /report
+            - name: scripts
+              mountPath: /scripts
           volumes:
           - name: report
             emptyDir: {}
+          - name: scripts
+            configMap:
+              name: trivy-notify-script
