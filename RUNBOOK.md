@@ -149,6 +149,24 @@ kubectl get secret grafana -n monitoring \
 Store in KeePass. If a fixed password is preferred, set `adminPassword`
 in `grafana/grafana-values.yaml` via a SOPS-encrypted secret.
 
+### Grafana dashboards
+
+Dashboards are stored as JSON in `grafana/*.json`. Re-import them after
+the `monitoring` namespace is up and you have the admin password:
+
+```sh
+GRAFANA_PASS=$(kubectl get secret grafana -n monitoring \
+  -o jsonpath='{.data.admin-password}' | base64 -d)
+
+for f in grafana/*.json; do
+  curl -s -X POST \
+    -H "Content-Type: application/json" \
+    -u "admin:${GRAFANA_PASS}" \
+    -d @"$f" \
+    http://grafana.k8s.ecafe.org/api/dashboards/db
+done
+```
+
 ### Tailscale
 
 The `operator-oauth` secret is managed by SOPS and applied automatically.
