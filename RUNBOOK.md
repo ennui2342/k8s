@@ -169,6 +169,21 @@ The `nas-ssh-key` secret is managed by SOPS. Verify the CronJob exists:
 kubectl get cronjob nas-raid-monitor -n monitoring
 ```
 
+### InfluxDB retention policies
+
+The `telegraf` database uses two retention policies that must be created
+after InfluxDB starts. The NFS volume persists these across pod restarts,
+but they must be recreated on a fresh cluster build:
+
+```sh
+# Default policy for solar/weather data (48h — kept small intentionally)
+# Already created by Flux as 'autogen' — no action needed.
+
+# Long-term policy for NAS SNMP metrics
+kubectl exec -n monitoring influxdb-0 -- influx -execute \
+  "CREATE RETENTION POLICY nas_30d ON telegraf DURATION 30d REPLICATION 1"
+```
+
 ---
 
 ## Re-keying Secrets

@@ -26,6 +26,13 @@ data:
     [[outputs.influxdb]]
       urls = ["http://influxdb.monitoring.svc:8086"]
       database = "telegraf"
+      namedrop = ["nas_cpu", "nas_storage", "nas_network"]
+
+    [[outputs.influxdb]]
+      urls = ["http://influxdb.monitoring.svc:8086"]
+      database = "telegraf"
+      retention_policy = "nas_30d"
+      namepass = ["nas_cpu", "nas_storage", "nas_network"]
 
     [[inputs.statsd]]
       service_address = ":8125"
