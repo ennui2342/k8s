@@ -70,7 +70,6 @@
           "showThresholdMarkers": true,
           "text": {}
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -166,10 +165,12 @@
             "fields": "",
             "values": false
           },
-          "text": {},
+          "text": {
+            "valueSize": 28,
+            "titleSize": 12
+          },
           "textMode": "auto"
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -264,7 +265,6 @@
           "showThresholdMarkers": true,
           "text": {}
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -349,7 +349,6 @@
           "alertThreshold": true
         },
         "percentage": false,
-        "pluginVersion": "7.5.5",
         "pointradius": 2,
         "points": false,
         "renderer": "flot",
@@ -490,7 +489,6 @@
           "showThresholdMarkers": true,
           "text": {}
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -586,7 +584,6 @@
           "showThresholdMarkers": true,
           "text": {}
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -683,10 +680,12 @@
             "fields": "",
             "values": false
           },
-          "text": {},
+          "text": {
+            "valueSize": 28,
+            "titleSize": 12
+          },
           "textMode": "auto"
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -748,7 +747,6 @@
           "content": "<center>\n    <iframe width=\"652\" height=\"500\" src=\"http://k8s.ecafe.org/zephyr/\" frameborder=0></iframe>\n</center>",
           "mode": "html"
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -838,10 +836,12 @@
             "fields": "",
             "values": false
           },
-          "text": {},
+          "text": {
+            "valueSize": 28,
+            "titleSize": 12
+          },
           "textMode": "value"
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -935,7 +935,6 @@
           "showThresholdMarkers": true,
           "text": {}
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -1026,10 +1025,12 @@
             "fields": "",
             "values": false
           },
-          "text": {},
+          "text": {
+            "valueSize": 28,
+            "titleSize": 12
+          },
           "textMode": "value"
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [

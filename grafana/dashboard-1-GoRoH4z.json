@@ -71,10 +71,12 @@
             "fields": "",
             "values": false
           },
-          "text": {},
+          "text": {
+            "valueSize": 28,
+            "titleSize": 12
+          },
           "textMode": "auto"
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -174,7 +176,6 @@
           "showThresholdMarkers": true,
           "text": {}
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -271,7 +272,10 @@
             "tags": []
           },
           {
-            "datasource": "__expr__",
+            "datasource": {
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
             "expression": "-$A/$B*100",
             "hide": false,
             "refId": "C",
@@ -331,10 +335,12 @@
             "fields": "",
             "values": false
           },
-          "text": {},
+          "text": {
+            "valueSize": 28,
+            "titleSize": 12
+          },
           "textMode": "auto"
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -439,7 +445,6 @@
           "showThresholdMarkers": true,
           "text": {}
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -545,7 +550,6 @@
           "showThresholdMarkers": true,
           "text": {}
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -622,7 +626,10 @@
             "tags": []
           },
           {
-            "datasource": "__expr__",
+            "datasource": {
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
             "expression": "$A/$B*100",
             "hide": false,
             "refId": "C",
@@ -700,7 +707,6 @@
             "mode": "single"
           }
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -788,10 +794,12 @@
             "fields": "",
             "values": false
           },
-          "text": {},
+          "text": {
+            "valueSize": 28,
+            "titleSize": 12
+          },
           "textMode": "auto"
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -891,10 +899,12 @@
             "fields": "",
             "values": false
           },
-          "text": {},
+          "text": {
+            "valueSize": 28,
+            "titleSize": 12
+          },
           "textMode": "auto"
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -997,10 +1007,12 @@
             "fields": "",
             "values": false
           },
-          "text": {},
+          "text": {
+            "valueSize": 28,
+            "titleSize": 12
+          },
           "textMode": "auto"
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -1094,10 +1106,12 @@
             "fields": "",
             "values": false
           },
-          "text": {},
+          "text": {
+            "valueSize": 28,
+            "titleSize": 12
+          },
           "textMode": "auto"
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -1204,10 +1218,12 @@
             "fields": "",
             "values": false
           },
-          "text": {},
+          "text": {
+            "valueSize": 28,
+            "titleSize": 12
+          },
           "textMode": "auto"
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -1312,10 +1328,12 @@
             "fields": "",
             "values": false
           },
-          "text": {},
+          "text": {
+            "valueSize": 28,
+            "titleSize": 12
+          },
           "textMode": "auto"
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -1421,10 +1439,12 @@
             "fields": "",
             "values": false
           },
-          "text": {},
+          "text": {
+            "valueSize": 28,
+            "titleSize": 12
+          },
           "textMode": "auto"
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "groupBy": [
@@ -1557,7 +1577,6 @@
             "mode": "single"
           }
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "alias": "battery-power",
@@ -1794,7 +1813,6 @@
             "mode": "single"
           }
         },
-        "pluginVersion": "7.5.5",
         "targets": [
           {
             "alias": "load-power",
