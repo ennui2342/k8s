@@ -99,10 +99,11 @@ spec:
             - /bin/sh
             - -c
             - |
-              trivy k8s \
+              trivy kubernetes \
                 --severity HIGH,CRITICAL \
                 --ignore-unfixed \
-                --components workload \
+                --disable-node-collector \
+                --scanners vuln \
                 --report summary \
                 --quiet \
                 --timeout 20m \
