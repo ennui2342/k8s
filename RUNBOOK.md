@@ -140,17 +140,8 @@ automatically via the `letsencrypt-prod` ClusterIssuer.
 ### Grafana admin password
 
 The admin credentials are in `grafana/grafana-admin-secret.yaml` (SOPS-encrypted),
-applied automatically by Flux. No manual steps needed.
-
-After the pod comes up, sync the database password to match the secret
-(Grafana doesn't do this automatically when an existing database is present):
-
-```sh
-NEW_PASS=$(kubectl get secret grafana-admin -n monitoring \
-  -o jsonpath='{.data.admin-password}' | base64 -d)
-kubectl exec -n monitoring deployment/grafana -- \
-  grafana-cli admin reset-admin-password "$NEW_PASS"
-```
+applied automatically by Flux. On a clean rebuild Grafana reads the password from
+the `GF_SECURITY_ADMIN_PASSWORD` env var on first start — no manual steps needed.
 
 ### Grafana dashboards and datasources
 
