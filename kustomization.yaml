@@ -12,6 +12,7 @@ resources:
   - solar/
   - taskmgt/
   - tick/
+  - nas-monitor/
   - syncthing/
   - tailscale/
   - website/

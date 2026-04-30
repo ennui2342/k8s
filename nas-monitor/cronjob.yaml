@@ -1,0 +1,77 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nas-raid-monitor
+  namespace: monitoring
+spec:
+  schedule: "*/15 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: monitor
+            image: alpine:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              apk add --no-cache --quiet openssh-client python3 curl jq
+
+              mdstat=$(ssh -p 9222 \
+                -i /ssh/id_rsa \
+                -o StrictHostKeyChecking=no \
+                -o BatchMode=yes \
+                -o ConnectTimeout=10 \
+                ennui2342@192.168.0.76 "cat /proc/mdstat" 2>/dev/null)
+
+              if [ $? -ne 0 ]; then
+                echo "Failed to connect to NAS - skipping check"
+                exit 0
+              fi
+
+              result=$(echo "$mdstat" | python3 -c "
+import re, sys
+mdstat = sys.stdin.read()
+issues = []
+if '(F)' in mdstat:
+    issues.append('Drive(s) marked as failed')
+for m in re.finditer(r'^(md\w+)\s*:(.+?)(?=^md|\Z)', mdstat, re.MULTILINE | re.DOTALL):
+    block = m.group(0)
+    name = m.group(1)
+    drive_count = len(re.findall(r'\w+\[\d+\]', block.split('\n')[0]))
+    s = re.search(r'\[([U_]+)\]', block)
+    if s:
+        u_count = s.group(1).count('U')
+        if u_count < drive_count:
+            issues.append(name + ': ' + str(u_count) + '/' + str(drive_count) + ' drives active')
+if issues:
+    print('\n'.join(issues))
+    sys.exit(1)
+")
+
+              if [ $? -eq 1 ]; then
+                payload=$(jq -n --arg msg "$result" \
+                  '{"content": "🚨 **NAS RAID alert**:\n```\n" + $msg + "\n```"}')
+                curl -s -X POST -H "Content-Type: application/json" \
+                  -d "$payload" "$DISCORD_WEBHOOK"
+                echo "Alert sent: $result"
+              else
+                echo "RAID healthy"
+              fi
+            env:
+            - name: DISCORD_WEBHOOK
+              valueFrom:
+                secretKeyRef:
+                  name: discord-webhook
+                  key: address
+            volumeMounts:
+            - name: ssh-key
+              mountPath: /ssh
+              readOnly: true
+          volumes:
+          - name: ssh-key
+            secret:
+              secretName: nas-ssh-key
+              defaultMode: 0600
