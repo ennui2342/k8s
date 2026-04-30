@@ -176,10 +176,11 @@ after InfluxDB starts. The NFS volume persists these across pod restarts,
 but they must be recreated on a fresh cluster build:
 
 ```sh
-# Default policy for solar/weather data (48h — kept small intentionally)
-# Already created by Flux as 'autogen' — no action needed.
+# Solar/weather data: extend default autogen policy from 24h to 7 days
+kubectl exec -n monitoring influxdb-0 -- influx -execute \
+  "ALTER RETENTION POLICY autogen ON telegraf DURATION 168h"
 
-# Long-term policy for NAS SNMP metrics
+# NAS SNMP metrics: separate long-term policy
 kubectl exec -n monitoring influxdb-0 -- influx -execute \
   "CREATE RETENTION POLICY nas_30d ON telegraf DURATION 30d REPLICATION 1"
 ```
