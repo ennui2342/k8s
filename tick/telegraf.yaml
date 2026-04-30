@@ -132,7 +132,7 @@ spec:
       serviceAccountName: telegraf
       containers:
       - name: telegraf
-        image: telegraf:1.17
+        image: telegraf:1.38.3
         env:
         - name: HOSTNAME
           value: telegraf-polling-service
