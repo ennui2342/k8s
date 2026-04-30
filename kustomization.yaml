@@ -14,5 +14,6 @@ resources:
   - tick/
   - nas-monitor/
   - syncthing/
+  - trivy/
   - tailscale/
   - website/

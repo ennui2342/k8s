@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: trivy
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: trivy-reader
+rules:
+- apiGroups: [""]
+  resources: ["pods", "nodes", "namespaces", "services", "configmaps", "replicationcontrollers"]
+  verbs: ["get", "list"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "daemonsets", "statefulsets", "replicasets"]
+  verbs: ["get", "list"]
+- apiGroups: ["batch"]
+  resources: ["jobs", "cronjobs"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: trivy-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: trivy-reader
+subjects:
+- kind: ServiceAccount
+  name: trivy
+  namespace: monitoring
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cve-scanner
+  namespace: monitoring
+spec:
+  schedule: "0 7 * * 1"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: trivy
+          restartPolicy: OnFailure
+          initContainers:
+          - name: scan
+            image: aquasec/trivy:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              trivy k8s \
+                --severity HIGH,CRITICAL \
+                --ignore-unfixed \
+                --report summary \
+                --quiet \
+                --timeout 20m \
+                cluster > /report/output.txt 2>&1
+              echo $? > /report/exit_code
+              cat /report/output.txt
+            volumeMounts:
+            - name: report
+              mountPath: /report
+          containers:
+          - name: notify
+            image: alpine:latest
+            env:
+            - name: DISCORD_WEBHOOK
+              valueFrom:
+                secretKeyRef:
+                  name: discord-webhook
+                  key: address
+            command:
+            - /bin/sh
+            - -c
+            - |
+              apk add --no-cache --quiet curl python3
+
+              EXIT_CODE=$(cat /report/exit_code)
+
+              if [ "$EXIT_CODE" -eq 0 ]; then
+                echo "No fixable HIGH/CRITICAL CVEs found - nothing to report"
+                exit 0
+              fi
+
+              echo "Vulnerabilities found - sending notifications"
+
+              python3 - << 'PYEOF'
+import json, subprocess, os, sys
+
+report = open('/report/output.txt').read()
+webhook = os.environ['DISCORD_WEBHOOK']
+
+message = '⚠️ **Weekly CVE Scan** — fixable HIGH/CRITICAL vulnerabilities found\n```\n' + report[:1700] + '\n```'
+payload = json.dumps({'content': message})
+
+r = subprocess.run(
+    ['curl', '-sf', '-X', 'POST', webhook, '-H', 'Content-Type: application/json', '-d', payload],
+    capture_output=True
+)
+if r.returncode != 0:
+    print('Discord notification failed', file=sys.stderr)
+
+r = subprocess.run(
+    ['curl', '-sf', '-X', 'POST', 'http://api.taskmgt.svc.cluster.local:8081/tasks',
+     '-H', 'Content-Type: application/json',
+     '-d', json.dumps({'text': 'Review CVE scan — fixable HIGH/CRITICAL in cluster !1 #security #cve <cli.cve-scanner'})],
+    capture_output=True
+)
+if r.returncode != 0:
+    print('tm task creation failed', file=sys.stderr)
+else:
+    print('tm task created:', json.loads(r.stdout).get('id', '?'))
+PYEOF
+            volumeMounts:
+            - name: report
+              mountPath: /report
+          volumes:
+          - name: report
+            emptyDir: {}
