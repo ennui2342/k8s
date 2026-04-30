@@ -43,14 +43,12 @@ data:
 
     TM_API = 'http://api.taskmgt.svc.cluster.local:8081/tasks'
     webhook = os.environ['DISCORD_WEBHOOK']
-    exit_code = int(open('/report/exit_code').read().strip())
-
-    if exit_code == 0:
-        print('No fixable HIGH/CRITICAL CVEs found')
-        sys.exit(0)
 
     try:
         data = json.load(open('/report/output.json'))
+    except FileNotFoundError:
+        print('Scan output not found — scan likely failed completely', file=sys.stderr)
+        sys.exit(1)
     except Exception as e:
         print(f'Failed to parse scan output: {e}', file=sys.stderr)
         sys.exit(1)
@@ -86,7 +84,7 @@ data:
                 images[image]['cves'][cve_id] = note
 
     if not images:
-        print('Scan flagged issues but no workload CVEs extracted')
+        print('No fixable HIGH/CRITICAL CVEs found in scanned images')
         sys.exit(0)
 
     print(f'Vulnerabilities found in {len(images)} image(s), sending notifications...')
@@ -186,12 +184,11 @@ spec:
                 --disable-node-collector \
                 --scanners vuln \
                 --format json \
-                --exit-code 1 \
                 --output /report/output.json \
                 --quiet \
                 --timeout 45m \
                 --parallel 10
-              echo $? > /report/exit_code
+              cat /report/output.json
             volumeMounts:
             - name: report
               mountPath: /report
