@@ -146,6 +146,19 @@ data:
             resp = json.loads(r.stdout)
             print(f'tm task created for {image}:', resp.get('id', '?'))
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: trivy-cache-pvc
+  namespace: monitoring
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 2Gi
+---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -182,6 +195,8 @@ spec:
             volumeMounts:
             - name: report
               mountPath: /report
+            - name: cache
+              mountPath: /root/.cache/trivy
           containers:
           - name: notify
             image: alpine:latest
@@ -208,3 +223,6 @@ spec:
           - name: scripts
             configMap:
               name: trivy-notify-script
+          - name: cache
+            persistentVolumeClaim:
+              claimName: trivy-cache-pvc
