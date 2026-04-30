@@ -1,0 +1,46 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: syncthing-conflict-monitor
+  namespace: default
+spec:
+  schedule: "0 9 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: monitor
+            image: alpine:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              apk add --no-cache --quiet curl jq
+              conflicts=$(find /data -name "*.sync-conflict-*" -type f 2>/dev/null)
+              if [ -z "$conflicts" ]; then
+                echo "No conflicts found"
+                exit 0
+              fi
+              count=$(printf '%s\n' "$conflicts" | wc -l | tr -d ' ')
+              body=$(printf '%s\n' "$conflicts" | head -20 | sed 's|/data/||')
+              payload=$(jq -n --arg count "$count" --arg body "$body" \
+                '{"content": ("⚠️ **SyncThing**: " + $count + " conflict file(s) found:\n```\n" + $body + "\n```")}')
+              curl -s -X POST -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK"
+            env:
+            - name: DISCORD_WEBHOOK
+              valueFrom:
+                secretKeyRef:
+                  name: discord-webhook
+                  key: address
+            volumeMounts:
+            - name: data
+              mountPath: /data
+              readOnly: true
+          volumes:
+          - name: data
+            nfs:
+              server: 192.168.0.76
+              path: /mnt/md0/sync/data
+              readOnly: true
