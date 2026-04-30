@@ -3,3 +3,4 @@ kind: Kustomization
 namespace: tailscale
 resources:
   - connector.yaml
+  - operator-oauth-secret.yaml
