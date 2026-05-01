@@ -6,6 +6,7 @@ metadata:
   namespace: flux-system
 spec:
   type: discord
+  username: k8s homelab
   secretRef:
     name: discord-webhook  # created manually: kubectl create secret generic discord-webhook -n flux-system --from-literal=address=<webhook-url>
 ---

@@ -26,7 +26,7 @@ spec:
               count=$(printf '%s\n' "$conflicts" | wc -l | tr -d ' ')
               body=$(printf '%s\n' "$conflicts" | head -20 | sed 's|/data/||')
               payload=$(jq -n --arg count "$count" --arg body "$body" \
-                '{"content": ("⚠️ **SyncThing**: " + $count + " conflict file(s) found:\n```\n" + $body + "\n```")}')
+                '{"username": "k8s homelab", "content": ("⚠️ **SyncThing**: " + $count + " conflict file(s) found:\n```\n" + $body + "\n```")}')
               curl -s -X POST -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK"
             env:
             - name: DISCORD_WEBHOOK

@@ -35,7 +35,7 @@ spec:
 
               if [ $? -eq 1 ]; then
                 payload=$(jq -n --arg msg "$result" \
-                  '{"content": "🚨 **NAS RAID alert**:\n```\n" + $msg + "\n```"}')
+                  '{"username": "k8s homelab", "content": "🚨 **NAS RAID alert**:\n```\n" + $msg + "\n```"}')
                 curl -s -X POST -H "Content-Type: application/json" \
                   -d "$payload" "$DISCORD_WEBHOOK"
                 echo "Alert sent: $result"

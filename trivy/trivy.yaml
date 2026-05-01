@@ -106,7 +106,7 @@ data:
     r = subprocess.run(
         ['curl', '-sf', '-X', 'POST', webhook,
          '-H', 'Content-Type: application/json',
-         '-d', json.dumps({'content': message})],
+         '-d', json.dumps({'username': 'k8s homelab', 'content': message})],
         capture_output=True
     )
     if r.returncode != 0:
