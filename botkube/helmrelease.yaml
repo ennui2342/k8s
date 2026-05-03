@@ -25,6 +25,20 @@ spec:
       clusterName: k8s-local
       upgradeNotifier: false
 
+    rbac:
+      groups:
+        'botkube-flux-ops':
+          create: true
+          rules:
+            - apiGroups:
+                - kustomize.toolkit.fluxcd.io
+                - helm.toolkit.fluxcd.io
+                - source.toolkit.fluxcd.io
+                - notification.toolkit.fluxcd.io
+                - image.toolkit.fluxcd.io
+              resources: ["*"]
+              verbs: ["get", "watch", "list", "patch", "update"]
+
     communications:
       'default-group':
         discord:
@@ -33,7 +47,8 @@ spec:
           channels:
             'default':
               bindings:
-                executors: []
+                executors:
+                  - k8s-tools
                 sources:
                   - k8s-err-events
 
@@ -68,4 +83,28 @@ spec:
                   namespaces:
                     include: [".*"]
 
-    executors: {}
+    executors:
+      k8s-tools:
+        botkube/kubectl:
+          enabled: true
+          displayName: "Kubectl"
+          config:
+            defaultNamespace: default
+            interactiveBuilder:
+              allowed:
+                verbs: ["api-resources", "api-versions", "cluster-info", "describe", "explain", "get", "logs", "top"]
+                resources: ["pods", "deployments", "statefulsets", "daemonsets", "services", "ingresses", "nodes", "namespaces", "persistentvolumeclaims", "events", "configmaps", "helmreleases", "kustomizations"]
+        botkubeExtra/helm:
+          enabled: true
+          displayName: "Helm"
+        botkubeExtra/flux:
+          enabled: true
+          displayName: "Flux"
+          context:
+            rbac:
+              group:
+                type: Static
+                static:
+                  values:
+                    - botkube-flux-ops
+                prefix: ""
