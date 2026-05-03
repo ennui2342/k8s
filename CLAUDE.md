@@ -59,9 +59,9 @@ tolerations:
 | `home-assistant` | homeassistant | `home-assistant/ha-*.yaml` | HA 2026.4.4, hostNetwork, config on NFS |
 | `home-assistant` | ring-mqtt | `ring-mqtt/` | Ring doorbell → MQTT bridge, RTSP port 30002 |
 | `monitoring` | grafana | `grafana/` | grafana.k8s.ecafe.org, anonymous viewer access; dashboards + datasource provisioned via ConfigMap |
-| `monitoring` | influxdb | `tick/influxdb*.yaml` | InfluxDB 1.8.0, 8Gi NFS PV |
-| `monitoring` | node-exporter | `monitoring/` | DaemonSet (all nodes incl. master); exposes node CPU/mem/disk/IO metrics |
-| `monitoring` | telegraf | `tick/telegraf*.yaml` | Scrapes MQTT (mosquitto.default:1883), statsd, SNMP (NAS at 192.168.0.76), and node-exporter |
+| `monitoring` | influxdb | `monitoring/influxdb.yaml` | InfluxDB 1.8.0, 8Gi NFS PV |
+| `monitoring` | node-exporter | `monitoring/node-exporter.yaml` | DaemonSet (all nodes incl. master); exposes node CPU/mem/disk/IO metrics |
+| `monitoring` | telegraf | `monitoring/telegraf.yaml` | Scrapes MQTT (mosquitto.default:1883), statsd, SNMP (NAS at 192.168.0.76), and node-exporter |
 | `tailscale` | operator | `tailscale/` | Flux HelmRelease (1.x.x); `ts-k8s-connector` exposes taskmgt frontend |
 | `taskmgt` | api + frontend | `taskmgt/` | Task management app; see Flux image automation below |
 
@@ -141,7 +141,7 @@ coredns/          — CoreDNS custom config (*.k8s.ecafe.org wildcard)
 flux-system/      — Flux bootstrap output + SOPS patch + alert config
 grafana/          — Grafana deployment, admin secret, provisioned datasource + dashboards, ingress + PV
 home-assistant/   — HA deployment, service, ingress, cert, cleanup CronJob
-monitoring/       — node-exporter DaemonSet + service (feeds Telegraf → InfluxDB)
+monitoring/       — InfluxDB, Telegraf, node-exporter; all monitoring stack manifests
 mosquitto/        — Mosquitto deployment, configmap, service
 nas-monitor/      — CronJob: SSH to NAS, parse /proc/mdstat, Discord alert
 nfs/              — NFS provisioner Helm template
@@ -150,7 +150,6 @@ solar/            — modpoll deployment and Modbus configmap
 syncthing/        — SyncThing deployment, PVCs, service, ingress, conflict CronJob
 tailscale/        — Flux HelmRelease + HelmRepository (tailscale) + Connector CR
 taskmgt/          — taskmgt app manifests + Flux image automation
-tick/             — InfluxDB StatefulSet + Telegraf deployment + PV
 website/          — nginx/PHP StatefulSet, configmaps, ingress
 ```
 

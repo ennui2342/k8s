@@ -12,7 +12,6 @@ resources:
   - solar/
   - taskmgt/
   - monitoring/
-  - tick/
   - nas-monitor/
   - syncthing/
   - trivy/
