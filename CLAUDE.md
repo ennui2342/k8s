@@ -54,7 +54,7 @@ in-place before committing, and automatically decrypted by Flux's kustomize-cont
 
 **SOPS configuration:** `.sops.yaml` in the repo root targets `*-secret.yaml` files.
 The age public key is embedded there. The **private key** lives only at
-`~/Resilio Sync/secure/k8s-flux-age.agekey` — never committed.
+`/Volumes/SSD/sync/secure/k8s-flux-age.agekey` — never committed.
 
 **Secrets managed in git (SOPS-encrypted):**
 - `flux-system/discord-webhook-secret.yaml` — Discord webhook for Flux notifications
@@ -72,7 +72,7 @@ The age public key is embedded there. The **private key** lives only at
   update the cluster secret, and add the public key as a write-capable deploy key on the GitHub repo
   (replacing the old key). The previous read-only key `flux-system-main-flux-system-./` (ID:
   145088789) was deleted — image automation requires write access to push tag updates.
-- `flux-system/sops-age` — age private key for SOPS decryption; loaded from `~/Resilio Sync/secure/k8s-flux-age.agekey` at bootstrap time
+- `flux-system/sops-age` — age private key for SOPS decryption; loaded from `/Volumes/SSD/sync/secure/k8s-flux-age.agekey` at bootstrap time
 
 **Adding a new secret:** create a `*-secret.yaml` file next to the app manifests, add it to the
 app's `kustomization.yaml` resources list, run `sops --encrypt --in-place <file>`, then commit.
