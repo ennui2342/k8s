@@ -11,6 +11,7 @@ resources:
   - ring-mqtt/
   - solar/
   - taskmgt/
+  - monitoring/
   - tick/
   - nas-monitor/
   - syncthing/

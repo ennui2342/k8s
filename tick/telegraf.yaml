@@ -4,6 +4,28 @@ metadata:
   name: telegraf
   namespace: monitoring
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: telegraf
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "endpoints"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: telegraf
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: telegraf
+subjects:
+  - kind: ServiceAccount
+    name: telegraf
+    namespace: monitoring
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -47,6 +69,12 @@ data:
       topic_tag = "topic"
       client_id = "telegraf"
       data_format = "json"
+
+    [[inputs.prometheus]]
+      monitor_kubernetes_pods = true
+      monitor_kubernetes_pods_namespace = "monitoring"
+      kubernetes_label_selector = "app=node-exporter"
+      metric_version = 2
 
     [[inputs.snmp]]
       agents = ["udp://192.168.0.76:161"]
