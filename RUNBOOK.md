@@ -88,17 +88,17 @@ kubectl create secret generic flux-system \
 
 ### 3b. SOPS age decryption key — MUST be done before Flux reconciles
 
-The age private key lives at `~/Resilio Sync/secure/k8s-flux-age.agekey`.
+The age private key lives at `/Volumes/SSD/sync/secure/k8s-flux-age.agekey`.
 This must be in the cluster before Flux applies any SOPS-encrypted resources,
 otherwise reconciliation will fail on all encrypted secrets.
 
 ```sh
 kubectl create secret generic sops-age \
   -n flux-system \
-  --from-file=age.agekey="$HOME/Resilio Sync/secure/k8s-flux-age.agekey"
+  --from-file=age.agekey="/Volumes/SSD/sync/secure/k8s-flux-age.agekey"
 ```
 
-If the age key file is lost (e.g. new machine without Resilio Sync restored yet),
+If the age key file is lost (e.g. new machine without the SSD sync volume mounted),
 re-encrypt all `*-secret.yaml` files with a new key before proceeding — see
 "Re-keying secrets" below.
 
@@ -225,12 +225,12 @@ new key:
 
 ```sh
 # Generate new age key
-age-keygen -o "$HOME/Resilio Sync/secure/k8s-flux-age.agekey"
+age-keygen -o "/Volumes/SSD/sync/secure/k8s-flux-age.agekey"
 
 # Note the new public key and update .sops.yaml
 # Then re-encrypt all secret files:
 find . -name '*-secret.yaml' | while read f; do
-  SOPS_AGE_KEY_FILE="$HOME/Resilio Sync/secure/k8s-flux-age.agekey" \
+  SOPS_AGE_KEY_FILE="/Volumes/SSD/sync/secure/k8s-flux-age.agekey" \
     sops updatekeys --yes "$f"
 done
 ```
