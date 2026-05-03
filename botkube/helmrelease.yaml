@@ -25,12 +25,8 @@ spec:
       'default-group':
         discord:
           enabled: true
-          token: ""
-          appID: ""
-          id: "1473249655302127628"
           channels:
             'default':
-              id: ""
               bindings:
                 executors: []
                 sources:
