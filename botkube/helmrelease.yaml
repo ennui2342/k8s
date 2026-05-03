@@ -29,6 +29,7 @@ spec:
       'default-group':
         discord:
           enabled: true
+          botID: "1500538696875642931"
           channels:
             'default':
               bindings:
