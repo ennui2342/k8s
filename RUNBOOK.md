@@ -130,8 +130,10 @@ All namespaces should come up within a few minutes. Check for failures:
 flux logs --level=error
 ```
 
-cert-manager will begin issuing the `epigone.ecafe.org` TLS certificate
-automatically via the `letsencrypt-prod` ClusterIssuer.
+Flux manages the full stack including cert-manager (via `cert-manager/helmrelease.yaml`)
+and the Tailscale operator (via `tailscale/helmrelease.yaml`) — no manual Helm installs
+needed. cert-manager will begin issuing the `epigone.ecafe.org` TLS certificate
+automatically via the `letsencrypt-prod` ClusterIssuer once it is running.
 
 ---
 
@@ -161,7 +163,7 @@ curl -s -u "admin:$PASS" http://grafana.k8s.ecafe.org/api/dashboards/uid/<uid> \
 Then regenerate the ConfigMap and commit:
 
 ```sh
-cd ~/Resilio\ Sync/projects/k8s
+cd /Volumes/SSD/sync/projects/k8s
 python3 - << 'EOF'
 import json, yaml
 dashboards = {
@@ -182,9 +184,10 @@ git add grafana/ && git commit -m "Update Grafana dashboards"
 
 ### Tailscale
 
-The `operator-oauth` secret is managed by SOPS and applied automatically.
-After the operator pod comes up, approve the Tailscale devices in the
-admin console if they are new machine keys.
+The operator is deployed via `tailscale/helmrelease.yaml`. OAuth credentials
+are read from the SOPS-encrypted `operator-oauth` secret via `valuesFrom` —
+no manual steps needed. After the operator pod comes up, approve any new
+Tailscale devices in the admin console if they are new machine keys.
 
 ### SyncThing
 
