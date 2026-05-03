@@ -12,6 +12,24 @@ patches:
     kind: Deployment
     name: kustomize-controller
 - patch: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: placeholder
+    spec:
+      template:
+        spec:
+          affinity:
+            nodeAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  preference:
+                    matchExpressions:
+                      - key: node-role.kubernetes.io/control-plane
+                        operator: DoesNotExist
+  target:
+    kind: Deployment
+- patch: |
     - op: add
       path: /spec/decryption
       value:

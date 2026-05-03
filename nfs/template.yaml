@@ -133,6 +133,14 @@ spec:
         release: nfs-subdir-external-provisioner
     spec:
       serviceAccountName: nfs-subdir-external-provisioner
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
       containers:
         - name: nfs-subdir-external-provisioner
           image: "k8s.gcr.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2"

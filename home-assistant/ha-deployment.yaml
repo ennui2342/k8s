@@ -14,6 +14,14 @@ spec:
         app: homeassistant-label
     spec:
       hostNetwork: true
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
       containers:
       - name: homeassistant
         image: homeassistant/home-assistant:2026.4.4

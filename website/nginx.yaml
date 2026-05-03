@@ -14,6 +14,14 @@ spec:
         app: nginx
     spec:
       terminationGracePeriodSeconds: 10
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
       containers:
         - name: nginx
           image: nginx

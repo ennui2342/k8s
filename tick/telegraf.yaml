@@ -130,6 +130,14 @@ spec:
         app: telegraf
     spec:
       serviceAccountName: telegraf
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
       containers:
       - name: telegraf
         image: telegraf:1.38.3

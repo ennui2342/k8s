@@ -13,6 +13,14 @@ spec:
       labels:
         app: frontend
     spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
       containers:
         - name: frontend
           image: ghcr.io/ennui2342/taskmgt-frontend:1.20260416.44 # {"$imagepolicy": "flux-system:taskmgt-frontend"}

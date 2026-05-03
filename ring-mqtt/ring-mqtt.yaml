@@ -15,6 +15,14 @@ spec:
       labels:
         app: ring-mqtt
     spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
       containers:
       - name: ring-mqtt
         image: tsightler/ring-mqtt

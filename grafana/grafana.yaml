@@ -95,6 +95,14 @@ spec:
         app.kubernetes.io/name: grafana
     spec:
       serviceAccountName: grafana
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
       securityContext:
         fsGroup: 472
         runAsGroup: 472

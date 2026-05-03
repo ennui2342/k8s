@@ -64,6 +64,14 @@ spec:
         app: influxdb
     spec:
       serviceAccountName: influxdb
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
       containers:
       - name: influxdb
         image: influxdb:1.8.0

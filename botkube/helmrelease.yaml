@@ -18,6 +18,15 @@ spec:
       name: botkube-discord
       valuesKey: values.yaml
   values:
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: node-role.kubernetes.io/control-plane
+                  operator: DoesNotExist
+
     analytics:
       disable: true
 

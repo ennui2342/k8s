@@ -17,6 +17,14 @@ spec:
       labels:
         app: syncthing
     spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
       containers:
       - name: syncthing
         image: lscr.io/linuxserver/syncthing:latest
