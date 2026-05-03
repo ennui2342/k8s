@@ -15,5 +15,6 @@ resources:
   - nas-monitor/
   - syncthing/
   - trivy/
+  - health-monitor/
   - tailscale/
   - website/

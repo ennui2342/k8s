@@ -1,0 +1,256 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: health-monitor
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: health-monitor-reader
+rules:
+- apiGroups: [""]
+  resources: ["pods", "nodes", "persistentvolumeclaims"]
+  verbs: ["get", "list"]
+- apiGroups: ["kustomize.toolkit.fluxcd.io"]
+  resources: ["kustomizations"]
+  verbs: ["get", "list"]
+- apiGroups: ["helm.toolkit.fluxcd.io"]
+  resources: ["helmreleases"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: health-monitor-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: health-monitor-reader
+subjects:
+- kind: ServiceAccount
+  name: health-monitor
+  namespace: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: health-monitor-script
+  namespace: monitoring
+data:
+  monitor.py: |
+    import json, subprocess, os, sys
+
+    TM_API = 'http://api.taskmgt.svc.cluster.local:8081'
+    DISCORD_WEBHOOK = os.environ.get('DISCORD_WEBHOOK', '')
+
+
+    def kubectl_json(*args):
+        r = subprocess.run(['kubectl'] + list(args) + ['-o', 'json'],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            print(f'kubectl {" ".join(args)} failed: {r.stderr[:200]}', file=sys.stderr)
+            return {}
+        try:
+            return json.loads(r.stdout)
+        except Exception as e:
+            print(f'Failed to parse kubectl output: {e}', file=sys.stderr)
+            return {}
+
+
+    def get_existing_health_tasks():
+        r = subprocess.run(
+            ['curl', '-sf', f'{TM_API}/tasks'],
+            capture_output=True, text=True
+        )
+        if r.returncode != 0:
+            print('Warning: could not fetch existing tasks from taskmgt', file=sys.stderr)
+            return []
+        try:
+            data = json.loads(r.stdout)
+            tasks = data if isinstance(data, list) else data.get('tasks', [])
+            return [t for t in tasks if '<cli.cluster-health' in t.get('text', '')]
+        except Exception as e:
+            print(f'Warning: could not parse task list: {e}', file=sys.stderr)
+            return []
+
+
+    def issue_tracked(resource_id, existing_tasks):
+        return any(resource_id in t.get('text', '') for t in existing_tasks)
+
+
+    def create_task(title, notes, priority):
+        text = f"{title} {priority} #devops +cli.claude-code.k8s <cli.cluster-health\n{notes}"
+        r = subprocess.run(
+            ['curl', '-sf', '-X', 'POST', f'{TM_API}/tasks',
+             '-H', 'Content-Type: application/json',
+             '-d', json.dumps({'text': text})],
+            capture_output=True, text=True
+        )
+        if r.returncode == 0:
+            try:
+                resp = json.loads(r.stdout)
+                print(f'Created task {resp.get("id", "?")} : {title}')
+            except Exception:
+                print(f'Created task: {title}')
+            return True
+        print(f'Failed to create task: {title}', file=sys.stderr)
+        return False
+
+
+    issues = []
+    existing_tasks = get_existing_health_tasks()
+    print(f'Existing cluster-health tasks: {len(existing_tasks)}')
+
+    # --- CrashLoopBackOff pods (>=20 restarts) ---
+    data = kubectl_json('get', 'pods', '-A')
+    for pod in data.get('items', []):
+        ns = pod['metadata']['namespace']
+        name = pod['metadata']['name']
+        for cs in pod.get('status', {}).get('containerStatuses', []):
+            restarts = cs.get('restartCount', 0)
+            waiting = cs.get('state', {}).get('waiting', {})
+            if waiting.get('reason') == 'CrashLoopBackOff' and restarts >= 20:
+                resource_id = f'pod/{name}'
+                if issue_tracked(resource_id, existing_tasks):
+                    print(f'Already tracked: {resource_id}')
+                    continue
+                priority = '!1' if restarts >= 50 else '!2'
+                issues.append({
+                    'resource': resource_id,
+                    'title': f'{resource_id} in {ns}: CrashLoopBackOff ({restarts} restarts)',
+                    'notes': f'* Namespace: {ns}\n* Container: {cs["name"]}\n* Restarts: {restarts}',
+                    'priority': priority,
+                })
+
+    # --- Flux kustomizations in Failed state ---
+    data = kubectl_json('get', 'kustomizations.kustomize.toolkit.fluxcd.io', '-A')
+    for k in data.get('items', []):
+        ns = k['metadata']['namespace']
+        name = k['metadata']['name']
+        ready = next((c for c in k.get('status', {}).get('conditions', []) if c['type'] == 'Ready'), None)
+        if ready and ready.get('status') == 'False':
+            resource_id = f'kustomization/{name}'
+            if issue_tracked(resource_id, existing_tasks):
+                print(f'Already tracked: {resource_id}')
+                continue
+            issues.append({
+                'resource': resource_id,
+                'title': f'{resource_id}: reconciliation failed',
+                'notes': f'* Namespace: {ns}\n* Message: {ready.get("message", "")[:200]}',
+                'priority': '!2',
+            })
+
+    # --- Flux HelmReleases in Failed state ---
+    data = kubectl_json('get', 'helmreleases.helm.toolkit.fluxcd.io', '-A')
+    for hr in data.get('items', []):
+        ns = hr['metadata']['namespace']
+        name = hr['metadata']['name']
+        ready = next((c for c in hr.get('status', {}).get('conditions', []) if c['type'] == 'Ready'), None)
+        if ready and ready.get('status') == 'False':
+            resource_id = f'helmrelease/{name}'
+            if issue_tracked(resource_id, existing_tasks):
+                print(f'Already tracked: {resource_id}')
+                continue
+            issues.append({
+                'resource': resource_id,
+                'title': f'{resource_id} in {ns}: failed',
+                'notes': f'* Namespace: {ns}\n* Message: {ready.get("message", "")[:200]}',
+                'priority': '!2',
+            })
+
+    # --- Unbound / Lost PVCs ---
+    data = kubectl_json('get', 'pvc', '-A')
+    for pvc in data.get('items', []):
+        ns = pvc['metadata']['namespace']
+        name = pvc['metadata']['name']
+        phase = pvc.get('status', {}).get('phase', '')
+        if phase in ('Pending', 'Lost'):
+            resource_id = f'pvc/{name}'
+            if issue_tracked(resource_id, existing_tasks):
+                print(f'Already tracked: {resource_id}')
+                continue
+            issues.append({
+                'resource': resource_id,
+                'title': f'{resource_id} in {ns}: {phase}',
+                'notes': f'* Namespace: {ns}\n* Phase: {phase}',
+                'priority': '!1',
+            })
+
+    # --- Nodes NotReady ---
+    data = kubectl_json('get', 'nodes')
+    for node in data.get('items', []):
+        name = node['metadata']['name']
+        ready = next((c for c in node.get('status', {}).get('conditions', []) if c['type'] == 'Ready'), None)
+        if ready and ready.get('status') != 'True':
+            resource_id = f'node/{name}'
+            if issue_tracked(resource_id, existing_tasks):
+                print(f'Already tracked: {resource_id}')
+                continue
+            issues.append({
+                'resource': resource_id,
+                'title': f'{resource_id}: NotReady',
+                'notes': f'* Status: {ready.get("status")}\n* Reason: {ready.get("reason", "unknown")}',
+                'priority': '!1',
+            })
+
+    if not issues:
+        print('No new cluster health issues detected')
+        sys.exit(0)
+
+    print(f'Creating {len(issues)} new task(s)...')
+    created = []
+    for issue in issues:
+        if create_task(issue['title'], issue['notes'], issue['priority']):
+            created.append(issue)
+
+    if created and DISCORD_WEBHOOK:
+        lines = [f'**Cluster Health Monitor** — {len(created)} new issue(s)', '```']
+        for issue in created:
+            lines.append(f"{issue['priority']} {issue['resource']}")
+        lines.append('```')
+        subprocess.run(
+            ['curl', '-sf', '-X', 'POST', DISCORD_WEBHOOK,
+             '-H', 'Content-Type: application/json',
+             '-d', json.dumps({'username': 'k8s homelab', 'content': '\n'.join(lines)[:2000]})],
+            capture_output=True
+        )
+
+    print(f'Done: {len(created)} task(s) created')
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cluster-health-monitor
+  namespace: monitoring
+spec:
+  schedule: "*/30 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: health-monitor
+          restartPolicy: OnFailure
+          containers:
+          - name: monitor
+            image: alpine/k8s:1.32.3
+            env:
+            - name: DISCORD_WEBHOOK
+              valueFrom:
+                secretKeyRef:
+                  name: discord-webhook
+                  key: address
+            command:
+            - /bin/sh
+            - -c
+            - |
+              apk add --no-cache --quiet python3 curl
+              python3 /scripts/monitor.py
+            volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+          volumes:
+          - name: scripts
+            configMap:
+              name: health-monitor-script

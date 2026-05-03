@@ -118,7 +118,7 @@ data:
     for image, info in images.items():
         critical = info['critical']
         high = info['high']
-        priority = '!1' if critical > 0 else '!2'
+        priority = '!2' if critical > 0 else '!3'
         sev_parts = []
         if critical:
             sev_parts.append(f"{critical} CRITICAL")
