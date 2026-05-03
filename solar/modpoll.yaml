@@ -25,7 +25,7 @@ spec:
       containers:
         - name: modpoll
           image: topmaker/modpoll:1.6.0
-          command: ["modpoll", "--tcp=192.168.0.188", "--config=/etc/modpoll.cfg", "--mqtt-host=mosquitto", "--mqtt-topic-prefix=solar/"]
+          command: ["modpoll", "--tcp=192.168.0.188", "-f", "/etc/modpoll.cfg", "--mqtt-host=mosquitto", "--mqtt-publish-topic-pattern", "solar/{{device_name}}"]
           volumeMounts:
           - name: modpoll-config-volume
             mountPath: /etc/modpoll.cfg
