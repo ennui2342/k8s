@@ -24,7 +24,7 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: modpoll
-          image: helloysd/modpoll
+          image: topmaker/modpoll:1.6.0
           command: ["modpoll", "--tcp=192.168.0.188", "--config=/etc/modpoll.cfg", "--mqtt-host=mosquitto", "--mqtt-topic-prefix=solar/"]
           volumeMounts:
           - name: modpoll-config-volume
