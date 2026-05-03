@@ -21,6 +21,10 @@ spec:
     analytics:
       disable: true
 
+    settings:
+      clusterName: k8s-local
+      upgradeNotifier: false
+
     communications:
       'default-group':
         discord:
