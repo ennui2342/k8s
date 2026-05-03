@@ -1,0 +1,69 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: botkube
+  namespace: botkube
+spec:
+  interval: 10m
+  chart:
+    spec:
+      chart: botkube
+      version: "1.x.x"
+      sourceRef:
+        kind: HelmRepository
+        name: botkube
+        namespace: botkube
+  valuesFrom:
+    - kind: Secret
+      name: botkube-discord
+      valuesKey: values.yaml
+  values:
+    analytics:
+      disable: true
+
+    communications:
+      'default-group':
+        discord:
+          enabled: true
+          token: ""
+          appID: ""
+          channels:
+            'default':
+              id: ""
+              bindings:
+                executors: []
+                sources:
+                  - k8s-err-events
+
+    sources:
+      k8s-err-events:
+        displayName: "K8s Issues"
+        plugins:
+          botkube/kubernetes@v1:
+            enabled: true
+            config:
+              recommendations:
+                pod:
+                  noLatestImageTag: false
+                  labelsSet: false
+                ingress:
+                  backendServiceValid: false
+                  tlsSecretValid: false
+              event:
+                types:
+                  - warning
+                  - error
+                reasons:
+                  exclude:
+                    - Unhealthy        # liveness/readiness probe failures — too noisy
+                    - ProbeWarning
+              resources:
+                - type: v1/pods
+                  namespaces:
+                    include: [".*"]
+                - type: v1/nodes
+                - type: v1/persistentvolumeclaims
+                  namespaces:
+                    include: [".*"]
+
+    executors: {}

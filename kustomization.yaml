@@ -16,5 +16,6 @@ resources:
   - syncthing/
   - trivy/
   - health-monitor/
+  - botkube/
   - tailscale/
   - website/
