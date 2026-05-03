@@ -171,6 +171,7 @@ dashboards = {
     "observatory.json":    "dashboard-98rU06mRk.json",
     "solar.json":          "dashboard-1-GoRoH4z.json",
     "weather-station.json":"dashboard-orrdjQlnk.json",
+    "node-metrics.json":   "dashboard-node-metrics.json",
 }
 cm = {"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"grafana-dashboards","namespace":"monitoring"},"data":{}}
 for dest, src in dashboards.items():
