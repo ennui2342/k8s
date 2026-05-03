@@ -6,29 +6,63 @@ All active app manifests live here. Flux reconciles the cluster against this rep
 ## Cluster Topology
 
 - **k3s** v1.32
-- **Master**: `ubuntu@k8s.local` — directly accessible from dev Mac via SSH and kubeconfig
-- **Workers**: `ubuntu@k8s-1`, `ubuntu@k8s-2` — reachable from master only (SSH keys on master)
+- **Master** (`k8s`, `ubuntu@k8s.local`): control plane only — tainted `node-role.kubernetes.io/control-plane:NoSchedule`. Directly accessible from dev Mac via SSH and kubeconfig.
+- **Workers**: `k8s-1` (`ubuntu@k8s-1`), `k8s-2` (`ubuntu@k8s-2`) — reachable from master only (SSH keys on master)
 - **Ingress**: Traefik v3 (bundled with k3s)
-- **Storage**: NFS StorageClass `nfs-client` backed by `192.168.0.76:/mnt/md0/k8s`
+- **Storage**: NFS StorageClass `nfs-client` backed by `192.168.0.76:/mnt/md0/k8s` (all PVs are NFS — no local disk dependency)
 - **VPN**: Tailscale Kubernetes operator (namespace: `tailscale`)
-- **TLS**: cert-manager with Let's Encrypt (ClusterIssuer: `letsencrypt-prod`)
+- **TLS**: cert-manager with Let's Encrypt (ClusterIssuer: `letsencrypt-prod`). Note: `*.k8s.ecafe.org` is internal DNS only — do not attempt TLS for those hostnames.
 - **GitOps**: Flux v2 pointing at `github.com/ennui2342/k8s` (branch: `main`)
+
+## Scheduling Constraints
+
+**These rules apply to every new workload added to this cluster.**
+
+### Control plane is off-limits for user workloads
+The master node (`k8s`) is tainted `node-role.kubernetes.io/control-plane:NoSchedule`. No user workload may run there. The k3s SQLite/kine datastore is sensitive to I/O and CPU latency — co-located workloads cause cascading failures (leader election loss, NodeNotReady events).
+
+### All pod specs must include soft worker-preference affinity
+Every Deployment, StatefulSet, and DaemonSet (user workloads) must include:
+
+```yaml
+affinity:
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: node-role.kubernetes.io/control-plane
+              operator: DoesNotExist
+```
+
+### DaemonSets that must run on all nodes
+If a DaemonSet genuinely needs to run on the master (e.g. monitoring agents collecting control-plane metrics), it must explicitly tolerate the taint:
+
+```yaml
+tolerations:
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+```
 
 ## Actively Deployed Services
 
 | Namespace | Service | Manifests | Notes |
 |-----------|---------|-----------|-------|
-| `cert-manager` | cert-manager | `cert-manager/` | Helm install; ClusterIssuer for ecafe.org |
+| `botkube` | botkube | `botkube/` | Flux HelmRelease; Discord alerts + kubectl/helm/flux executors |
+| `cert-manager` | cert-manager | `cert-manager/` | Flux HelmRelease (v1.x.x); ClusterIssuer for ecafe.org |
 | `default` | mosquitto | `mosquitto/` | MQTT broker, anonymous access, port 31883 (NodePort) |
-| `default` | modpoll | `solar/` | Reads FoxESS inverter via Modbus at 192.168.0.188, publishes to MQTT |
+| `default` | modpoll | `solar/` | Reads FoxESS inverter via Modbus at 192.168.0.188, publishes to `solar/foxess` on MQTT |
 | `default` | nfs-provisioner | `nfs/template.yaml` | NFS subdir external provisioner |
+| `default` | syncthing | `syncthing/` | SyncThing file sync; config + data on NFS |
 | `default` | web | `website/` | nginx + PHP-FPM StatefulSet; serves k8s.ecafe.org |
-| `home-assistant` | homeassistant | `home-assistant/ha-*.yaml` | HA 2025.6.1, hostNetwork, config on NFS |
+| `home-assistant` | homeassistant | `home-assistant/ha-*.yaml` | HA 2026.4.4, hostNetwork, config on NFS |
 | `home-assistant` | ring-mqtt | `ring-mqtt/` | Ring doorbell → MQTT bridge, RTSP port 30002 |
 | `monitoring` | grafana | `grafana/` | grafana.k8s.ecafe.org, anonymous viewer access; dashboards + datasource provisioned via ConfigMap |
-| `monitoring` | influxdb | `tick/influxdb-*.yaml` | InfluxDB 1.8, 8Gi NFS PV |
-| `monitoring` | telegraf | `tick/telegraf-*.yaml` | Scrapes MQTT (mosquitto.default:1883) and statsd |
-| `tailscale` | operator | `tailscale/` | Tailscale operator; `ts-frontend` exposes taskmgt frontend |
+| `monitoring` | influxdb | `tick/influxdb*.yaml` | InfluxDB 1.8.0, 8Gi NFS PV |
+| `monitoring` | node-exporter | `monitoring/` | DaemonSet (all nodes incl. master); exposes node CPU/mem/disk/IO metrics |
+| `monitoring` | telegraf | `tick/telegraf*.yaml` | Scrapes MQTT (mosquitto.default:1883), statsd, SNMP (NAS at 192.168.0.76), and node-exporter |
+| `tailscale` | operator | `tailscale/` | Flux HelmRelease (1.x.x); `ts-k8s-connector` exposes taskmgt frontend |
 | `taskmgt` | api + frontend | `taskmgt/` | Task management app; see Flux image automation below |
 
 ### Key Ingress Hostnames
@@ -102,18 +136,19 @@ Manifests: `flux-system/discord-alert.yaml`
 ## Directory Structure Notes
 
 ```
-cert-manager/     — ClusterIssuer and cert-manager Helm values
+cert-manager/     — Flux HelmRelease + HelmRepository (jetstack) + ClusterIssuer
 coredns/          — CoreDNS custom config (*.k8s.ecafe.org wildcard)
 flux-system/      — Flux bootstrap output + SOPS patch + alert config
 grafana/          — Grafana deployment, admin secret, provisioned datasource + dashboards, ingress + PV
 home-assistant/   — HA deployment, service, ingress, cert, cleanup CronJob
+monitoring/       — node-exporter DaemonSet + service (feeds Telegraf → InfluxDB)
 mosquitto/        — Mosquitto deployment, configmap, service
 nas-monitor/      — CronJob: SSH to NAS, parse /proc/mdstat, Discord alert
 nfs/              — NFS provisioner Helm template
 ring-mqtt/        — ring-mqtt deployment, PVC, service
 solar/            — modpoll deployment and Modbus configmap
 syncthing/        — SyncThing deployment, PVCs, service, ingress, conflict CronJob
-tailscale/        — Tailscale operator Helm install + connector
+tailscale/        — Flux HelmRelease + HelmRepository (tailscale) + Connector CR
 taskmgt/          — taskmgt app manifests + Flux image automation
 tick/             — InfluxDB StatefulSet + Telegraf deployment + PV
 website/          — nginx/PHP StatefulSet, configmaps, ingress
@@ -121,8 +156,10 @@ website/          — nginx/PHP StatefulSet, configmaps, ingress
 
 ## Orienting a New Claude Instance
 
-1. Run `kubectl get all -A` to see live cluster state.
-2. Check `kubectl get gitrepository,kustomization,imagepolicy,imageupdateautomation -A` for Flux status.
-3. The cluster is the source of truth for what's *running*; this repo is the source of truth for what *should* run.
-4. Inactive/historical manifests exist locally but are gitignored — they may be stale.
-5. SSH to master: `ssh ubuntu@k8s.local`. Workers only reachable from there.
+1. Run `kubectl get pods -A -o custom-columns='NODE:.spec.nodeName,NS:.metadata.namespace,POD:.metadata.name,STATUS:.status.phase' --no-headers | grep -v Completed | sort` to see live pod placement.
+2. Check `kubectl get helmrelease -A` for Flux HelmRelease status.
+3. Check `kubectl get gitrepository,kustomization,imagepolicy,imageupdateautomation -A` for Flux status.
+4. The cluster is the source of truth for what's *running*; this repo is the source of truth for what *should* run.
+5. Inactive/historical manifests exist locally but are gitignored — they may be stale.
+6. SSH to master: `ssh ubuntu@k8s.local`. Workers only reachable from there.
+7. Use `kubectl` locally — do not SSH to k8s.local just to run kubectl.
