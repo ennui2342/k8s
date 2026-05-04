@@ -13,6 +13,8 @@ spec:
     metadata:
       labels:
         app: mosquitto
+      annotations:
+        checksum/config: "fbab8efc6137"
     spec:
       affinity:
         nodeAffinity:

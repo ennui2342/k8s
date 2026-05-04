@@ -141,47 +141,23 @@ automatically via the `letsencrypt-prod` ClusterIssuer once it is running.
 
 ### Grafana admin password
 
-The admin credentials are in `grafana/grafana-admin-secret.yaml` (SOPS-encrypted),
-applied automatically by Flux. On a clean rebuild Grafana reads the password from
-the `GF_SECURITY_ADMIN_PASSWORD` env var on first start — no manual steps needed.
+The admin credentials are in `prometheus/grafana-admin-secret.yaml` (SOPS-encrypted),
+applied automatically by Flux. The kube-prometheus-stack chart reads them from the
+`grafana-admin` secret — no manual steps needed.
 
 ### Grafana dashboards and datasources
 
-Dashboards and the InfluxDB datasource are provisioned declaratively via
-ConfigMaps (`grafana-dashboards` and `grafana-datasources`). They come up
-automatically with the pod — no manual import needed.
+Grafana is managed by kube-prometheus-stack (`prometheus/helmrelease.yaml`).
 
-Dashboard JSON sources live in `grafana/dashboard-*.json`. To update a
-dashboard: edit in the UI, re-export via the API, overwrite the file, and commit:
+- **Community dashboards** (Node Exporter Full, Kubernetes Cluster, Loki, NFS) are downloaded
+  from grafana.com at deploy time via `dashboards.default` in the HelmRelease values.
+- **Custom dashboards** (Solar, Observatory, NAS Monitor, Weather Station) are provisioned via
+  ConfigMaps in `dashboards/` with label `grafana_dashboard: "1"` — the Grafana sidecar
+  picks them up automatically.
+- **Datasources** (Prometheus, InfluxDB, Loki) are configured in the HelmRelease values.
 
-```sh
-curl -s -u "admin:$PASS" http://grafana.k8s.ecafe.org/api/dashboards/uid/<uid> \
-  | python3 -c "import json,sys; d=json.load(sys.stdin); d['dashboard']['version']=0; print(json.dumps({'dashboard':d['dashboard'],'overwrite':True},indent=2))" \
-  > grafana/dashboard-<name>.json
-```
-
-Then regenerate the ConfigMap and commit:
-
-```sh
-cd /Volumes/SSD/sync/projects/k8s
-python3 - << 'EOF'
-import json, yaml
-dashboards = {
-    "nas-monitor.json":    "dashboard-nas-monitor.json",
-    "observatory.json":    "dashboard-98rU06mRk.json",
-    "solar.json":          "dashboard-1-GoRoH4z.json",
-    "weather-station.json":"dashboard-orrdjQlnk.json",
-    "node-metrics.json":   "dashboard-node-metrics.json",
-}
-cm = {"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"grafana-dashboards","namespace":"monitoring"},"data":{}}
-for dest, src in dashboards.items():
-    d = json.load(open(f"grafana/{src}"))
-    inner = d["dashboard"]; inner["version"] = 0
-    cm["data"][dest] = json.dumps(inner, indent=2)
-yaml.dump(cm, open("grafana/grafana-dashboards.yaml","w"), default_flow_style=False, allow_unicode=True)
-EOF
-git add grafana/ && git commit -m "Update Grafana dashboards"
-```
+To update a custom dashboard: edit in the UI, export the JSON, update the ConfigMap in
+`dashboards/dashboard-<name>.yaml`, and commit. The sidecar reloads without a pod restart.
 
 ### Tailscale
 

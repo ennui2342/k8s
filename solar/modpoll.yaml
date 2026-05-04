@@ -13,6 +13,8 @@ spec:
     metadata:
       labels:
         app: modpoll
+      annotations:
+        checksum/config: "7bc4fd0f2cdf"
     spec:
       terminationGracePeriodSeconds: 10
       affinity:

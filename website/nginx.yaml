@@ -12,6 +12,9 @@ spec:
     metadata:
       labels:
         app: nginx
+      annotations:
+        checksum/config: "67b9205b25ed"
+        checksum/phpconfig: "3cad52e955d0"
     spec:
       terminationGracePeriodSeconds: 10
       affinity:

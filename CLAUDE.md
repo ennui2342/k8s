@@ -58,10 +58,12 @@ tolerations:
 | `default` | web | `website/` | nginx + PHP-FPM StatefulSet; serves k8s.ecafe.org |
 | `home-assistant` | homeassistant | `home-assistant/ha-*.yaml` | HA 2026.4.4, hostNetwork, config on NFS |
 | `home-assistant` | ring-mqtt | `ring-mqtt/` | Ring doorbell → MQTT bridge, RTSP port 30002 |
-| `monitoring` | grafana | `grafana/` | grafana.k8s.ecafe.org, anonymous viewer access; dashboards + datasource provisioned via ConfigMap |
+| `monitoring` | grafana | `prometheus/helmrelease.yaml` | grafana.k8s.ecafe.org, anonymous viewer access; managed by kube-prometheus-stack chart |
 | `monitoring` | influxdb | `monitoring/influxdb.yaml` | InfluxDB 1.8.0, 8Gi NFS PV |
-| `monitoring` | node-exporter | `monitoring/node-exporter.yaml` | DaemonSet (all nodes incl. master); exposes node CPU/mem/disk/IO metrics |
-| `monitoring` | telegraf | `monitoring/telegraf.yaml` | Scrapes MQTT (mosquitto.default:1883), statsd, SNMP (NAS at 192.168.0.76), and node-exporter |
+| `monitoring` | kube-prometheus-stack | `prometheus/` | Flux HelmRelease (70.x.x); Prometheus + Alertmanager + Grafana + node-exporter + kube-state-metrics |
+| `monitoring` | loki | `monitoring/loki.yaml` | Flux HelmRelease (6.x.x); log aggregation, 31-day retention, NFS storage |
+| `monitoring` | promtail | `monitoring/promtail.yaml` | Flux HelmRelease (6.x.x); ships pod logs to Loki |
+| `monitoring` | telegraf | `monitoring/telegraf.yaml` | Scrapes MQTT (mosquitto.default:1883), statsd, SNMP (NAS at 192.168.0.76) |
 | `tailscale` | operator | `tailscale/` | Flux HelmRelease (1.x.x); `ts-k8s-connector` exposes taskmgt frontend |
 | `taskmgt` | api + frontend | `taskmgt/` | Task management app; see Flux image automation below |
 
@@ -96,7 +98,7 @@ The age public key is embedded there. The **private key** lives only at
 - `nas-monitor/discord-webhook-secret.yaml` — Discord webhook for NAS RAID alerts
 - `nas-monitor/nas-ssh-key-secret.yaml` — SSH key for NAS RAID monitoring (port 9222)
 - `tailscale/operator-oauth-secret.yaml` — Tailscale OAuth client ID + secret
-- `grafana/grafana-admin-secret.yaml` — Grafana admin username + password
+- `prometheus/grafana-admin-secret.yaml` — Grafana admin username + password
 
 **Secrets NOT in git (provisioned imperatively or auto-managed):**
 - `home-assistant/epigone.ecafe.org-production` — TLS cert (managed by cert-manager, auto-renewed)
@@ -139,9 +141,10 @@ Manifests: `flux-system/discord-alert.yaml`
 cert-manager/     — Flux HelmRelease + HelmRepository (jetstack) + ClusterIssuer
 coredns/          — CoreDNS custom config (*.k8s.ecafe.org wildcard)
 flux-system/      — Flux bootstrap output + SOPS patch + alert config
-grafana/          — Grafana deployment, admin secret, provisioned datasource + dashboards, ingress + PV
+dashboards/       — Custom Grafana dashboard ConfigMaps (Solar, Observatory, NAS Monitor, Weather Station)
 home-assistant/   — HA deployment, service, ingress, cert, cleanup CronJob
-monitoring/       — InfluxDB, Telegraf, node-exporter; all monitoring stack manifests
+monitoring/       — InfluxDB, Telegraf, Loki, Promtail; all monitoring stack manifests
+prometheus/       — kube-prometheus-stack HelmRelease + HelmRepository + grafana-admin secret
 mosquitto/        — Mosquitto deployment, configmap, service
 nas-monitor/      — CronJob: SSH to NAS, parse /proc/mdstat, Discord alert
 nfs/              — NFS provisioner Helm template
