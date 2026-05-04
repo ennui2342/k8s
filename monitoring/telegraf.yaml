@@ -74,17 +74,17 @@ data:
       namepass = ["prometheus"]
       [[processors.regex.tags]]
         key = "address"
-        pattern = "^10\\.42\\.0\\."
+        pattern = "^10\\.42\\.0\\.\\d+$"
         replacement = "k8s"
         result_key = "node"
       [[processors.regex.tags]]
         key = "address"
-        pattern = "^10\\.42\\.1\\."
+        pattern = "^10\\.42\\.1\\.\\d+$"
         replacement = "k8s-1"
         result_key = "node"
       [[processors.regex.tags]]
         key = "address"
-        pattern = "^10\\.42\\.2\\."
+        pattern = "^10\\.42\\.2\\.\\d+$"
         replacement = "k8s-2"
         result_key = "node"
 
@@ -172,6 +172,8 @@ spec:
       app: telegraf
   template:
     metadata:
+      annotations:
+        checksum/config: "00d2dd87f0a9"
       labels:
         app: telegraf
     spec:
