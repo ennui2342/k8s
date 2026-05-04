@@ -5,12 +5,9 @@
       {
         "datasource": null,
         "fieldConfig": {
-          "defaults": {
-            "unit": "short",
-            "custom": { "lineWidth": 2 }
-          }
+          "defaults": { "unit": "short", "custom": { "lineWidth": 2 } }
         },
-        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+        "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
         "id": 1,
         "targets": [
           {
@@ -18,27 +15,51 @@
             "query": "SELECT mean(\"node_load1\") FROM \"prometheus\" WHERE $timeFilter GROUP BY time($__interval), \"node\" fill(none)",
             "rawQuery": true,
             "refId": "A",
-            "alias": "1m - $tag_node",
+            "alias": "$tag_node",
             "resultFormat": "time_series"
-          },
+          }
+        ],
+        "title": "Load Average 1m",
+        "type": "timeseries"
+      },
+      {
+        "datasource": null,
+        "fieldConfig": {
+          "defaults": { "unit": "short", "custom": { "lineWidth": 2 } }
+        },
+        "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+        "id": 9,
+        "targets": [
           {
             "datasource": null,
             "query": "SELECT mean(\"node_load5\") FROM \"prometheus\" WHERE $timeFilter GROUP BY time($__interval), \"node\" fill(none)",
             "rawQuery": true,
-            "refId": "B",
-            "alias": "5m - $tag_node",
+            "refId": "A",
+            "alias": "$tag_node",
             "resultFormat": "time_series"
-          },
+          }
+        ],
+        "title": "Load Average 5m",
+        "type": "timeseries"
+      },
+      {
+        "datasource": null,
+        "fieldConfig": {
+          "defaults": { "unit": "short", "custom": { "lineWidth": 2 } }
+        },
+        "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+        "id": 10,
+        "targets": [
           {
             "datasource": null,
             "query": "SELECT mean(\"node_load15\") FROM \"prometheus\" WHERE $timeFilter GROUP BY time($__interval), \"node\" fill(none)",
             "rawQuery": true,
-            "refId": "C",
-            "alias": "15m - $tag_node",
+            "refId": "A",
+            "alias": "$tag_node",
             "resultFormat": "time_series"
           }
         ],
-        "title": "Load Average (1m / 5m / 15m)",
+        "title": "Load Average 15m",
         "type": "timeseries"
       },
       {
