@@ -166,6 +166,10 @@ spec:
 
     # --- kube-state-metrics ---
     kube-state-metrics:
+      livenessProbe:
+        initialDelaySeconds: 30
+      readinessProbe:
+        initialDelaySeconds: 30
       affinity:
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
