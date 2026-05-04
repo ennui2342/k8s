@@ -73,12 +73,16 @@ spec:
       enabled: false
     minio:
       enabled: false
+    chunksCache:
+      enabled: false
+    resultsCache:
+      enabled: false
+    lokiCanary:
+      enabled: false
     monitoring:
       selfMonitoring:
         enabled: false
         grafanaAgent:
           installOperator: false
-      lokiCanary:
-        enabled: false
     test:
       enabled: false
