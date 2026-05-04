@@ -100,6 +100,8 @@ spec:
       app.kubernetes.io/name: grafana
   template:
     metadata:
+      annotations:
+        checksum/datasources: "db24d997add3"
       labels:
         app.kubernetes.io/name: grafana
     spec:
