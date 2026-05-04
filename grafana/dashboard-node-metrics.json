@@ -192,6 +192,60 @@
         ],
         "title": "Disk I/O (mmcblk0) — Read up / Write down",
         "type": "timeseries"
+      },
+      {
+        "datasource": null,
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps"
+          }
+        },
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
+        "id": 7,
+        "targets": [
+          {
+            "datasource": null,
+            "query": "SELECT non_negative_derivative(sum(\"node_nfs_requests_total\"), 1s) FROM \"prometheus\" WHERE $timeFilter GROUP BY time($__interval), \"pod_name\" fill(none)",
+            "rawQuery": true,
+            "refId": "A",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "NFS Requests/sec",
+        "type": "timeseries"
+      },
+      {
+        "datasource": null,
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "red", "value": 1 }
+              ]
+            },
+            "custom": {
+              "thresholdsStyle": {
+                "mode": "line"
+              }
+            }
+          }
+        },
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
+        "id": 8,
+        "targets": [
+          {
+            "datasource": null,
+            "query": "SELECT non_negative_derivative(mean(\"node_nfs_rpc_retransmissions_total\"), 1s) FROM \"prometheus\" WHERE $timeFilter GROUP BY time($__interval), \"pod_name\" fill(none)",
+            "rawQuery": true,
+            "refId": "A",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "NFS RPC Retransmissions/sec",
+        "type": "timeseries"
       }
     ],
     "refresh": "1m",
