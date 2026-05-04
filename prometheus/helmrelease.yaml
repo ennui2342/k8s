@@ -172,6 +172,25 @@ spec:
 
     # --- kube-state-metrics ---
     kube-state-metrics:
+      collectors:
+        - cronjobs
+        - daemonsets
+        - deployments
+        - endpoints
+        - horizontalpodautoscalers
+        - ingresses
+        - jobs
+        - leases
+        - namespaces
+        - nodes
+        - persistentvolumeclaims
+        - persistentvolumes
+        - pods
+        - replicasets
+        - replicationcontrollers
+        - services
+        - statefulsets
+        - storageclasses
       livenessProbe:
         initialDelaySeconds: 30
         failureThreshold: 12
