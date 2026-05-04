@@ -5,3 +5,5 @@ resources:
   - influxdb.yaml
   - telegraf.yaml
   - pv.yaml
+  - loki.yaml
+  - promtail.yaml
