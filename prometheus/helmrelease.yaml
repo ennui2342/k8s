@@ -85,14 +85,6 @@ spec:
 
       dashboards:
         default:
-          node-exporter-full:
-            gnetId: 1860
-            revision: 37
-            datasource: Prometheus
-          kubernetes-cluster:
-            gnetId: 315
-            revision: 3
-            datasource: Prometheus
           loki:
             gnetId: 14055
             revision: 5
@@ -207,6 +199,15 @@ spec:
                 matchExpressions:
                   - key: node-role.kubernetes.io/control-plane
                     operator: DoesNotExist
+
+    # --- node-exporter OS dashboards ---
+    # These nodes are Linux/ARM64 only
+    nodeExporter:
+      operatingSystems:
+        aix:
+          enabled: false
+        darwin:
+          enabled: false
 
     # --- k3s compatibility ---
     # These components are not accessible via standard endpoints in k3s
