@@ -88,12 +88,6 @@ data:
         replacement = "k8s-2"
         result_key = "node"
 
-    [[inputs.prometheus]]
-      monitor_kubernetes_pods = true
-      monitor_kubernetes_pods_namespace = "monitoring"
-      kubernetes_label_selector = "app=node-exporter"
-      metric_version = 2
-
     [[inputs.snmp]]
       agents = ["udp://192.168.0.76:161"]
       version = 2
@@ -173,7 +167,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: "00d2dd87f0a9"
+        checksum/config: "c0ca9e3ec9b0"
       labels:
         app: telegraf
     spec:

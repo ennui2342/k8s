@@ -4,3 +4,4 @@ namespace: monitoring
 resources:
   - helmrepo.yaml
   - helmrelease.yaml
+  - grafana-admin-secret.yaml

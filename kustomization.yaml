@@ -4,7 +4,6 @@ resources:
   - flux-system/
   - cert-manager/
   - coredns/
-  - grafana/
   - home-assistant/
   - mosquitto/
   - nfs/
