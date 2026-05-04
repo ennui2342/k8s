@@ -71,18 +71,11 @@ spec:
     # Disable extras not needed for single-binary homelab
     gateway:
       enabled: false
-    minio:
-      enabled: false
     chunksCache:
       enabled: false
     resultsCache:
       enabled: false
     lokiCanary:
       enabled: false
-    monitoring:
-      selfMonitoring:
-        enabled: false
-        grafanaAgent:
-          installOperator: false
     test:
       enabled: false
