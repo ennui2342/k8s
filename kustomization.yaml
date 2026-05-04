@@ -12,6 +12,8 @@ resources:
   - solar/
   - taskmgt/
   - monitoring/
+  - prometheus/
+  - dashboards/
   - nas-monitor/
   - syncthing/
   - trivy/

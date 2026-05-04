@@ -1,0 +1,187 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kube-prometheus-stack
+  namespace: monitoring
+spec:
+  interval: 10m
+  timeout: 15m
+  chart:
+    spec:
+      chart: kube-prometheus-stack
+      version: "70.x.x"
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+        namespace: monitoring
+  values:
+
+    # --- Grafana ---
+    grafana:
+      admin:
+        existingSecret: grafana-admin
+        userKey: admin-user
+        passwordKey: admin-password
+
+      grafana.ini:
+        analytics:
+          check_for_updates: true
+        auth.anonymous:
+          enabled: true
+          org_role: Viewer
+        panels:
+          disable_sanitize_html: true
+        security:
+          allow_embedding: true
+
+      ingress:
+        enabled: true
+        annotations:
+          kubernetes.io/ingress.class: traefik
+        hosts:
+          - grafana.k8s.ecafe.org
+
+      persistence:
+        enabled: true
+        storageClassName: nfs-client
+        size: 10Gi
+
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+
+      # Watch all namespaces for ConfigMaps labelled grafana_dashboard: "1"
+      sidecar:
+        dashboards:
+          enabled: true
+          searchNamespace: ALL
+          label: grafana_dashboard
+          labelValue: "1"
+
+      # Community dashboards downloaded from grafana.com at deploy time
+      dashboardProviders:
+        dashboardproviders.yaml:
+          apiVersion: 1
+          providers:
+            - name: default
+              orgId: 1
+              folder: ''
+              type: file
+              disableDeletion: false
+              editable: true
+              options:
+                path: /var/lib/grafana/dashboards/default
+
+      dashboards:
+        default:
+          node-exporter-full:
+            gnetId: 1860
+            revision: 37
+            datasource: Prometheus
+          kubernetes-cluster:
+            gnetId: 315
+            revision: 3
+            datasource: Prometheus
+          loki:
+            gnetId: 14055
+            revision: 5
+            datasource:
+              - name: DS_PROMETHEUS
+                value: Prometheus
+              - name: DS_LOKI
+                value: Loki
+          nfs:
+            gnetId: 6257
+            revision: 1
+            datasource: Prometheus
+
+      additionalDataSources:
+        - name: InfluxDB
+          type: influxdb
+          access: proxy
+          url: http://influxdb.monitoring.svc:8086
+          database: telegraf
+          uid: Kb3eTeiRk
+          editable: true
+        - name: Loki
+          type: loki
+          access: proxy
+          url: http://loki.monitoring.svc:3100
+          uid: loki
+          editable: true
+
+    # --- Prometheus ---
+    prometheus:
+      prometheusSpec:
+        retention: 31d
+        affinity:
+          nodeAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                preference:
+                  matchExpressions:
+                    - key: node-role.kubernetes.io/control-plane
+                      operator: DoesNotExist
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: nfs-client
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 20Gi
+
+    # --- Alertmanager ---
+    alertmanager:
+      alertmanagerSpec:
+        affinity:
+          nodeAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                preference:
+                  matchExpressions:
+                    - key: node-role.kubernetes.io/control-plane
+                      operator: DoesNotExist
+
+    # --- node-exporter ---
+    # Must run on all nodes including master to collect control-plane metrics
+    prometheus-node-exporter:
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+
+    # --- kube-state-metrics ---
+    kube-state-metrics:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+
+    # --- k3s compatibility ---
+    # These components are not accessible via standard endpoints in k3s
+    kubeControllerManager:
+      enabled: false
+    kubeScheduler:
+      enabled: false
+    kubeEtcd:
+      enabled: false
+    kubeProxy:
+      enabled: false
