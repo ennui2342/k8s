@@ -174,8 +174,12 @@ spec:
     kube-state-metrics:
       livenessProbe:
         initialDelaySeconds: 30
+        failureThreshold: 12
+        periodSeconds: 15
       readinessProbe:
         initialDelaySeconds: 30
+        failureThreshold: 12
+        periodSeconds: 15
       affinity:
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
