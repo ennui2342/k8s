@@ -70,6 +70,24 @@ data:
       client_id = "telegraf"
       data_format = "json"
 
+    [[processors.regex]]
+      namepass = ["prometheus"]
+      [[processors.regex.tags]]
+        key = "address"
+        pattern = "^10\\.42\\.0\\."
+        replacement = "k8s"
+        result_key = "node"
+      [[processors.regex.tags]]
+        key = "address"
+        pattern = "^10\\.42\\.1\\."
+        replacement = "k8s-1"
+        result_key = "node"
+      [[processors.regex.tags]]
+        key = "address"
+        pattern = "^10\\.42\\.2\\."
+        replacement = "k8s-2"
+        result_key = "node"
+
     [[inputs.prometheus]]
       monitor_kubernetes_pods = true
       monitor_kubernetes_pods_namespace = "monitoring"

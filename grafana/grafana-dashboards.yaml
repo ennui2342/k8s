@@ -95,24 +95,24 @@ data:
     ,\n  \"title\": \"NAS Monitor\",\n  \"uid\": \"nas-monitor\",\n  \"version\":\
     \ 0\n}"
   node-metrics.json: "{\n  \"description\": \"Cluster node resource utilisation via\
-    \ node-exporter. Series are identified by pod_name (node-exporter-* suffix maps\
-    \ to a node; pod names change on DaemonSet rollout).\",\n  \"panels\": [\n   \
-    \ {\n      \"datasource\": null,\n      \"fieldConfig\": {\n        \"defaults\"\
-    : {\n          \"unit\": \"short\",\n          \"custom\": {\n            \"lineWidth\"\
-    : 2\n          }\n        }\n      },\n      \"gridPos\": {\n        \"h\": 8,\n\
-    \        \"w\": 24,\n        \"x\": 0,\n        \"y\": 0\n      },\n      \"id\"\
-    : 1,\n      \"targets\": [\n        {\n          \"datasource\": null,\n     \
-    \     \"query\": \"SELECT mean(\\\"node_load1\\\") FROM \\\"prometheus\\\" WHERE\
-    \ $timeFilter GROUP BY time($__interval), \\\"pod_name\\\" fill(none)\",\n   \
-    \       \"rawQuery\": true,\n          \"refId\": \"A\",\n          \"resultFormat\"\
-    : \"time_series\"\n        },\n        {\n          \"datasource\": null,\n  \
-    \        \"query\": \"SELECT mean(\\\"node_load5\\\") FROM \\\"prometheus\\\"\
-    \ WHERE $timeFilter GROUP BY time($__interval), \\\"pod_name\\\" fill(none)\"\
-    ,\n          \"rawQuery\": true,\n          \"refId\": \"B\",\n          \"resultFormat\"\
-    : \"time_series\"\n        },\n        {\n          \"datasource\": null,\n  \
-    \        \"query\": \"SELECT mean(\\\"node_load15\\\") FROM \\\"prometheus\\\"\
-    \ WHERE $timeFilter GROUP BY time($__interval), \\\"pod_name\\\" fill(none)\"\
-    ,\n          \"rawQuery\": true,\n          \"refId\": \"C\",\n          \"resultFormat\"\
+    \ node-exporter.\",\n  \"panels\": [\n    {\n      \"datasource\": null,\n   \
+    \   \"fieldConfig\": {\n        \"defaults\": {\n          \"unit\": \"short\"\
+    ,\n          \"custom\": {\n            \"lineWidth\": 2\n          }\n      \
+    \  }\n      },\n      \"gridPos\": {\n        \"h\": 8,\n        \"w\": 24,\n\
+    \        \"x\": 0,\n        \"y\": 0\n      },\n      \"id\": 1,\n      \"targets\"\
+    : [\n        {\n          \"datasource\": null,\n          \"query\": \"SELECT\
+    \ mean(\\\"node_load1\\\") FROM \\\"prometheus\\\" WHERE $timeFilter GROUP BY\
+    \ time($__interval), \\\"node\\\" fill(none)\",\n          \"rawQuery\": true,\n\
+    \          \"refId\": \"A\",\n          \"alias\": \"1m - $tag_node\",\n     \
+    \     \"resultFormat\": \"time_series\"\n        },\n        {\n          \"datasource\"\
+    : null,\n          \"query\": \"SELECT mean(\\\"node_load5\\\") FROM \\\"prometheus\\\
+    \" WHERE $timeFilter GROUP BY time($__interval), \\\"node\\\" fill(none)\",\n\
+    \          \"rawQuery\": true,\n          \"refId\": \"B\",\n          \"alias\"\
+    : \"5m - $tag_node\",\n          \"resultFormat\": \"time_series\"\n        },\n\
+    \        {\n          \"datasource\": null,\n          \"query\": \"SELECT mean(\\\
+    \"node_load15\\\") FROM \\\"prometheus\\\" WHERE $timeFilter GROUP BY time($__interval),\
+    \ \\\"node\\\" fill(none)\",\n          \"rawQuery\": true,\n          \"refId\"\
+    : \"C\",\n          \"alias\": \"15m - $tag_node\",\n          \"resultFormat\"\
     : \"time_series\"\n        }\n      ],\n      \"title\": \"Load Average (1m /\
     \ 5m / 15m)\",\n      \"type\": \"timeseries\"\n    },\n    {\n      \"datasource\"\
     : null,\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"max\"\
@@ -122,18 +122,19 @@ data:
     \ [\n        {\n          \"datasource\": null,\n          \"query\": \"SELECT\
     \ 100 * (1 - mean(\\\"node_memory_MemAvailable_bytes\\\") / mean(\\\"node_memory_MemTotal_bytes\\\
     \")) FROM \\\"prometheus\\\" WHERE $timeFilter GROUP BY time($__interval), \\\"\
-    pod_name\\\" fill(none)\",\n          \"rawQuery\": true,\n          \"refId\"\
-    : \"A\",\n          \"resultFormat\": \"time_series\"\n        }\n      ],\n \
-    \     \"title\": \"Memory Usage (%)\",\n      \"type\": \"timeseries\"\n    },\n\
-    \    {\n      \"datasource\": null,\n      \"fieldConfig\": {\n        \"defaults\"\
-    : {\n          \"max\": 100,\n          \"min\": 0,\n          \"unit\": \"percent\"\
-    \n        }\n      },\n      \"gridPos\": {\n        \"h\": 8,\n        \"w\"\
-    : 12,\n        \"x\": 12,\n        \"y\": 8\n      },\n      \"id\": 3,\n    \
-    \  \"targets\": [\n        {\n          \"datasource\": null,\n          \"query\"\
-    : \"SELECT 100 * (1 - mean(\\\"node_filesystem_avail_bytes\\\") / mean(\\\"node_filesystem_size_bytes\\\
-    \")) FROM \\\"prometheus\\\" WHERE \\\"mountpoint\\\"='/' AND $timeFilter GROUP\
-    \ BY time($__interval), \\\"pod_name\\\" fill(none)\",\n          \"rawQuery\"\
-    : true,\n          \"refId\": \"A\",\n          \"resultFormat\": \"time_series\"\
+    node\\\" fill(none)\",\n          \"rawQuery\": true,\n          \"refId\": \"\
+    A\",\n          \"alias\": \"$tag_node\",\n          \"resultFormat\": \"time_series\"\
+    \n        }\n      ],\n      \"title\": \"Memory Usage (%)\",\n      \"type\"\
+    : \"timeseries\"\n    },\n    {\n      \"datasource\": null,\n      \"fieldConfig\"\
+    : {\n        \"defaults\": {\n          \"max\": 100,\n          \"min\": 0,\n\
+    \          \"unit\": \"percent\"\n        }\n      },\n      \"gridPos\": {\n\
+    \        \"h\": 8,\n        \"w\": 12,\n        \"x\": 12,\n        \"y\": 8\n\
+    \      },\n      \"id\": 3,\n      \"targets\": [\n        {\n          \"datasource\"\
+    : null,\n          \"query\": \"SELECT 100 * (1 - mean(\\\"node_filesystem_avail_bytes\\\
+    \") / mean(\\\"node_filesystem_size_bytes\\\")) FROM \\\"prometheus\\\" WHERE\
+    \ \\\"mountpoint\\\"='/' AND $timeFilter GROUP BY time($__interval), \\\"node\\\
+    \" fill(none)\",\n          \"rawQuery\": true,\n          \"refId\": \"A\",\n\
+    \          \"alias\": \"$tag_node\",\n          \"resultFormat\": \"time_series\"\
     \n        }\n      ],\n      \"title\": \"Root Disk Usage (%)\",\n      \"type\"\
     : \"timeseries\"\n    },\n    {\n      \"datasource\": null,\n      \"fieldConfig\"\
     : {\n        \"defaults\": {\n          \"max\": 100,\n          \"min\": 0,\n\
@@ -142,28 +143,29 @@ data:
     \      },\n      \"id\": 4,\n      \"targets\": [\n        {\n          \"datasource\"\
     : null,\n          \"query\": \"SELECT 100 * (1 - non_negative_derivative(mean(\\\
     \"node_cpu_seconds_total\\\"), 1s)) FROM \\\"prometheus\\\" WHERE \\\"mode\\\"\
-    ='idle' AND $timeFilter GROUP BY time($__interval), \\\"pod_name\\\" fill(none)\"\
-    ,\n          \"rawQuery\": true,\n          \"refId\": \"A\",\n          \"resultFormat\"\
-    : \"time_series\"\n        }\n      ],\n      \"title\": \"CPU Usage (%)\",\n\
-    \      \"type\": \"timeseries\"\n    },\n    {\n      \"datasource\": null,\n\
-    \      \"fieldConfig\": {\n        \"defaults\": {\n          \"unit\": \"Bps\"\
-    \n        },\n        \"overrides\": [\n          {\n            \"matcher\":\
-    \ {\n              \"id\": \"byFrameRefID\",\n              \"options\": \"B\"\
-    \n            },\n            \"properties\": [\n              {\n           \
-    \     \"id\": \"custom.transform\",\n                \"value\": \"negative-Y\"\
-    \n              }\n            ]\n          }\n        ]\n      },\n      \"gridPos\"\
-    : {\n        \"h\": 8,\n        \"w\": 24,\n        \"x\": 0,\n        \"y\":\
-    \ 24\n      },\n      \"id\": 5,\n      \"targets\": [\n        {\n          \"\
-    datasource\": null,\n          \"query\": \"SELECT non_negative_derivative(mean(\\\
-    \"node_network_receive_bytes_total\\\"), 1s) FROM \\\"prometheus\\\" WHERE \\\"\
-    device\\\"='eth0' AND $timeFilter GROUP BY time($__interval), \\\"pod_name\\\"\
-    \ fill(none)\",\n          \"rawQuery\": true,\n          \"refId\": \"A\",\n\
-    \          \"resultFormat\": \"time_series\"\n        },\n        {\n        \
-    \  \"datasource\": null,\n          \"query\": \"SELECT non_negative_derivative(mean(\\\
-    \"node_network_transmit_bytes_total\\\"), 1s) FROM \\\"prometheus\\\" WHERE \\\
-    \"device\\\"='eth0' AND $timeFilter GROUP BY time($__interval), \\\"pod_name\\\
-    \" fill(none)\",\n          \"rawQuery\": true,\n          \"refId\": \"B\",\n\
-    \          \"resultFormat\": \"time_series\"\n        }\n      ],\n      \"title\"\
+    ='idle' AND $timeFilter GROUP BY time($__interval), \\\"node\\\" fill(none)\"\
+    ,\n          \"rawQuery\": true,\n          \"refId\": \"A\",\n          \"alias\"\
+    : \"$tag_node\",\n          \"resultFormat\": \"time_series\"\n        }\n   \
+    \   ],\n      \"title\": \"CPU Usage (%)\",\n      \"type\": \"timeseries\"\n\
+    \    },\n    {\n      \"datasource\": null,\n      \"fieldConfig\": {\n      \
+    \  \"defaults\": {\n          \"unit\": \"Bps\"\n        },\n        \"overrides\"\
+    : [\n          {\n            \"matcher\": {\n              \"id\": \"byFrameRefID\"\
+    ,\n              \"options\": \"B\"\n            },\n            \"properties\"\
+    : [\n              {\n                \"id\": \"custom.transform\",\n        \
+    \        \"value\": \"negative-Y\"\n              }\n            ]\n         \
+    \ }\n        ]\n      },\n      \"gridPos\": {\n        \"h\": 8,\n        \"\
+    w\": 24,\n        \"x\": 0,\n        \"y\": 24\n      },\n      \"id\": 5,\n \
+    \     \"targets\": [\n        {\n          \"datasource\": null,\n          \"\
+    query\": \"SELECT non_negative_derivative(mean(\\\"node_network_receive_bytes_total\\\
+    \"), 1s) FROM \\\"prometheus\\\" WHERE \\\"device\\\"='eth0' AND $timeFilter GROUP\
+    \ BY time($__interval), \\\"node\\\" fill(none)\",\n          \"rawQuery\": true,\n\
+    \          \"refId\": \"A\",\n          \"alias\": \"Rx - $tag_node\",\n     \
+    \     \"resultFormat\": \"time_series\"\n        },\n        {\n          \"datasource\"\
+    : null,\n          \"query\": \"SELECT non_negative_derivative(mean(\\\"node_network_transmit_bytes_total\\\
+    \"), 1s) FROM \\\"prometheus\\\" WHERE \\\"device\\\"='eth0' AND $timeFilter GROUP\
+    \ BY time($__interval), \\\"node\\\" fill(none)\",\n          \"rawQuery\": true,\n\
+    \          \"refId\": \"B\",\n          \"alias\": \"Tx - $tag_node\",\n     \
+    \     \"resultFormat\": \"time_series\"\n        }\n      ],\n      \"title\"\
     : \"Network Throughput (eth0) \\u2014 Rx up / Tx down\",\n      \"type\": \"timeseries\"\
     \n    },\n    {\n      \"datasource\": null,\n      \"fieldConfig\": {\n     \
     \   \"defaults\": {\n          \"unit\": \"Bps\"\n        },\n        \"overrides\"\
@@ -176,38 +178,40 @@ data:
     \     \"targets\": [\n        {\n          \"datasource\": null,\n          \"\
     query\": \"SELECT non_negative_derivative(mean(\\\"node_disk_read_bytes_total\\\
     \"), 1s) FROM \\\"prometheus\\\" WHERE \\\"device\\\"='mmcblk0' AND $timeFilter\
-    \ GROUP BY time($__interval), \\\"pod_name\\\" fill(none)\",\n          \"rawQuery\"\
-    : true,\n          \"refId\": \"A\",\n          \"resultFormat\": \"time_series\"\
-    \n        },\n        {\n          \"datasource\": null,\n          \"query\"\
-    : \"SELECT non_negative_derivative(mean(\\\"node_disk_written_bytes_total\\\"\
-    ), 1s) FROM \\\"prometheus\\\" WHERE \\\"device\\\"='mmcblk0' AND $timeFilter\
-    \ GROUP BY time($__interval), \\\"pod_name\\\" fill(none)\",\n          \"rawQuery\"\
-    : true,\n          \"refId\": \"B\",\n          \"resultFormat\": \"time_series\"\
-    \n        }\n      ],\n      \"title\": \"Disk I/O (mmcblk0) \\u2014 Read up /\
-    \ Write down\",\n      \"type\": \"timeseries\"\n    },\n    {\n      \"datasource\"\
+    \ GROUP BY time($__interval), \\\"node\\\" fill(none)\",\n          \"rawQuery\"\
+    : true,\n          \"refId\": \"A\",\n          \"alias\": \"Read - $tag_node\"\
+    ,\n          \"resultFormat\": \"time_series\"\n        },\n        {\n      \
+    \    \"datasource\": null,\n          \"query\": \"SELECT non_negative_derivative(mean(\\\
+    \"node_disk_written_bytes_total\\\"), 1s) FROM \\\"prometheus\\\" WHERE \\\"device\\\
+    \"='mmcblk0' AND $timeFilter GROUP BY time($__interval), \\\"node\\\" fill(none)\"\
+    ,\n          \"rawQuery\": true,\n          \"refId\": \"B\",\n          \"alias\"\
+    : \"Write - $tag_node\",\n          \"resultFormat\": \"time_series\"\n      \
+    \  }\n      ],\n      \"title\": \"Disk I/O (mmcblk0) \\u2014 Read up / Write\
+    \ down\",\n      \"type\": \"timeseries\"\n    },\n    {\n      \"datasource\"\
     : null,\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"unit\"\
     : \"reqps\"\n        }\n      },\n      \"gridPos\": {\n        \"h\": 8,\n  \
     \      \"w\": 12,\n        \"x\": 0,\n        \"y\": 40\n      },\n      \"id\"\
     : 7,\n      \"targets\": [\n        {\n          \"datasource\": null,\n     \
     \     \"query\": \"SELECT non_negative_derivative(sum(\\\"node_nfs_requests_total\\\
     \"), 1s) FROM \\\"prometheus\\\" WHERE $timeFilter GROUP BY time($__interval),\
-    \ \\\"pod_name\\\" fill(none)\",\n          \"rawQuery\": true,\n          \"\
-    refId\": \"A\",\n          \"resultFormat\": \"time_series\"\n        }\n    \
-    \  ],\n      \"title\": \"NFS Requests/sec\",\n      \"type\": \"timeseries\"\n\
-    \    },\n    {\n      \"datasource\": null,\n      \"fieldConfig\": {\n      \
-    \  \"defaults\": {\n          \"unit\": \"reqps\",\n          \"thresholds\":\
-    \ {\n            \"mode\": \"absolute\",\n            \"steps\": [\n         \
-    \     {\n                \"color\": \"green\",\n                \"value\": null\n\
-    \              },\n              {\n                \"color\": \"red\",\n    \
-    \            \"value\": 1\n              }\n            ]\n          },\n    \
-    \      \"custom\": {\n            \"thresholdsStyle\": {\n              \"mode\"\
-    : \"line\"\n            }\n          }\n        }\n      },\n      \"gridPos\"\
-    : {\n        \"h\": 8,\n        \"w\": 12,\n        \"x\": 12,\n        \"y\"\
-    : 40\n      },\n      \"id\": 8,\n      \"targets\": [\n        {\n          \"\
-    datasource\": null,\n          \"query\": \"SELECT non_negative_derivative(mean(\\\
-    \"node_nfs_rpc_retransmissions_total\\\"), 1s) FROM \\\"prometheus\\\" WHERE $timeFilter\
-    \ GROUP BY time($__interval), \\\"pod_name\\\" fill(none)\",\n          \"rawQuery\"\
-    : true,\n          \"refId\": \"A\",\n          \"resultFormat\": \"time_series\"\
+    \ \\\"node\\\" fill(none)\",\n          \"rawQuery\": true,\n          \"refId\"\
+    : \"A\",\n          \"alias\": \"$tag_node\",\n          \"resultFormat\": \"\
+    time_series\"\n        }\n      ],\n      \"title\": \"NFS Requests/sec\",\n \
+    \     \"type\": \"timeseries\"\n    },\n    {\n      \"datasource\": null,\n \
+    \     \"fieldConfig\": {\n        \"defaults\": {\n          \"unit\": \"reqps\"\
+    ,\n          \"thresholds\": {\n            \"mode\": \"absolute\",\n        \
+    \    \"steps\": [\n              {\n                \"color\": \"green\",\n  \
+    \              \"value\": null\n              },\n              {\n          \
+    \      \"color\": \"red\",\n                \"value\": 1\n              }\n  \
+    \          ]\n          },\n          \"custom\": {\n            \"thresholdsStyle\"\
+    : {\n              \"mode\": \"line\"\n            }\n          }\n        }\n\
+    \      },\n      \"gridPos\": {\n        \"h\": 8,\n        \"w\": 12,\n     \
+    \   \"x\": 12,\n        \"y\": 40\n      },\n      \"id\": 8,\n      \"targets\"\
+    : [\n        {\n          \"datasource\": null,\n          \"query\": \"SELECT\
+    \ non_negative_derivative(mean(\\\"node_nfs_rpc_retransmissions_total\\\"), 1s)\
+    \ FROM \\\"prometheus\\\" WHERE $timeFilter GROUP BY time($__interval), \\\"node\\\
+    \" fill(none)\",\n          \"rawQuery\": true,\n          \"refId\": \"A\",\n\
+    \          \"alias\": \"$tag_node\",\n          \"resultFormat\": \"time_series\"\
     \n        }\n      ],\n      \"title\": \"NFS RPC Retransmissions/sec\",\n   \
     \   \"type\": \"timeseries\"\n    }\n  ],\n  \"refresh\": \"1m\",\n  \"schemaVersion\"\
     : 27,\n  \"time\": {\n    \"from\": \"now-3h\",\n    \"to\": \"now\"\n  },\n \

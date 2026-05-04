@@ -1,15 +1,13 @@
 {
   "dashboard": {
-    "description": "Cluster node resource utilisation via node-exporter. Series are identified by pod_name (node-exporter-* suffix maps to a node; pod names change on DaemonSet rollout).",
+    "description": "Cluster node resource utilisation via node-exporter.",
     "panels": [
       {
         "datasource": null,
         "fieldConfig": {
           "defaults": {
             "unit": "short",
-            "custom": {
-              "lineWidth": 2
-            }
+            "custom": { "lineWidth": 2 }
           }
         },
         "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
@@ -17,23 +15,26 @@
         "targets": [
           {
             "datasource": null,
-            "query": "SELECT mean(\"node_load1\") FROM \"prometheus\" WHERE $timeFilter GROUP BY time($__interval), \"pod_name\" fill(none)",
+            "query": "SELECT mean(\"node_load1\") FROM \"prometheus\" WHERE $timeFilter GROUP BY time($__interval), \"node\" fill(none)",
             "rawQuery": true,
             "refId": "A",
+            "alias": "1m - $tag_node",
             "resultFormat": "time_series"
           },
           {
             "datasource": null,
-            "query": "SELECT mean(\"node_load5\") FROM \"prometheus\" WHERE $timeFilter GROUP BY time($__interval), \"pod_name\" fill(none)",
+            "query": "SELECT mean(\"node_load5\") FROM \"prometheus\" WHERE $timeFilter GROUP BY time($__interval), \"node\" fill(none)",
             "rawQuery": true,
             "refId": "B",
+            "alias": "5m - $tag_node",
             "resultFormat": "time_series"
           },
           {
             "datasource": null,
-            "query": "SELECT mean(\"node_load15\") FROM \"prometheus\" WHERE $timeFilter GROUP BY time($__interval), \"pod_name\" fill(none)",
+            "query": "SELECT mean(\"node_load15\") FROM \"prometheus\" WHERE $timeFilter GROUP BY time($__interval), \"node\" fill(none)",
             "rawQuery": true,
             "refId": "C",
+            "alias": "15m - $tag_node",
             "resultFormat": "time_series"
           }
         ],
@@ -43,20 +44,17 @@
       {
         "datasource": null,
         "fieldConfig": {
-          "defaults": {
-            "max": 100,
-            "min": 0,
-            "unit": "percent"
-          }
+          "defaults": { "max": 100, "min": 0, "unit": "percent" }
         },
         "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
         "id": 2,
         "targets": [
           {
             "datasource": null,
-            "query": "SELECT 100 * (1 - mean(\"node_memory_MemAvailable_bytes\") / mean(\"node_memory_MemTotal_bytes\")) FROM \"prometheus\" WHERE $timeFilter GROUP BY time($__interval), \"pod_name\" fill(none)",
+            "query": "SELECT 100 * (1 - mean(\"node_memory_MemAvailable_bytes\") / mean(\"node_memory_MemTotal_bytes\")) FROM \"prometheus\" WHERE $timeFilter GROUP BY time($__interval), \"node\" fill(none)",
             "rawQuery": true,
             "refId": "A",
+            "alias": "$tag_node",
             "resultFormat": "time_series"
           }
         ],
@@ -66,20 +64,17 @@
       {
         "datasource": null,
         "fieldConfig": {
-          "defaults": {
-            "max": 100,
-            "min": 0,
-            "unit": "percent"
-          }
+          "defaults": { "max": 100, "min": 0, "unit": "percent" }
         },
         "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
         "id": 3,
         "targets": [
           {
             "datasource": null,
-            "query": "SELECT 100 * (1 - mean(\"node_filesystem_avail_bytes\") / mean(\"node_filesystem_size_bytes\")) FROM \"prometheus\" WHERE \"mountpoint\"='/' AND $timeFilter GROUP BY time($__interval), \"pod_name\" fill(none)",
+            "query": "SELECT 100 * (1 - mean(\"node_filesystem_avail_bytes\") / mean(\"node_filesystem_size_bytes\")) FROM \"prometheus\" WHERE \"mountpoint\"='/' AND $timeFilter GROUP BY time($__interval), \"node\" fill(none)",
             "rawQuery": true,
             "refId": "A",
+            "alias": "$tag_node",
             "resultFormat": "time_series"
           }
         ],
@@ -89,20 +84,17 @@
       {
         "datasource": null,
         "fieldConfig": {
-          "defaults": {
-            "max": 100,
-            "min": 0,
-            "unit": "percent"
-          }
+          "defaults": { "max": 100, "min": 0, "unit": "percent" }
         },
         "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
         "id": 4,
         "targets": [
           {
             "datasource": null,
-            "query": "SELECT 100 * (1 - non_negative_derivative(mean(\"node_cpu_seconds_total\"), 1s)) FROM \"prometheus\" WHERE \"mode\"='idle' AND $timeFilter GROUP BY time($__interval), \"pod_name\" fill(none)",
+            "query": "SELECT 100 * (1 - non_negative_derivative(mean(\"node_cpu_seconds_total\"), 1s)) FROM \"prometheus\" WHERE \"mode\"='idle' AND $timeFilter GROUP BY time($__interval), \"node\" fill(none)",
             "rawQuery": true,
             "refId": "A",
+            "alias": "$tag_node",
             "resultFormat": "time_series"
           }
         ],
@@ -112,21 +104,11 @@
       {
         "datasource": null,
         "fieldConfig": {
-          "defaults": {
-            "unit": "Bps"
-          },
+          "defaults": { "unit": "Bps" },
           "overrides": [
             {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "B"
-              },
-              "properties": [
-                {
-                  "id": "custom.transform",
-                  "value": "negative-Y"
-                }
-              ]
+              "matcher": { "id": "byFrameRefID", "options": "B" },
+              "properties": [{ "id": "custom.transform", "value": "negative-Y" }]
             }
           ]
         },
@@ -135,16 +117,18 @@
         "targets": [
           {
             "datasource": null,
-            "query": "SELECT non_negative_derivative(mean(\"node_network_receive_bytes_total\"), 1s) FROM \"prometheus\" WHERE \"device\"='eth0' AND $timeFilter GROUP BY time($__interval), \"pod_name\" fill(none)",
+            "query": "SELECT non_negative_derivative(mean(\"node_network_receive_bytes_total\"), 1s) FROM \"prometheus\" WHERE \"device\"='eth0' AND $timeFilter GROUP BY time($__interval), \"node\" fill(none)",
             "rawQuery": true,
             "refId": "A",
+            "alias": "Rx - $tag_node",
             "resultFormat": "time_series"
           },
           {
             "datasource": null,
-            "query": "SELECT non_negative_derivative(mean(\"node_network_transmit_bytes_total\"), 1s) FROM \"prometheus\" WHERE \"device\"='eth0' AND $timeFilter GROUP BY time($__interval), \"pod_name\" fill(none)",
+            "query": "SELECT non_negative_derivative(mean(\"node_network_transmit_bytes_total\"), 1s) FROM \"prometheus\" WHERE \"device\"='eth0' AND $timeFilter GROUP BY time($__interval), \"node\" fill(none)",
             "rawQuery": true,
             "refId": "B",
+            "alias": "Tx - $tag_node",
             "resultFormat": "time_series"
           }
         ],
@@ -154,21 +138,11 @@
       {
         "datasource": null,
         "fieldConfig": {
-          "defaults": {
-            "unit": "Bps"
-          },
+          "defaults": { "unit": "Bps" },
           "overrides": [
             {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "B"
-              },
-              "properties": [
-                {
-                  "id": "custom.transform",
-                  "value": "negative-Y"
-                }
-              ]
+              "matcher": { "id": "byFrameRefID", "options": "B" },
+              "properties": [{ "id": "custom.transform", "value": "negative-Y" }]
             }
           ]
         },
@@ -177,16 +151,18 @@
         "targets": [
           {
             "datasource": null,
-            "query": "SELECT non_negative_derivative(mean(\"node_disk_read_bytes_total\"), 1s) FROM \"prometheus\" WHERE \"device\"='mmcblk0' AND $timeFilter GROUP BY time($__interval), \"pod_name\" fill(none)",
+            "query": "SELECT non_negative_derivative(mean(\"node_disk_read_bytes_total\"), 1s) FROM \"prometheus\" WHERE \"device\"='mmcblk0' AND $timeFilter GROUP BY time($__interval), \"node\" fill(none)",
             "rawQuery": true,
             "refId": "A",
+            "alias": "Read - $tag_node",
             "resultFormat": "time_series"
           },
           {
             "datasource": null,
-            "query": "SELECT non_negative_derivative(mean(\"node_disk_written_bytes_total\"), 1s) FROM \"prometheus\" WHERE \"device\"='mmcblk0' AND $timeFilter GROUP BY time($__interval), \"pod_name\" fill(none)",
+            "query": "SELECT non_negative_derivative(mean(\"node_disk_written_bytes_total\"), 1s) FROM \"prometheus\" WHERE \"device\"='mmcblk0' AND $timeFilter GROUP BY time($__interval), \"node\" fill(none)",
             "rawQuery": true,
             "refId": "B",
+            "alias": "Write - $tag_node",
             "resultFormat": "time_series"
           }
         ],
@@ -196,18 +172,17 @@
       {
         "datasource": null,
         "fieldConfig": {
-          "defaults": {
-            "unit": "reqps"
-          }
+          "defaults": { "unit": "reqps" }
         },
         "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
         "id": 7,
         "targets": [
           {
             "datasource": null,
-            "query": "SELECT non_negative_derivative(sum(\"node_nfs_requests_total\"), 1s) FROM \"prometheus\" WHERE $timeFilter GROUP BY time($__interval), \"pod_name\" fill(none)",
+            "query": "SELECT non_negative_derivative(sum(\"node_nfs_requests_total\"), 1s) FROM \"prometheus\" WHERE $timeFilter GROUP BY time($__interval), \"node\" fill(none)",
             "rawQuery": true,
             "refId": "A",
+            "alias": "$tag_node",
             "resultFormat": "time_series"
           }
         ],
@@ -227,9 +202,7 @@
               ]
             },
             "custom": {
-              "thresholdsStyle": {
-                "mode": "line"
-              }
+              "thresholdsStyle": { "mode": "line" }
             }
           }
         },
@@ -238,9 +211,10 @@
         "targets": [
           {
             "datasource": null,
-            "query": "SELECT non_negative_derivative(mean(\"node_nfs_rpc_retransmissions_total\"), 1s) FROM \"prometheus\" WHERE $timeFilter GROUP BY time($__interval), \"pod_name\" fill(none)",
+            "query": "SELECT non_negative_derivative(mean(\"node_nfs_rpc_retransmissions_total\"), 1s) FROM \"prometheus\" WHERE $timeFilter GROUP BY time($__interval), \"node\" fill(none)",
             "rawQuery": true,
             "refId": "A",
+            "alias": "$tag_node",
             "resultFormat": "time_series"
           }
         ],
@@ -250,10 +224,7 @@
     ],
     "refresh": "1m",
     "schemaVersion": 27,
-    "time": {
-      "from": "now-3h",
-      "to": "now"
-    },
+    "time": { "from": "now-3h", "to": "now" },
     "timezone": "browser",
     "title": "Node Metrics",
     "uid": "node-metrics",
