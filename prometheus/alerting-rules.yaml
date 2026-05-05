@@ -1,0 +1,52 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: homelab-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: storage
+      interval: 1m
+      rules:
+        - alert: NodeHighIOWait
+          expr: |
+            avg by (instance) (
+              rate(node_cpu_seconds_total{mode="iowait", job="node-exporter"}[5m])
+            ) * 100 > 10
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: High I/O wait on {{ $labels.instance }}
+            description: >-
+              Average iowait is {{ $value | printf "%.1f" }}% on {{ $labels.instance }}.
+              Typically indicates NFS or disk saturation — check NAS load and active transfers.
+
+        - alert: NodeCriticalIOWait
+          expr: |
+            avg by (instance) (
+              rate(node_cpu_seconds_total{mode="iowait", job="node-exporter"}[5m])
+            ) * 100 > 30
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Critical I/O wait on {{ $labels.instance }}
+            description: >-
+              Average iowait is {{ $value | printf "%.1f" }}% on {{ $labels.instance }}.
+              NFS mounts are likely stalling — check NAS immediately.
+
+        - alert: PersistentVolumeFillingUp
+          expr: |
+            kubelet_volume_stats_used_bytes
+              / kubelet_volume_stats_capacity_bytes > 0.85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is {{ $value | humanizePercentage }} full
+            description: >-
+              PVC {{ $labels.persistentvolumeclaim }} in namespace {{ $labels.namespace }}
+              is {{ $value | humanizePercentage }} full. Consider expanding or pruning.

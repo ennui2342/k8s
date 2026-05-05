@@ -59,39 +59,7 @@ spec:
               bindings:
                 executors:
                   - k8s-tools
-                sources:
-                  - k8s-err-events
-
-    sources:
-      k8s-err-events:
-        displayName: "K8s Issues"
-        plugins:
-          botkube/kubernetes@v1:
-            enabled: true
-            config:
-              recommendations:
-                pod:
-                  noLatestImageTag: false
-                  labelsSet: false
-                ingress:
-                  backendServiceValid: false
-                  tlsSecretValid: false
-              event:
-                types:
-                  - warning
-                  - error
-                reasons:
-                  exclude:
-                    - Unhealthy        # liveness/readiness probe failures — too noisy
-                    - ProbeWarning
-              resources:
-                - type: v1/pods
-                  namespaces:
-                    include: [".*"]
-                - type: v1/nodes
-                - type: v1/persistentvolumeclaims
-                  namespaces:
-                    include: [".*"]
+                # sources intentionally omitted — AlertManager owns alerting now
 
     executors:
       k8s-tools:

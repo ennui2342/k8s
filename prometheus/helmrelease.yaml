@@ -137,6 +137,9 @@ spec:
     # --- Alertmanager ---
     alertmanager:
       alertmanagerSpec:
+        # Mount the discord-webhook secret so AlertManager can read the URL from a file
+        secrets:
+          - discord-webhook
         affinity:
           nodeAffinity:
             preferredDuringSchedulingIgnoredDuringExecution:
@@ -145,6 +148,47 @@ spec:
                   matchExpressions:
                     - key: node-role.kubernetes.io/control-plane
                       operator: DoesNotExist
+
+      config:
+        global:
+          resolve_timeout: 5m
+
+        route:
+          group_by: ['alertname', 'namespace']
+          group_wait: 1m        # wait 1m to batch related alerts before sending
+          group_interval: 5m    # wait 5m before sending updates to an existing group
+          repeat_interval: 4h   # re-notify after 4h if still firing
+          receiver: discord
+          routes:
+            - matchers:
+                - alertname="Watchdog"
+              receiver: "null"  # suppress the heartbeat alert
+
+        receivers:
+          - name: "null"
+          - name: discord
+            discord_configs:
+              - webhook_url_file: /etc/alertmanager/secrets/discord-webhook/address
+                send_resolved: true
+
+        inhibit_rules:
+          # Standard: critical suppresses warning/info for same alert in same namespace
+          - source_matchers:
+              - severity="critical"
+            target_matchers:
+              - severity=~"warning|info"
+            equal: [alertname, namespace]
+          - source_matchers:
+              - severity="warning"
+            target_matchers:
+              - severity="info"
+            equal: [alertname, namespace]
+          # Root cause: high iowait (storage/NFS saturation) suppresses downstream
+          # pod-level symptoms that are consequences, not independent problems
+          - source_matchers:
+              - alertname="NodeHighIOWait"
+            target_matchers:
+              - alertname=~"KubePodCrashLooping|KubePodNotReady|KubeDeploymentReplicasMismatch"
 
     # --- node-exporter ---
     # Must run on all nodes including master to collect control-plane metrics
