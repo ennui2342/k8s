@@ -59,23 +59,25 @@ spec:
               bindings:
                 executors:
                   - k8s-tools
-                # sources intentionally omitted — AlertManager owns alerting now
+                sources: []  # must be explicit empty list — omitting leaves valuesFrom secret's list intact
 
-    # Explicitly disable all source plugins — both our own and chart defaults.
-    # Removing sources from channel bindings is insufficient; the plugins must
-    # be disabled here or they still load and fire events.
+    # Disable all source plugins. The chart defaults use `botkube/kubernetes`
+    # (no @v1 suffix) — that's the key that must be set to enabled: false.
     sources:
       k8s-err-events:
-        botkube/kubernetes@v1:
+        botkube/kubernetes:
           enabled: false
       k8s-all-events:
-        botkube/kubernetes@v1:
+        botkube/kubernetes:
           enabled: false
       k8s-create-events:
-        botkube/kubernetes@v1:
+        botkube/kubernetes:
           enabled: false
       k8s-recommendation-events:
-        botkube/kubernetes@v1:
+        botkube/kubernetes:
+          enabled: false
+      k8s-err-with-logs-events:
+        botkube/kubernetes:
           enabled: false
 
     executors:
