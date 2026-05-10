@@ -87,9 +87,6 @@ rules:
   - apiGroups: [""]
     resources: ["endpoints"]
     verbs: ["get", "list", "watch", "create", "update", "patch"]
-  - apiGroups: ["coordination.k8s.io"]
-    resources: ["leases"]
-    verbs: ["get", "list", "watch", "create", "update", "patch"]
 ---
 # Source: nfs-subdir-external-provisioner/templates/rolebinding.yaml
 kind: RoleBinding
@@ -146,7 +143,7 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: nfs-subdir-external-provisioner
-          image: "registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.18"
+          image: "registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2"
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: nfs-subdir-external-provisioner-root
@@ -158,6 +155,8 @@ spec:
               value: 192.168.0.76
             - name: NFS_PATH
               value: /mnt/md0/k8s
+            - name: ENABLE_LEADER_ELECTION
+              value: "false"
       volumes:
         - name: nfs-subdir-external-provisioner-root
           nfs:
