@@ -24,7 +24,7 @@ spec:
                     operator: DoesNotExist
       containers:
       - name: homeassistant
-        image: homeassistant/home-assistant:2026.4.4
+        image: homeassistant/home-assistant:2026.5.1
         ports:
           - containerPort: 8123
         resources: {}
