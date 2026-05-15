@@ -27,9 +27,8 @@ spec:
       containers:
         - name: mdns-repeater
           image: docker.io/monstrenyatko/mdns-repeater:latest
-          env:
-            - name: MDNS_REPEATER_INTERFACES
-              value: "wlan0 eth0"
+          command: ["/bin/mdns-repeater"]
+          args: ["-f", "wlan0", "eth0"]
           securityContext:
             privileged: true
       restartPolicy: Always

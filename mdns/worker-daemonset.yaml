@@ -23,9 +23,8 @@ spec:
       containers:
         - name: mdns-repeater
           image: docker.io/monstrenyatko/mdns-repeater:latest
-          env:
-            - name: MDNS_REPEATER_INTERFACES
-              value: "eth0 cni0"
+          command: ["/bin/mdns-repeater"]
+          args: ["-f", "eth0", "cni0"]
           securityContext:
             privileged: true
       restartPolicy: Always
