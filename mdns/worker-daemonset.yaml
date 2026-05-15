@@ -15,12 +15,6 @@ spec:
       hostNetwork: true
       affinity:
         nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              preference:
-                matchExpressions:
-                  - key: node-role.kubernetes.io/control-plane
-                    operator: DoesNotExist
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
               - matchExpressions:
@@ -28,8 +22,10 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: mdns-repeater
-          image: docker.io/angelnu/mdns_repeater:latest
-          args: ["eth0", "cni0"]
+          image: docker.io/monstrenyatko/mdns-repeater:latest
+          env:
+            - name: MDNS_REPEATER_INTERFACES
+              value: "eth0 cni0"
           securityContext:
             privileged: true
       restartPolicy: Always

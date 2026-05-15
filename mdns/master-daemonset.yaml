@@ -26,8 +26,10 @@ spec:
                     operator: Exists
       containers:
         - name: mdns-repeater
-          image: docker.io/angelnu/mdns_repeater:latest
-          args: ["wlan0", "eth0"]
+          image: docker.io/monstrenyatko/mdns-repeater:latest
+          env:
+            - name: MDNS_REPEATER_INTERFACES
+              value: "wlan0 eth0"
           securityContext:
             privileged: true
       restartPolicy: Always
