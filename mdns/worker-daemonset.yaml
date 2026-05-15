@@ -28,7 +28,7 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: mdns-repeater
-          image: ghcr.io/angelnu/mdns_repeater:latest
+          image: docker.io/angelnu/mdns_repeater:latest
           args: ["eth0", "cni0"]
           securityContext:
             privileged: true
