@@ -18,7 +18,8 @@ metadata:
 spec:
   providerRef:
     name: discord
-  summary: "k8s homelab"
+  eventMetadata:
+    summary: "k8s homelab"
   eventSeverity: info
   eventSources:
     - kind: Kustomization
