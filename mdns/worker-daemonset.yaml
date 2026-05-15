@@ -21,9 +21,16 @@ spec:
                   - key: node-role.kubernetes.io/control-plane
                     operator: DoesNotExist
       initContainers:
-        - name: disable-multicast-snooping
+        - name: setup
           image: alpine:3.21
-          command: ["sh", "-c", "echo 0 > /sys/class/net/cni0/bridge/multicast_snooping"]
+          command:
+            - sh
+            - -c
+            - |
+              echo 0 > /sys/class/net/cni0/bridge/multicast_snooping
+              apk add --no-cache iptables
+              iptables -C OUTPUT -o eth0 -p udp --dport 5353 -d 224.0.0.251 -j DROP 2>/dev/null || \
+                iptables -I OUTPUT -o eth0 -p udp --dport 5353 -d 224.0.0.251 -j DROP
           securityContext:
             privileged: true
           volumeMounts:
