@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: mdns-repeater-master
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: mdns-repeater-master
+  template:
+    metadata:
+      labels:
+        app: mdns-repeater-master
+    spec:
+      hostNetwork: true
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+      containers:
+        - name: mdns-repeater
+          image: ghcr.io/angelnu/mdns_repeater:latest
+          args: ["wlan0", "eth0"]
+          securityContext:
+            privileged: true
+      restartPolicy: Always

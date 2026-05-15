@@ -20,3 +20,4 @@ resources:
   - botkube/
   - tailscale/
   - website/
+  - mdns/
