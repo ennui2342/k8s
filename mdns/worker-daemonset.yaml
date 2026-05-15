@@ -20,6 +20,15 @@ spec:
               - matchExpressions:
                   - key: node-role.kubernetes.io/control-plane
                     operator: DoesNotExist
+      initContainers:
+        - name: disable-multicast-snooping
+          image: alpine:3.21
+          command: ["sh", "-c", "echo 0 > /sys/class/net/cni0/bridge/multicast_snooping"]
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: sys
+              mountPath: /sys
       containers:
         - name: mdns-repeater
           image: docker.io/monstrenyatko/mdns-repeater:latest
@@ -27,4 +36,8 @@ spec:
           args: ["-f", "eth0", "cni0"]
           securityContext:
             privileged: true
+      volumes:
+        - name: sys
+          hostPath:
+            path: /sys
       restartPolicy: Always
