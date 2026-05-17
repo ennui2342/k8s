@@ -234,7 +234,7 @@ spec:
           restartPolicy: OnFailure
           containers:
           - name: monitor
-            image: alpine/k8s:1.32.3
+            image: alpine/k8s:1.32.13
             env:
             - name: DISCORD_WEBHOOK
               valueFrom:
