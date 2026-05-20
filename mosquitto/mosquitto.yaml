@@ -26,7 +26,8 @@ spec:
                     operator: DoesNotExist
       containers:
       - name: mosquitto
-        image: eclipse-mosquitto
+        image: ghcr.io/ennui2342/eclipse-mosquitto:2.1.2-patched
+        imagePullPolicy: Never
         ports:
         - containerPort: 9001
         - containerPort: 1883
