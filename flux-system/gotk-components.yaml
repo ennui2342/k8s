@@ -8231,8 +8231,8 @@ spec:
             resourceFieldRef:
               containerName: manager
               resource: limits.memory
-        image: ghcr.io/fluxcd/image-reflector-controller:v1.1.1
-        imagePullPolicy: IfNotPresent
+        image: ghcr.io/ennui2342/image-reflector-controller:v1.1.1-patched
+        imagePullPolicy: Never
         livenessProbe:
           httpGet:
             path: /healthz
