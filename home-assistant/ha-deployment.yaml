@@ -23,7 +23,8 @@ spec:
                     operator: DoesNotExist
       containers:
       - name: homeassistant
-        image: homeassistant/home-assistant:2026.5.1
+        image: ghcr.io/ennui2342/home-assistant:2026.5.3-patched
+        imagePullPolicy: Never
         ports:
           - containerPort: 8123
         resources: {}
