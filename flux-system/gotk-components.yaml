@@ -8323,8 +8323,8 @@ spec:
             resourceFieldRef:
               containerName: manager
               resource: limits.memory
-        image: ghcr.io/fluxcd/kustomize-controller:v1.8.4
-        imagePullPolicy: IfNotPresent
+        image: ghcr.io/ennui2342/kustomize-controller:v1.8.4-patched
+        imagePullPolicy: Never
         livenessProbe:
           httpGet:
             path: /healthz
