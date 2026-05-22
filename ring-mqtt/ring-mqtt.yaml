@@ -25,7 +25,8 @@ spec:
                     operator: DoesNotExist
       containers:
       - name: ring-mqtt
-        image: tsightler/ring-mqtt
+        image: ghcr.io/ennui2342/ring-mqtt:latest-patched
+        imagePullPolicy: Never
         ports:
         - containerPort: 8554
         volumeMounts:
