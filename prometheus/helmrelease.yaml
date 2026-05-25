@@ -63,6 +63,8 @@ spec:
 
       # Watch all namespaces for ConfigMaps labelled grafana_dashboard: "1"
       sidecar:
+        image:
+          tag: "1.30.9"
         dashboards:
           enabled: true
           searchNamespace: ALL
