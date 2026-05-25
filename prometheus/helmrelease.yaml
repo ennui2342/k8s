@@ -24,6 +24,9 @@ spec:
 
     # --- Grafana ---
     grafana:
+      image:
+        tag: "11.6.14-security-04"  # CVE fix: alpine openssl/musl/nghttp2 (2 CRITICAL + 9 HIGH)
+
       admin:
         existingSecret: grafana-admin
         userKey: admin-user
