@@ -75,6 +75,11 @@ spec:
     write:
       replicas: 0
 
+    # Override k8s-sidecar to patched version (fixes CVE-2025-15467, CVE-2026-31789 + 8 HIGH CVEs via Alpine 3.23)
+    sidecar:
+      image:
+        tag: "2.7.3"
+
     # Disable extras not needed for single-binary homelab
     gateway:
       enabled: false
