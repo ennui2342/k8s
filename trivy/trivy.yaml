@@ -175,7 +175,8 @@ spec:
           restartPolicy: OnFailure
           initContainers:
           - name: scan
-            image: aquasec/trivy:latest
+            image: ghcr.io/ennui2342/aquasec-trivy:0.70.0-patched
+            imagePullPolicy: Never
             command:
             - /bin/sh
             - -c
