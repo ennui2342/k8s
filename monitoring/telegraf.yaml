@@ -182,7 +182,8 @@ spec:
                     operator: DoesNotExist
       containers:
       - name: telegraf
-        image: telegraf:1.38.3
+        image: ghcr.io/ennui2342/telegraf:1.38.3-patched
+        imagePullPolicy: Never
         env:
         - name: HOSTNAME
           value: telegraf-polling-service
