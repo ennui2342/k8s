@@ -38,7 +38,8 @@ spec:
               mountPath: /sys
       containers:
         - name: mdns-repeater
-          image: docker.io/monstrenyatko/mdns-repeater:latest
+          image: ghcr.io/ennui2342/mdns-repeater:latest-patched
+          imagePullPolicy: Never
           command: ["/bin/mdns-repeater"]
           args: ["-f", "eth0", "cni0"]
           securityContext:

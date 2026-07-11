@@ -52,6 +52,7 @@ tolerations:
 | `botkube` | botkube | `botkube/` | Flux HelmRelease; Discord alerts + kubectl/helm/flux executors |
 | `cert-manager` | cert-manager | `cert-manager/` | Flux HelmRelease (v1.x.x); ClusterIssuer for ecafe.org |
 | `default` | mosquitto | `mosquitto/` | MQTT broker, anonymous access, port 31883 (NodePort) |
+| `default` | mdns-repeater | `mdns/` | DaemonSets (master + worker) repeating mDNS packets across host interfaces so mDNS-discoverable devices are visible cluster-wide; `hostNetwork: true`, `privileged: true`; image `ghcr.io/ennui2342/mdns-repeater:latest-patched` (locally patched, imagePullPolicy Never) |
 | `default` | modpoll | `solar/` | Reads FoxESS inverter via Modbus at 192.168.0.188, publishes to `solar/foxess` on MQTT |
 | `default` | nfs-provisioner | `nfs/template.yaml` | NFS subdir external provisioner |
 | `default` | syncthing | `syncthing/` | SyncThing file sync; config + data on NFS |
@@ -143,6 +144,7 @@ coredns/          — CoreDNS custom config (*.k8s.ecafe.org wildcard)
 flux-system/      — Flux bootstrap output + SOPS patch + alert config
 dashboards/       — Custom Grafana dashboard ConfigMaps (Solar, Observatory, NAS Monitor, Weather Station)
 home-assistant/   — HA deployment, service, ingress, cert, cleanup CronJob
+mdns/             — mdns-repeater DaemonSets (master + worker), hostNetwork mDNS relay
 monitoring/       — InfluxDB, Telegraf, Loki, Promtail; all monitoring stack manifests
 prometheus/       — kube-prometheus-stack HelmRelease + HelmRepository + grafana-admin secret
 mosquitto/        — Mosquitto deployment, configmap, service
