@@ -245,6 +245,14 @@ spec:
             - /bin/sh
             - -c
             - |
+              # alpine/k8s:1.32.13 is the final build of the 1.32.x line (Alpine edge,
+              # not rebuilt since 2026-03-23) and its baked-in openssl/musl/curl/expat/
+              # nghttp2 packages are behind current CVE fixes. No newer 1.32.x tag
+              # exists, and bumping to 1.33.13 still ships stale openssl/musl. Instead,
+              # pull patched packages live from the Alpine edge repo on every run so the
+              # kubectl client stays pinned at v1.32.13 (matches the k3s v1.32 server).
+              apk update --quiet
+              apk upgrade --no-cache --quiet
               apk add --no-cache --quiet python3 curl
               python3 /scripts/monitor.py
             volumeMounts:
