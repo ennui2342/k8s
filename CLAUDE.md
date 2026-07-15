@@ -56,6 +56,7 @@ tolerations:
 | `default` | modpoll | `solar/` | Reads FoxESS inverter via Modbus at 192.168.0.188, publishes to `solar/foxess` on MQTT |
 | `default` | nfs-provisioner | `nfs/template.yaml` | NFS subdir external provisioner |
 | `default` | syncthing | `syncthing/` | SyncThing file sync; config + data on NFS |
+| `default` | webdav | `webdav/` | hacdias/webdav server for Zotero PDF attachment sync; 20Gi NFS PV; Tailscale-only access (no Ingress) via the tailscale-operator subnet router, same as taskmgt; basic-auth user `zotero`, bcrypt password in `webdav-secret.yaml` |
 | `default` | web | `website/` | nginx + PHP-FPM StatefulSet; serves k8s.ecafe.org |
 | `home-assistant` | homeassistant | `home-assistant/ha-*.yaml` | HA 2026.4.4, hostNetwork, config on NFS |
 | `home-assistant` | ring-mqtt | `ring-mqtt/` | Ring doorbell → MQTT bridge, RTSP port 30002 |
@@ -98,6 +99,7 @@ The age public key is embedded there. The **private key** lives only at
 - `syncthing/discord-webhook-secret.yaml` — Discord webhook for SyncThing conflict monitor
 - `nas-monitor/discord-webhook-secret.yaml` — Discord webhook for NAS RAID alerts
 - `nas-monitor/nas-ssh-key-secret.yaml` — SSH key for NAS RAID monitoring (port 9222)
+- `webdav/webdav-secret.yaml` — hacdias/webdav config.yaml, contains bcrypt-hashed basic-auth password for the `zotero` user
 - `tailscale/operator-oauth-secret.yaml` — Tailscale OAuth client ID + secret
 - `prometheus/grafana-admin-secret.yaml` — Grafana admin username + password
 
@@ -155,6 +157,7 @@ solar/            — modpoll deployment and Modbus configmap
 syncthing/        — SyncThing deployment, PVCs, service, ingress, conflict CronJob
 tailscale/        — Flux HelmRelease + HelmRepository (tailscale) + Connector CR
 taskmgt/          — taskmgt app manifests + Flux image automation
+webdav/           — hacdias/webdav deployment, PV/PVC, service, config secret (Zotero PDF sync, Tailscale-only)
 website/          — nginx/PHP StatefulSet, configmaps, ingress
 ```
 

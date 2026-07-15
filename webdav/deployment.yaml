@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webdav
+  namespace: default
+  labels:
+    app: webdav
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: webdav
+  template:
+    metadata:
+      labels:
+        app: webdav
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      containers:
+      - name: webdav
+        image: ghcr.io/hacdias/webdav:latest
+        args: ["-c", "/config.yml"]
+        ports:
+        - name: webdav
+          containerPort: 6065
+        volumeMounts:
+        - name: config
+          mountPath: /config.yml
+          subPath: config.yaml
+          readOnly: true
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: config
+        secret:
+          secretName: webdav-config
+      - name: data
+        persistentVolumeClaim:
+          claimName: webdav-data-pvc

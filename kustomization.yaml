@@ -21,3 +21,4 @@ resources:
   - tailscale/
   - website/
   - mdns/
+  - webdav/
