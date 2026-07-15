@@ -12,7 +12,6 @@ spec:
       priority: 100
       middlewares:
         - name: webdav-strip-prefix
-          namespace: default
       services:
         - name: webdav
           namespace: default

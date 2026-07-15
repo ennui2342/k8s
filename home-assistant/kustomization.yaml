@@ -8,3 +8,4 @@ resources:
   - ha-service.yaml
   - ha-recording-cleanup.yaml
   - webdav-route.yaml
+  - webdav-middleware.yaml
