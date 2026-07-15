@@ -56,9 +56,9 @@ tolerations:
 | `default` | modpoll | `solar/` | Reads FoxESS inverter via Modbus at 192.168.0.188, publishes to `solar/foxess` on MQTT |
 | `default` | nfs-provisioner | `nfs/template.yaml` | NFS subdir external provisioner |
 | `default` | syncthing | `syncthing/` | SyncThing file sync; config + data on NFS |
-| `default` | webdav | `webdav/` | hacdias/webdav server for Zotero PDF attachment sync; 20Gi NFS PV; `webdav.k8s.ecafe.org` ingress (internal/Tailscale) plus `epigone.ecafe.org/webdav` (public, trusted cert — see `epigone/` — required by Zotero for Android, which refuses self-signed/internal certs); basic-auth user `zotero`, bcrypt password in `webdav-secret.yaml` |
+| `default` | webdav | `webdav/` | hacdias/webdav server for Zotero PDF attachment sync; 20Gi NFS PV; `webdav.k8s.ecafe.org` ingress (internal/Tailscale, used by desktop Zotero) plus a Tailscale-operator Funnel Ingress (`webdav-funnel`) giving a trusted `*.ts.net` cert that works identically on-LAN and off — needed because Zotero for Android refuses self-signed/internal certs and the epigone.ecafe.org path hit home-router NAT-hairpin issues when accessed from inside the LAN; basic-auth user `zotero`, bcrypt password in `webdav-secret.yaml` |
 | `default` | web | `website/` | nginx + PHP-FPM StatefulSet; serves k8s.ecafe.org |
-| `epigone` | epigone routing | `epigone/` | Shared `epigone.ecafe.org` entrypoint: cert-manager Certificate + one Traefik IngressRoute that fronts both Home Assistant (`/`) and webdav (`/webdav`, stripped) via cross-namespace service refs. Decoupled from home-assistant since it now serves multiple apps. |
+| `epigone` | epigone routing | `epigone/` | Owns the `epigone.ecafe.org` cert-manager Certificate + Traefik IngressRoute for Home Assistant. Kept as its own namespace (decoupled from home-assistant) since it was briefly shared with webdav too; webdav now uses Tailscale Funnel instead (see below), so this currently only fronts Home Assistant, but stays separate in case another service needs the same public hostname later. |
 | `home-assistant` | homeassistant | `home-assistant/ha-*.yaml` | HA 2026.4.4, hostNetwork, config on NFS; reachable at `home-assistant.k8s.ecafe.org` and, via `epigone/`, at `epigone.ecafe.org` |
 | `home-assistant` | ring-mqtt | `ring-mqtt/` | Ring doorbell → MQTT bridge, RTSP port 30002 |
 | `monitoring` | grafana | `prometheus/helmrelease.yaml` | grafana.k8s.ecafe.org, anonymous viewer access; managed by kube-prometheus-stack chart |
@@ -73,10 +73,11 @@ tolerations:
 ### Key Ingress Hostnames
 - `k8s.ecafe.org` — website
 - `home-assistant.k8s.ecafe.org` — Home Assistant (internal DNS only)
-- `epigone.ecafe.org` — shared public hostname (TLS via cert-manager, real Let's Encrypt cert), routed by `epigone/`'s IngressRoute: `/` → Home Assistant, `/webdav` → webdav
+- `epigone.ecafe.org` — public hostname for Home Assistant (TLS via cert-manager, real Let's Encrypt cert), routed by `epigone/`'s IngressRoute
 - `grafana.k8s.ecafe.org` — Grafana
 - `tasks.k8s.ecafe.org` — taskmgt frontend (also on Tailscale as `taskmgt`)
-- `webdav.k8s.ecafe.org` — WebDAV server (Zotero PDF sync, internal/Tailscale access)
+- `webdav.k8s.ecafe.org` — WebDAV server, internal/Tailscale access (used by desktop Zotero)
+- `webdav.<tailnet-name>.ts.net` — WebDAV server via Tailscale Funnel, trusted cert, works on-LAN and off (used by Zotero for Android); requires the `funnel` node attribute granted to `tag:k8s` in the tailnet's ACL policy (Tailscale admin console, not managed in this repo)
 - `zephyr.ecafe.org` — DDNS endpoint
 
 ### Traefik Customization
@@ -169,7 +170,7 @@ syncthing/        — SyncThing deployment, PVCs, service, ingress, conflict Cro
 tailscale/        — Flux HelmRelease + HelmRepository (tailscale) + Connector CR
 taskmgt/          — taskmgt app manifests + Flux image automation
 traefik/          — HelmChartConfig customizing k3s's bundled Traefik (allowCrossNamespace)
-webdav/           — hacdias/webdav deployment, PV/PVC, service, ingress, middleware, config secret (Zotero PDF sync)
+webdav/           — hacdias/webdav deployment, PV/PVC, service, internal ingress, Tailscale Funnel ingress, config secret (Zotero PDF sync)
 website/          — nginx/PHP StatefulSet, configmaps, ingress
 ```
 

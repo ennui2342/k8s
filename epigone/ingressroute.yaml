@@ -7,16 +7,6 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`epigone.ecafe.org`) && PathPrefix(`/webdav`)
-      kind: Rule
-      priority: 100
-      middlewares:
-        - name: webdav-strip-prefix
-          namespace: default
-      services:
-        - name: webdav
-          namespace: default
-          port: 6065
     - match: Host(`epigone.ecafe.org`)
       kind: Rule
       services:

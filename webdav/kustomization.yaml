@@ -6,5 +6,5 @@ resources:
   - deployment.yaml
   - service.yaml
   - ingress.yaml
-  - middleware.yaml
+  - funnel-ingress.yaml
   - webdav-secret.yaml
