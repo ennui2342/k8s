@@ -134,6 +134,9 @@ Flux manages the full stack including cert-manager (via `cert-manager/helmreleas
 and the Tailscale operator (via `tailscale/helmrelease.yaml`) — no manual Helm installs
 needed. cert-manager will begin issuing the `epigone.ecafe.org` TLS certificate
 automatically via the `letsencrypt-prod` ClusterIssuer once it is running.
+Flux also applies `traefik/helmchartconfig.yaml`, which patches the k3s-bundled Traefik
+to enable `providers.kubernetescrd.allowCrossNamespace` (needed by `epigone/`'s
+IngressRoute) — this triggers a one-time Traefik pod restart.
 
 ---
 
@@ -171,6 +174,30 @@ Tailscale devices in the admin console if they are new machine keys.
 SyncThing config is persisted on NFS (`/mnt/md0/sync/config`), so device
 identity and folder config survive a cluster rebuild without any extra steps.
 Verify the pod is up and the web UI is reachable at `syncthing.k8s.ecafe.org`.
+
+### WebDAV (Zotero) — Tailscale Funnel
+
+`webdav/funnel-ingress.yaml` exposes webdav at a stable `*.ts.net` hostname via the
+Tailscale operator's Funnel support, used by Zotero for Android (which refuses
+self-signed/internal certs). This depends on two **account-level** Tailscale settings
+that live outside this repo and outside the cluster, so they are not recreated by a
+cluster rebuild — only need to be (re-)done if starting a new tailnet:
+
+- Admin console → **DNS** tab → **HTTPS Certificates** enabled
+- Admin console → **Access Controls** → ACL policy grants the `funnel` node attribute
+  to `tag:k8s` (the tag the operator's proxies use):
+  ```
+  "nodeAttrs": [
+  	{
+  		"target": ["tag:k8s"],
+  		"attr":   ["funnel"],
+  	},
+  ],
+  ```
+
+Once both are set, the Ingress's `status.loadBalancer.ingress[].hostname` (`kubectl get
+ingress webdav-funnel -n default`) reports the assigned hostname
+(`webdav.tail611131.ts.net` at time of writing).
 
 #### Sync-conflict prevention (`.stignore`)
 

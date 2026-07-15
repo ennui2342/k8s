@@ -67,7 +67,7 @@ tolerations:
 | `monitoring` | loki | `monitoring/loki.yaml` | Flux HelmRelease (6.x.x); log aggregation, 31-day retention, NFS storage |
 | `monitoring` | promtail | `monitoring/promtail.yaml` | Flux HelmRelease (6.x.x); ships pod logs to Loki |
 | `monitoring` | telegraf | `monitoring/telegraf.yaml` | Scrapes MQTT (mosquitto.default:1883), statsd, SNMP (NAS at 192.168.0.76) |
-| `tailscale` | operator | `tailscale/` | Flux HelmRelease (1.x.x); `ts-k8s-connector` exposes taskmgt frontend |
+| `tailscale` | operator | `tailscale/` | Flux HelmRelease (1.x.x); `ts-k8s-connector` exposes taskmgt frontend; also runs the Funnel proxy for webdav (`ts-webdav-funnel` StatefulSet, auto-created from `webdav/funnel-ingress.yaml`) |
 | `taskmgt` | api + frontend | `taskmgt/` | Task management app; see Flux image automation below |
 
 ### Key Ingress Hostnames
@@ -77,14 +77,14 @@ tolerations:
 - `grafana.k8s.ecafe.org` — Grafana
 - `tasks.k8s.ecafe.org` — taskmgt frontend (also on Tailscale as `taskmgt`)
 - `webdav.k8s.ecafe.org` — WebDAV server, internal/Tailscale access (used by desktop Zotero)
-- `webdav.<tailnet-name>.ts.net` — WebDAV server via Tailscale Funnel, trusted cert, works on-LAN and off (used by Zotero for Android); requires the `funnel` node attribute granted to `tag:k8s` in the tailnet's ACL policy (Tailscale admin console, not managed in this repo)
+- `webdav.tail611131.ts.net` — WebDAV server via Tailscale Funnel (`webdav/funnel-ingress.yaml`), trusted cert, works on-LAN and off (used by Zotero for Android); root URL, no path suffix. Required two one-time settings in the Tailscale admin console (not managed in this repo): "HTTPS Certificates" enabled (DNS tab) and the `funnel` node attribute granted to `tag:k8s` in the ACL policy
 - `zephyr.ecafe.org` — DDNS endpoint
 
 ### Traefik Customization
 The k3s-bundled Traefik is customized via `traefik/helmchartconfig.yaml` (a `HelmChartConfig`
 targeting the `traefik` HelmChart k3s manages in `kube-system`) to set
 `--providers.kubernetescrd.allowCrossNamespace=true`, required for the `epigone/` IngressRoute
-to reference services/middlewares in other namespaces. Applying this restarts the Traefik pod
+to reference the `homeassistant-service` Service in the `home-assistant` namespace. Applying this restarts the Traefik pod
 (brief downtime for all ingress hostnames).
 
 ## GitOps Principles
@@ -156,7 +156,7 @@ cert-manager/     — Flux HelmRelease + HelmRepository (jetstack) + ClusterIssu
 coredns/          — CoreDNS custom config (*.k8s.ecafe.org wildcard)
 flux-system/      — Flux bootstrap output + SOPS patch + alert config
 dashboards/       — Custom Grafana dashboard ConfigMaps (Solar, Observatory, NAS Monitor, Weather Station)
-epigone/          — Shared epigone.ecafe.org namespace: cert-manager Certificate + IngressRoute fronting Home Assistant + webdav
+epigone/          — epigone.ecafe.org namespace: cert-manager Certificate + IngressRoute fronting Home Assistant
 home-assistant/   — HA deployment, service, ingress, cleanup CronJob
 mdns/             — mdns-repeater DaemonSets (master + worker), hostNetwork mDNS relay
 monitoring/       — InfluxDB, Telegraf, Loki, Promtail; all monitoring stack manifests
