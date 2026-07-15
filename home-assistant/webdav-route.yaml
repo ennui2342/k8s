@@ -14,7 +14,6 @@ spec:
         - name: webdav-strip-prefix
       services:
         - name: webdav
-          namespace: default
           port: 6065
   tls:
     secretName: epigone.ecafe.org-production
