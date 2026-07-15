@@ -1,0 +1,21 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: webdav-via-epigone
+  namespace: home-assistant
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`epigone.ecafe.org`) && PathPrefix(`/webdav`)
+      kind: Rule
+      priority: 100
+      middlewares:
+        - name: webdav-strip-prefix
+          namespace: default
+      services:
+        - name: webdav
+          namespace: default
+          port: 6065
+  tls:
+    secretName: epigone.ecafe.org-production
