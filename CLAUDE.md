@@ -56,7 +56,7 @@ tolerations:
 | `default` | modpoll | `solar/` | Reads FoxESS inverter via Modbus at 192.168.0.188, publishes to `solar/foxess` on MQTT |
 | `default` | nfs-provisioner | `nfs/template.yaml` | NFS subdir external provisioner |
 | `default` | syncthing | `syncthing/` | SyncThing file sync; config + data on NFS |
-| `default` | webdav | `webdav/` | hacdias/webdav server for Zotero PDF attachment sync; 20Gi NFS PV; Tailscale-only access (no Ingress) via the tailscale-operator subnet router, same as taskmgt; basic-auth user `zotero`, bcrypt password in `webdav-secret.yaml` |
+| `default` | webdav | `webdav/` | hacdias/webdav server for Zotero PDF attachment sync; 20Gi NFS PV; `webdav.k8s.ecafe.org` ingress (also reachable via Tailscale subnet router, same as taskmgt); basic-auth user `zotero`, bcrypt password in `webdav-secret.yaml` |
 | `default` | web | `website/` | nginx + PHP-FPM StatefulSet; serves k8s.ecafe.org |
 | `home-assistant` | homeassistant | `home-assistant/ha-*.yaml` | HA 2026.4.4, hostNetwork, config on NFS |
 | `home-assistant` | ring-mqtt | `ring-mqtt/` | Ring doorbell → MQTT bridge, RTSP port 30002 |
@@ -74,6 +74,7 @@ tolerations:
 - `home-assistant.k8s.ecafe.org`, `epigone.ecafe.org` — Home Assistant (TLS via cert-manager)
 - `grafana.k8s.ecafe.org` — Grafana
 - `tasks.k8s.ecafe.org` — taskmgt frontend (also on Tailscale as `taskmgt`)
+- `webdav.k8s.ecafe.org` — WebDAV server (Zotero PDF sync)
 - `zephyr.ecafe.org` — DDNS endpoint
 
 ## GitOps Principles
