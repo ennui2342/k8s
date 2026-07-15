@@ -5,7 +5,6 @@ metadata:
   namespace: home-assistant # <--- This is your Home Assistant namespace
   annotations:
     kubernetes.io/ingress.class: traefik
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
   rules:
   - host: home-assistant.k8s.ecafe.org
@@ -18,17 +17,3 @@ spec:
             name: homeassistant-service
             port:
               number: 8123
-  - host: epigone.ecafe.org
-    http:
-      paths:
-      - path: "/"
-        pathType: Prefix
-        backend:
-          service:
-            name: homeassistant-service
-            port:
-              number: 8123
-  tls:
-  - hosts:
-    - epigone.ecafe.org
-    secretName: epigone.ecafe.org-production

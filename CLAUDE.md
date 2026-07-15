@@ -56,9 +56,10 @@ tolerations:
 | `default` | modpoll | `solar/` | Reads FoxESS inverter via Modbus at 192.168.0.188, publishes to `solar/foxess` on MQTT |
 | `default` | nfs-provisioner | `nfs/template.yaml` | NFS subdir external provisioner |
 | `default` | syncthing | `syncthing/` | SyncThing file sync; config + data on NFS |
-| `default` | webdav | `webdav/` | hacdias/webdav server for Zotero PDF attachment sync; 20Gi NFS PV; `webdav.k8s.ecafe.org` ingress (also reachable via Tailscale subnet router, same as taskmgt); basic-auth user `zotero`, bcrypt password in `webdav-secret.yaml` |
+| `default` | webdav | `webdav/` | hacdias/webdav server for Zotero PDF attachment sync; 20Gi NFS PV; `webdav.k8s.ecafe.org` ingress (internal/Tailscale) plus `epigone.ecafe.org/webdav` (public, trusted cert — see `epigone/` — required by Zotero for Android, which refuses self-signed/internal certs); basic-auth user `zotero`, bcrypt password in `webdav-secret.yaml` |
 | `default` | web | `website/` | nginx + PHP-FPM StatefulSet; serves k8s.ecafe.org |
-| `home-assistant` | homeassistant | `home-assistant/ha-*.yaml` | HA 2026.4.4, hostNetwork, config on NFS |
+| `epigone` | epigone routing | `epigone/` | Shared `epigone.ecafe.org` entrypoint: cert-manager Certificate + one Traefik IngressRoute that fronts both Home Assistant (`/`) and webdav (`/webdav`, stripped) via cross-namespace service refs. Decoupled from home-assistant since it now serves multiple apps. |
+| `home-assistant` | homeassistant | `home-assistant/ha-*.yaml` | HA 2026.4.4, hostNetwork, config on NFS; reachable at `home-assistant.k8s.ecafe.org` and, via `epigone/`, at `epigone.ecafe.org` |
 | `home-assistant` | ring-mqtt | `ring-mqtt/` | Ring doorbell → MQTT bridge, RTSP port 30002 |
 | `monitoring` | grafana | `prometheus/helmrelease.yaml` | grafana.k8s.ecafe.org, anonymous viewer access; managed by kube-prometheus-stack chart |
 | `monitoring` | influxdb | `monitoring/influxdb.yaml` | InfluxDB 1.8.0, 8Gi NFS PV |
@@ -71,11 +72,19 @@ tolerations:
 
 ### Key Ingress Hostnames
 - `k8s.ecafe.org` — website
-- `home-assistant.k8s.ecafe.org`, `epigone.ecafe.org` — Home Assistant (TLS via cert-manager)
+- `home-assistant.k8s.ecafe.org` — Home Assistant (internal DNS only)
+- `epigone.ecafe.org` — shared public hostname (TLS via cert-manager, real Let's Encrypt cert), routed by `epigone/`'s IngressRoute: `/` → Home Assistant, `/webdav` → webdav
 - `grafana.k8s.ecafe.org` — Grafana
 - `tasks.k8s.ecafe.org` — taskmgt frontend (also on Tailscale as `taskmgt`)
-- `webdav.k8s.ecafe.org` — WebDAV server (Zotero PDF sync)
+- `webdav.k8s.ecafe.org` — WebDAV server (Zotero PDF sync, internal/Tailscale access)
 - `zephyr.ecafe.org` — DDNS endpoint
+
+### Traefik Customization
+The k3s-bundled Traefik is customized via `traefik/helmchartconfig.yaml` (a `HelmChartConfig`
+targeting the `traefik` HelmChart k3s manages in `kube-system`) to set
+`--providers.kubernetescrd.allowCrossNamespace=true`, required for the `epigone/` IngressRoute
+to reference services/middlewares in other namespaces. Applying this restarts the Traefik pod
+(brief downtime for all ingress hostnames).
 
 ## GitOps Principles
 
@@ -105,7 +114,7 @@ The age public key is embedded there. The **private key** lives only at
 - `prometheus/grafana-admin-secret.yaml` — Grafana admin username + password
 
 **Secrets NOT in git (provisioned imperatively or auto-managed):**
-- `home-assistant/epigone.ecafe.org-production` — TLS cert (managed by cert-manager, auto-renewed)
+- `epigone/epigone.ecafe.org-production` — TLS cert (managed by cert-manager, auto-renewed)
 - `flux-system/flux-system` — SSH deploy key for `github.com/ennui2342/k8s`; **write-capable** key
   named `flux-system-readwrite` (GitHub key ID: 145092103). The private key is stored only in the
   cluster secret and is not persisted anywhere. **On cluster rebuild:** generate a new SSH keypair,
@@ -146,7 +155,8 @@ cert-manager/     — Flux HelmRelease + HelmRepository (jetstack) + ClusterIssu
 coredns/          — CoreDNS custom config (*.k8s.ecafe.org wildcard)
 flux-system/      — Flux bootstrap output + SOPS patch + alert config
 dashboards/       — Custom Grafana dashboard ConfigMaps (Solar, Observatory, NAS Monitor, Weather Station)
-home-assistant/   — HA deployment, service, ingress, cert, cleanup CronJob
+epigone/          — Shared epigone.ecafe.org namespace: cert-manager Certificate + IngressRoute fronting Home Assistant + webdav
+home-assistant/   — HA deployment, service, ingress, cleanup CronJob
 mdns/             — mdns-repeater DaemonSets (master + worker), hostNetwork mDNS relay
 monitoring/       — InfluxDB, Telegraf, Loki, Promtail; all monitoring stack manifests
 prometheus/       — kube-prometheus-stack HelmRelease + HelmRepository + grafana-admin secret
@@ -158,7 +168,8 @@ solar/            — modpoll deployment and Modbus configmap
 syncthing/        — SyncThing deployment, PVCs, service, ingress, conflict CronJob
 tailscale/        — Flux HelmRelease + HelmRepository (tailscale) + Connector CR
 taskmgt/          — taskmgt app manifests + Flux image automation
-webdav/           — hacdias/webdav deployment, PV/PVC, service, config secret (Zotero PDF sync, Tailscale-only)
+traefik/          — HelmChartConfig customizing k3s's bundled Traefik (allowCrossNamespace)
+webdav/           — hacdias/webdav deployment, PV/PVC, service, ingress, middleware, config secret (Zotero PDF sync)
 website/          — nginx/PHP StatefulSet, configmaps, ingress
 ```
 
