@@ -5,4 +5,3 @@ resources:
   - ha-ingress.yaml
   - ha-pvc.yaml
   - ha-service.yaml
-  - ha-recording-cleanup.yaml
