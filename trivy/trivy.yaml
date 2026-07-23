@@ -49,7 +49,16 @@ data:
     grep '^\s*upstream_image:' /config/patched-images.yaml \
       | sed -E 's/^[^:]+:[[:space:]]*//; s/^"//; s/"$//' \
       | while IFS= read -r img; do
-          [ -z "$img" ] && continue
+          # Every YAML entry must advance $i exactly once, including
+          # null/empty ones (strategy: deferred-migration has no
+          # upstream_image) — notify.py correlates files by enumerate()
+          # index over the *full* entry list, so skipping the increment
+          # here would desync every subsequent index.
+          if [ -z "$img" ] || [ "$img" = "null" ]; then
+            echo '{}' > "/report/reconcile/${i}.json"
+            i=$((i + 1))
+            continue
+          fi
           echo "reconcile: scanning upstream $img (index $i)"
           trivy image \
             --severity HIGH,CRITICAL \

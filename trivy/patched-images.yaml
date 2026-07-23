@@ -14,6 +14,12 @@
 #   health-monitor/health-monitor.yaml). No separate patched_image or
 #   Dockerfile. Reverting means removing the live-upgrade command and going
 #   back to the image's normal entrypoint, once upstream no longer needs it.
+# strategy: deferred-migration — the base OS is EOL (no CVE fix will ever
+#   ship); the real fix is an application-level version migration, not a CVE
+#   patch. `patched_image` is set to the plain image ref currently deployed
+#   (so the suppression match works the same way), `upstream_image` is null
+#   (nothing to reconcile against — there's no upstream fix to wait for).
+#   See the linked tm task for the actual migration project.
 #
 # critical/high are the CRITICAL+HIGH counts resolved at patch time — the
 # reconciliation scan compares the *current* upstream scan against these as
@@ -116,5 +122,25 @@
   build_recipe: null
   reason: "final build of the 1.32.x line (Alpine edge, not rebuilt since 2026-03-23); no newer 1.32.x tag exists and 1.33.x still ships stale packages. Packages upgraded live via apk at every pod start instead of a frozen tag."
   patched_date: "2026-05-04"
+  critical: 0
+  high: 0
+
+- workload: default/StatefulSet/web
+  strategy: deferred-migration
+  patched_image: "php:7.0-fpm"
+  upstream_image: null
+  build_recipe: null
+  reason: "PHP 7.0 / Debian 9 (stretch) EOL since 2020, 28 CRITICAL + 240 HIGH unpatchable CVEs — needs a PHP 8.x migration, not weekly CVE nagging. See tm task 2f2f1b21."
+  patched_date: null
+  critical: 0
+  high: 0
+
+- workload: monitoring/StatefulSet/influxdb
+  strategy: deferred-migration
+  patched_image: "influxdb:1.8.0"
+  upstream_image: null
+  build_recipe: null
+  reason: "Debian 9 (stretch) EOL since 2020, 5 CRITICAL + 51 HIGH unpatchable CVEs — needs an InfluxDB 1.x/2.x migration, not weekly CVE nagging. See tm task 94978139."
+  patched_date: null
   critical: 0
   high: 0
