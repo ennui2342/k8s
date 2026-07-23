@@ -79,6 +79,26 @@ data:
         return any(resource_id in t.get('text', '') for t in existing_tasks)
 
 
+    def find_condition(conditions, ctype):
+        return next((c for c in conditions if c['type'] == ctype), None)
+
+
+    def flux_failure(conditions):
+        # Ready == 'False' is an explicit failure. But a genuinely stuck release
+        # (retries exhausted) sits at Ready == 'Unknown' forever with a separate
+        # Stalled == 'True' condition — Ready alone never flips to False in that
+        # case, so it must be checked independently or stuck releases go
+        # undetected indefinitely (this is exactly what happened to botkube from
+        # 2026-05-09 until manually discovered on 2026-07-23).
+        ready = find_condition(conditions, 'Ready')
+        stalled = find_condition(conditions, 'Stalled')
+        if stalled and stalled.get('status') == 'True':
+            return stalled, '!1'  # retries exhausted — won't self-heal, needs a human
+        if ready and ready.get('status') == 'False':
+            return ready, '!2'
+        return None, None
+
+
     def create_task(title, notes, priority):
         text = f"{title} {priority} #devops +cli.claude-code.k8s <cli.cluster-health\n{notes}"
         r = subprocess.run(
@@ -123,40 +143,40 @@ data:
                     'priority': priority,
                 })
 
-    # --- Flux kustomizations in Failed state ---
+    # --- Flux kustomizations: failed or stalled ---
     data = kubectl_json('get', 'kustomizations.kustomize.toolkit.fluxcd.io', '-A')
     for k in data.get('items', []):
         ns = k['metadata']['namespace']
         name = k['metadata']['name']
-        ready = next((c for c in k.get('status', {}).get('conditions', []) if c['type'] == 'Ready'), None)
-        if ready and ready.get('status') == 'False':
+        cond, priority = flux_failure(k.get('status', {}).get('conditions', []))
+        if cond:
             resource_id = f'kustomization/{name}'
             if issue_tracked(resource_id, existing_tasks):
                 print(f'Already tracked: {resource_id}')
                 continue
             issues.append({
                 'resource': resource_id,
-                'title': f'{resource_id}: reconciliation failed',
-                'notes': f'* Namespace: {ns}\n* Message: {ready.get("message", "")[:200]}',
-                'priority': '!2',
+                'title': f'{resource_id}: reconciliation {"stalled" if priority == "!1" else "failed"}',
+                'notes': f'* Namespace: {ns}\n* Reason: {cond.get("reason", "")}\n* Message: {cond.get("message", "")[:200]}',
+                'priority': priority,
             })
 
-    # --- Flux HelmReleases in Failed state ---
+    # --- Flux HelmReleases: failed or stalled ---
     data = kubectl_json('get', 'helmreleases.helm.toolkit.fluxcd.io', '-A')
     for hr in data.get('items', []):
         ns = hr['metadata']['namespace']
         name = hr['metadata']['name']
-        ready = next((c for c in hr.get('status', {}).get('conditions', []) if c['type'] == 'Ready'), None)
-        if ready and ready.get('status') == 'False':
+        cond, priority = flux_failure(hr.get('status', {}).get('conditions', []))
+        if cond:
             resource_id = f'helmrelease/{name}'
             if issue_tracked(resource_id, existing_tasks):
                 print(f'Already tracked: {resource_id}')
                 continue
             issues.append({
                 'resource': resource_id,
-                'title': f'{resource_id} in {ns}: failed',
-                'notes': f'* Namespace: {ns}\n* Message: {ready.get("message", "")[:200]}',
-                'priority': '!2',
+                'title': f'{resource_id} in {ns}: {"stalled" if priority == "!1" else "failed"}',
+                'notes': f'* Namespace: {ns}\n* Reason: {cond.get("reason", "")}\n* Message: {cond.get("message", "")[:200]}',
+                'priority': priority,
             })
 
     # --- Unbound / Lost PVCs ---

@@ -25,3 +25,36 @@ spec:
     - kind: Kustomization
       name: "*"
       namespace: flux-system
+    - kind: GitRepository
+      name: "*"
+      namespace: flux-system
+    # HelmRelease/HelmRepository failures were previously invisible: the only
+    # eventSource watched was the single flux-system Kustomization, whose own
+    # Ready status doesn't reflect whether the HelmReleases it creates actually
+    # converge (see botkube's HelmRelease, stalled since 2026-05-09 with zero
+    # alert). One entry per namespace is required — eventSources has no
+    # cluster-wide wildcard, only per-namespace name:"*".
+    - kind: HelmRelease
+      name: "*"
+      namespace: botkube
+    - kind: HelmRelease
+      name: "*"
+      namespace: cert-manager
+    - kind: HelmRelease
+      name: "*"
+      namespace: monitoring
+    - kind: HelmRelease
+      name: "*"
+      namespace: tailscale
+    - kind: HelmRepository
+      name: "*"
+      namespace: botkube
+    - kind: HelmRepository
+      name: "*"
+      namespace: cert-manager
+    - kind: HelmRepository
+      name: "*"
+      namespace: monitoring
+    - kind: HelmRepository
+      name: "*"
+      namespace: tailscale
