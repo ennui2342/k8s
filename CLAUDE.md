@@ -61,7 +61,9 @@ tolerations:
 | `epigone` | epigone routing | `epigone/` | Owns the `epigone.ecafe.org` cert-manager Certificate + Traefik IngressRoute for Home Assistant. Kept as its own namespace (decoupled from home-assistant) since it was briefly shared with webdav too; webdav now uses Tailscale Funnel instead (see below), so this currently only fronts Home Assistant, but stays separate in case another service needs the same public hostname later. |
 | `home-assistant` | homeassistant | `home-assistant/ha-*.yaml` | HA 2026.4.4, hostNetwork, config on NFS; reachable at `home-assistant.k8s.ecafe.org` and, via `epigone/`, at `epigone.ecafe.org` |
 | `home-assistant` | ring-mqtt | `ring-mqtt/` | Ring doorbell → MQTT bridge, RTSP port 30002 |
+| `monitoring` | cve-scanner | `trivy/` | Weekly Trivy scan → dedupes/files/auto-closes `tm` tasks; see CVE Patch Management below |
 | `monitoring` | grafana | `prometheus/helmrelease.yaml` | grafana.k8s.ecafe.org, anonymous viewer access; managed by kube-prometheus-stack chart |
+| `monitoring` | health-monitor | `health-monitor/` | CronJob: CrashLoopBackOff/failed-kustomization/NotReady-node checks → `tm` tasks |
 | `monitoring` | influxdb | `monitoring/influxdb.yaml` | InfluxDB 1.8.0, 8Gi NFS PV |
 | `monitoring` | kube-prometheus-stack | `prometheus/` | Flux HelmRelease (70.x.x); Prometheus + Alertmanager + Grafana + node-exporter + kube-state-metrics |
 | `monitoring` | loki | `monitoring/loki.yaml` | Flux HelmRelease (6.x.x); log aggregation, 31-day retention, NFS storage |
@@ -149,6 +151,23 @@ Manifests: `flux-system/taskmgt-image-automation.yaml`
 Flux alerts on deployment events via Discord webhook.
 Manifests: `flux-system/discord-alert.yaml`
 
+## CVE Patch Management
+
+Weekly Trivy scan (`monitoring/cve-scanner` CronJob, Monday 07:00, `trivy/trivy.yaml`) files one
+`tm` task per vulnerable image (`+cli.claude-code.k8s <cli.cve-scanner`), deduping on creation and
+auto-closing tasks for images no longer flagged. A Mac-side aswarm pipeline
+(`/Volumes/SSD/pipelines/nightly-agents.yaml`, 1am/6am) works the queue: an orchestrator selects
+the highest-priority task and routes it to an upgrade or health specialist subagent. The upgrade
+specialist's prompt lives at `~/projects/agents/k8s/nightly-upgrade-prompt.md` (its own separate,
+tracked git repo — not part of this one).
+
+Images with no upstream fix get rebuilt locally and forked (`ghcr.io/ennui2342/*-patched`,
+`imagePullPolicy: Never`, imported directly into node containerd — no registry push). Every fork
+is tracked in `trivy/patched-images.yaml` alongside a reproducible Dockerfile under
+`trivy/patched-images/<name>/`. The same scan also re-checks each fork's plain upstream image
+weekly and files a `<cli.reconcile-scanner` task to revert once upstream ships an equivalent fix —
+see `RUNBOOK.md`'s "CVE Patch Management" section for the full mechanics.
+
 ## Directory Structure Notes
 
 ```
@@ -157,6 +176,7 @@ coredns/          — CoreDNS custom config (*.k8s.ecafe.org wildcard)
 flux-system/      — Flux bootstrap output + SOPS patch + alert config
 dashboards/       — Custom Grafana dashboard ConfigMaps (Solar, Observatory, NAS Monitor, Weather Station)
 epigone/          — epigone.ecafe.org namespace: cert-manager Certificate + IngressRoute fronting Home Assistant
+health-monitor/   — CronJob: cluster health checks (CrashLoopBackOff, failed Flux kustomizations, NotReady nodes) → tm tasks
 home-assistant/   — HA deployment, service, ingress, cleanup CronJob
 mdns/             — mdns-repeater DaemonSets (master + worker), hostNetwork mDNS relay
 monitoring/       — InfluxDB, Telegraf, Loki, Promtail; all monitoring stack manifests
@@ -170,6 +190,7 @@ syncthing/        — SyncThing deployment, PVCs, service, ingress, conflict Cro
 tailscale/        — Flux HelmRelease + HelmRepository (tailscale) + Connector CR
 taskmgt/          — taskmgt app manifests + Flux image automation
 traefik/          — HelmChartConfig customizing k3s's bundled Traefik (allowCrossNamespace)
+trivy/            — Weekly CVE scanner CronJob; patched-images.yaml tracks custom image forks + reconciliation
 webdav/           — hacdias/webdav deployment, PV/PVC, service, internal ingress, Tailscale Funnel ingress, config secret (Zotero PDF sync)
 website/          — nginx/PHP StatefulSet, configmaps, ingress
 ```

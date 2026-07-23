@@ -3,3 +3,7 @@ kind: Kustomization
 namespace: monitoring
 resources:
   - trivy.yaml
+configMapGenerator:
+  - name: trivy-patched-images
+    files:
+      - patched-images.yaml

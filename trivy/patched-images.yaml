@@ -1,0 +1,120 @@
+# Tracks every workload currently running a custom-forked image instead of a
+# plain upstream tag, so the CVE scanner can:
+#   1. suppress duplicate per-CVE nagging for images already known to be forked
+#   2. periodically re-scan the *upstream* image and detect when maintainers
+#      ship an equivalent fix, so we can revert instead of re-patching forever
+#
+# strategy: frozen-rebuild — a one-off custom image built with `docker build`
+#   locally and imported into node containerd (imagePullPolicy: Never). Has a
+#   Dockerfile under trivy/patched-images/<name>/. Reverting means switching
+#   the manifest back to `upstream_image` and deleting the Dockerfile + this
+#   entry.
+# strategy: live-upgrade — the manifest runs a plain upstream image but
+#   upgrades OS packages live at every pod/container start (see
+#   health-monitor/health-monitor.yaml). No separate patched_image or
+#   Dockerfile. Reverting means removing the live-upgrade command and going
+#   back to the image's normal entrypoint, once upstream no longer needs it.
+#
+# critical/high are the CRITICAL+HIGH counts resolved at patch time — the
+# reconciliation scan compares the *current* upstream scan against these as
+# the bar upstream needs to clear (equal or better) before we revert.
+
+- workload: default/Deployment/mosquitto
+  strategy: frozen-rebuild
+  patched_image: ghcr.io/ennui2342/eclipse-mosquitto:2.1.2-patched
+  upstream_image: eclipse-mosquitto:2.1.2-alpine
+  build_recipe: trivy/patched-images/mosquitto/Dockerfile
+  reason: "gnutls CVEs in Alpine base; no newer 2.1.2 upstream tag"
+  patched_date: "2026-05-20"
+  critical: 1
+  high: 4
+
+- workload: default/Deployment/modpoll
+  strategy: frozen-rebuild
+  patched_image: ghcr.io/ennui2342/modpoll:1.6.0-patched
+  upstream_image: topmaker/modpoll:1.6.0
+  build_recipe: trivy/patched-images/modpoll/Dockerfile
+  reason: "openssl/libpam CVEs in Debian 12 base; no newer modpoll upstream tag"
+  patched_date: "2026-05-19"
+  critical: 2
+  high: 8
+
+- workload: flux-system/Deployment/image-reflector-controller
+  strategy: frozen-rebuild
+  patched_image: ghcr.io/ennui2342/image-reflector-controller:v1.1.1-patched
+  upstream_image: ghcr.io/fluxcd/image-reflector-controller:v1.1.1
+  build_recipe: trivy/patched-images/image-reflector-controller/Dockerfile
+  reason: "openssl/musl/zlib CVEs in Alpine base"
+  patched_date: "2026-05-20"
+  critical: 1
+  high: 6
+
+- workload: flux-system/Deployment/kustomize-controller
+  strategy: frozen-rebuild
+  patched_image: ghcr.io/ennui2342/kustomize-controller:v1.8.4-patched
+  upstream_image: ghcr.io/fluxcd/kustomize-controller:v1.8.4
+  build_recipe: trivy/patched-images/kustomize-controller/Dockerfile
+  reason: "gnutls/nghttp2 CVEs in Alpine base"
+  patched_date: "2026-05-21"
+  critical: 1
+  high: 5
+
+- workload: default/DaemonSet/mdns-repeater
+  strategy: frozen-rebuild
+  patched_image: ghcr.io/ennui2342/mdns-repeater:latest-patched
+  upstream_image: monstrenyatko/mdns-repeater:latest
+  build_recipe: trivy/patched-images/mdns-repeater/Dockerfile
+  reason: "upstream Docker Hub inactive since 2023; Alpine 3.15 base badly outdated, patched from the still-maintained v3.15 backport branch"
+  patched_date: "2026-06-13"
+  critical: 5
+  high: 24
+
+- workload: home-assistant/Deployment/homeassistant
+  strategy: frozen-rebuild
+  patched_image: ghcr.io/ennui2342/home-assistant:2026.5.3-patched
+  upstream_image: homeassistant/home-assistant:2026.5.3
+  build_recipe: trivy/patched-images/home-assistant/Dockerfile
+  reason: "openssl/bind/lcms2 CVEs in Alpine base"
+  patched_date: "2026-05-25"
+  critical: 2
+  high: 20
+
+- workload: monitoring/Deployment/telegraf
+  strategy: frozen-rebuild
+  patched_image: ghcr.io/ennui2342/telegraf:1.38.3-patched
+  upstream_image: telegraf:1.38.3
+  build_recipe: trivy/patched-images/telegraf/Dockerfile
+  reason: "gnutls/libcap/nghttp2 CVEs in Debian bookworm base"
+  patched_date: "2026-06-08"
+  critical: 2
+  high: 5
+
+- workload: home-assistant/Deployment/ring-mqtt
+  strategy: frozen-rebuild
+  patched_image: ghcr.io/ennui2342/ring-mqtt:latest-patched
+  upstream_image: tsightler/ring-mqtt:latest
+  build_recipe: trivy/patched-images/ring-mqtt/Dockerfile
+  reason: "openssl/musl/nghttp2/zlib CVEs in Alpine base"
+  patched_date: "2026-05-22"
+  critical: 1
+  high: 7
+
+- workload: monitoring/CronJob/cve-scanner
+  strategy: frozen-rebuild
+  patched_image: ghcr.io/ennui2342/aquasec-trivy:0.70.0-patched
+  upstream_image: aquasec/trivy:0.70.0
+  build_recipe: trivy/patched-images/aquasec-trivy/Dockerfile
+  reason: "openssl/musl/nghttp2/zlib CVEs in Alpine base"
+  patched_date: "2026-05-30"
+  critical: 1
+  high: 7
+
+- workload: monitoring/CronJob/health-monitor
+  strategy: live-upgrade
+  patched_image: null
+  upstream_image: alpine/k8s:1.32.13
+  build_recipe: null
+  reason: "final build of the 1.32.x line (Alpine edge, not rebuilt since 2026-03-23); no newer 1.32.x tag exists and 1.33.x still ships stale packages. Packages upgraded live via apk at every pod start instead of a frozen tag."
+  patched_date: "2026-05-04"
+  critical: 0
+  high: 0

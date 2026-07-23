@@ -416,3 +416,46 @@ cd /path/to/k8s && sops --encrypt --in-place myapp/mysecret-secret.yaml
 
 # Add to the app's kustomization.yaml resources list, then commit
 ```
+
+---
+
+## CVE Patch Management
+
+The `monitoring/cve-scanner` CronJob (Monday 07:00, `trivy/trivy.yaml`) scans the live cluster
+weekly with Trivy and files a `tm` task per vulnerable image, tagged `+cli.claude-code.k8s
+<cli.cve-scanner`. It dedupes on creation (one task per image, updated in place if the CVE set
+changes, auto-closed if the image is no longer flagged) and skips filing tasks entirely for
+images already tracked in `trivy/patched-images.yaml` (see below).
+
+A separate aswarm pipeline, `nightly-agents` (`/Volumes/SSD/pipelines/nightly-agents.yaml`, runs
+1am/6am on the Mac), works this queue one task at a time: the orchestrator prompt
+(`~/projects/agents/k8s/nightly-orchestrator-prompt.md`) selects the highest-priority task and
+routes it to the upgrade specialist (`~/projects/agents/k8s/nightly-upgrade-prompt.md` — a
+separate, tracked git repo, not part of this one; there was previously also an untracked mirror
+under `~/projects/k8s/.claude/` that the orchestrator read from — removed, single source of truth
+now). The specialist prefers a plain
+upstream tag bump; only builds a custom image when no upstream fix exists.
+
+### Custom-patched images
+
+Some images have no upstream fix available and are patched by rebuilding locally (`docker build`
+with an `apk upgrade`/`apt-get upgrade`), then imported directly into containerd on the relevant
+node(s) (`ctr image import` or equivalent) and referenced with `imagePullPolicy: Never` — no
+registry push required. Every such fork is recorded in `trivy/patched-images.yaml`:
+
+- `strategy: frozen-rebuild` — has a committed Dockerfile under `trivy/patched-images/<name>/`
+  capturing the recipe, so it can be reproduced on a from-scratch cluster rebuild instead of
+  depending on containerd state that exists only on specific nodes.
+- `strategy: live-upgrade` — the manifest runs `apk upgrade` (or similar) at every pod start
+  instead of a frozen tag (see `health-monitor/health-monitor.yaml`), for cases where no image
+  build is practical. No Dockerfile; reverting means removing the upgrade command.
+
+The same CronJob scans each entry's plain `upstream_image` standalone every week and compares it
+against the `critical`/`high` counts recorded at patch time. Once upstream matches or beats that
+baseline, it files a `<cli.reconcile-scanner` task — the upgrade specialist treats this as a
+revert: switch back to the upstream tag, delete the Dockerfile directory, and remove the
+`patched-images.yaml` entry, restoring normal upstream tracking instead of maintaining the fork
+indefinitely.
+
+When patching a new image by hand outside the automated flow, add the corresponding entry and
+Dockerfile yourself so it doesn't fall off this tracking going forward.

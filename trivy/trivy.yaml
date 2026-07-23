@@ -35,15 +35,105 @@ subjects:
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  name: trivy-reconcile-script
+  namespace: monitoring
+data:
+  reconcile.sh: |
+    #!/bin/sh
+    # For each tracked patched-image entry, scan the plain upstream image
+    # standalone so notify.py can compare it against the CVE count we patched
+    # at fork time and detect when upstream has caught up.
+    set -e
+    mkdir -p /report/reconcile
+    i=0
+    grep '^\s*upstream_image:' /config/patched-images.yaml \
+      | sed -E 's/^[^:]+:[[:space:]]*//; s/^"//; s/"$//' \
+      | while IFS= read -r img; do
+          [ -z "$img" ] && continue
+          echo "reconcile: scanning upstream $img (index $i)"
+          trivy image \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --format json \
+            --quiet \
+            --timeout 10m \
+            --output "/report/reconcile/${i}.json" \
+            "$img" || echo '{}' > "/report/reconcile/${i}.json"
+          i=$((i + 1))
+        done
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
   name: trivy-notify-script
   namespace: monitoring
 data:
   notify.py: |
-    import json, subprocess, os, sys
+    import json, subprocess, os, sys, re, hashlib, glob
+    import yaml
 
-    TM_API = 'http://api.taskmgt.svc.cluster.local:8081/tasks'
+    TM_API = 'http://api.taskmgt.svc.cluster.local:8081'
     webhook = os.environ['DISCORD_WEBHOOK']
+    PATCHED_IMAGES_PATH = '/config/patched-images.yaml'
+    RECONCILE_DIR = '/report/reconcile'
 
+    STATUS_TOKEN_RE = re.compile(r'\s*§\S+')
+
+    def strip_status(text):
+        lines = text.split('\n', 1)
+        first = STATUS_TOKEN_RE.sub('', lines[0])
+        return first if len(lines) == 1 else first + '\n' + lines[1]
+
+    def set_status(text, status):
+        return strip_status(text).split('\n', 1)[0] + f' §{status}' + (
+            '\n' + text.split('\n', 1)[1] if '\n' in text else ''
+        )
+
+    def get_tasks():
+        # Non-closed tasks only (open + wait) — matches the API's default scope.
+        r = subprocess.run(['curl', '-sf', f'{TM_API}/tasks'], capture_output=True, text=True)
+        if r.returncode != 0:
+            print('Warning: could not fetch existing tasks from taskmgt', file=sys.stderr)
+            return []
+        try:
+            data = json.loads(r.stdout)
+            return data if isinstance(data, list) else data.get('tasks', [])
+        except Exception as e:
+            print(f'Warning: could not parse task list: {e}', file=sys.stderr)
+            return []
+
+    def create_task(text):
+        r = subprocess.run(
+            ['curl', '-sf', '-X', 'POST', f'{TM_API}/tasks',
+             '-H', 'Content-Type: application/json', '-d', json.dumps({'text': text})],
+            capture_output=True, text=True
+        )
+        if r.returncode != 0:
+            print('tm task creation failed', file=sys.stderr)
+            return None
+        resp = json.loads(r.stdout)
+        print('tm task created:', resp.get('id', '?'))
+        return resp.get('id')
+
+    def update_task(task_id, text):
+        r = subprocess.run(
+            ['curl', '-sf', '-X', 'PATCH', f'{TM_API}/tasks/{task_id}',
+             '-H', 'Content-Type: application/json', '-d', json.dumps({'text': text})],
+            capture_output=True, text=True
+        )
+        if r.returncode != 0:
+            print(f'tm task update failed for {task_id}', file=sys.stderr)
+            return False
+        print(f'tm task {task_id} updated')
+        return True
+
+    def find_task(prefix, tasks):
+        return next((t for t in tasks if t.get('text', '').startswith(prefix)), None)
+
+    def cve_hash(cve_ids):
+        return hashlib.md5(','.join(sorted(cve_ids)).encode()).hexdigest()[:12]
+
+    # --- Load main cluster scan ---
     try:
         data = json.load(open('/report/output.json'))
     except FileNotFoundError:
@@ -85,37 +175,61 @@ data:
                     note += f" -> fix: {fixed}"
                 images[image]['cves'][cve_id] = note
 
+    # --- Load patched-images tracking/exceptions file ---
+    try:
+        patched_entries = yaml.safe_load(open(PATCHED_IMAGES_PATH)) or []
+    except FileNotFoundError:
+        patched_entries = []
+    except Exception as e:
+        print(f'Warning: could not parse patched-images.yaml: {e}', file=sys.stderr)
+        patched_entries = []
+
+    patched_by_image = {e['patched_image']: e for e in patched_entries if e.get('patched_image')}
+
     if not images:
         print('No fixable HIGH/CRITICAL CVEs found in scanned images')
-        sys.exit(0)
-
-    print(f'Vulnerabilities found in {len(images)} image(s), sending notifications...')
-
-    # Discord summary
-    lines = ['**Weekly CVE Scan** — fixable HIGH/CRITICAL vulnerabilities found', '```']
-    for image, info in images.items():
-        parts = []
-        if info['critical']:
-            parts.append(f"{info['critical']} CRITICAL")
-        if info['high']:
-            parts.append(f"{info['high']} HIGH")
-        lines.append(f"{image}: {', '.join(parts)}")
-    lines.append('```')
-    message = '\n'.join(lines)[:2000]
-
-    r = subprocess.run(
-        ['curl', '-sf', '-X', 'POST', webhook,
-         '-H', 'Content-Type: application/json',
-         '-d', json.dumps({'username': 'k8s homelab', 'content': message})],
-        capture_output=True
-    )
-    if r.returncode != 0:
-        print('Discord notification failed', file=sys.stderr)
     else:
-        print('Discord notification sent')
+        print(f'Vulnerabilities found in {len(images)} image(s), sending notifications...')
 
-    # One tm task per affected image
+    # Discord summary — informational, lists everything found including
+    # already-forked images (suppressed from tm task creation below).
+    if images:
+        lines = ['**Weekly CVE Scan** — fixable HIGH/CRITICAL vulnerabilities found', '```']
+        for image, info in images.items():
+            parts = []
+            if info['critical']:
+                parts.append(f"{info['critical']} CRITICAL")
+            if info['high']:
+                parts.append(f"{info['high']} HIGH")
+            suffix = ' [tracked fork]' if any(image.startswith(p) for p in patched_by_image) else ''
+            lines.append(f"{image}: {', '.join(parts)}{suffix}")
+        lines.append('```')
+        message = '\n'.join(lines)[:2000]
+
+        r = subprocess.run(
+            ['curl', '-sf', '-X', 'POST', webhook,
+             '-H', 'Content-Type: application/json',
+             '-d', json.dumps({'username': 'k8s homelab', 'content': message})],
+            capture_output=True
+        )
+        if r.returncode != 0:
+            print('Discord notification failed', file=sys.stderr)
+        else:
+            print('Discord notification sent')
+
+    existing_tasks = get_tasks()
+    cve_scanner_tasks = [t for t in existing_tasks if '<cli.cve-scanner' in t.get('text', '')]
+    print(f'Existing open/wait cve-scanner tasks: {len(cve_scanner_tasks)}')
+
+    # --- File/update/skip one task per affected image (dedupe on creation) ---
+    seen_images = set()
     for image, info in images.items():
+        # Already-tracked fork: suppress per-CVE nagging, reconciliation handles it.
+        if any(image.startswith(p) for p in patched_by_image):
+            print(f'Suppressing {image}: tracked fork in patched-images.yaml')
+            continue
+
+        seen_images.add(image)
         critical = info['critical']
         high = info['high']
         priority = '!2' if critical > 0 else '!3'
@@ -126,25 +240,100 @@ data:
             sev_parts.append(f"{high} HIGH")
         sev_str = ' + '.join(sev_parts)
 
-        title = f"Update {image} — {sev_str} fixable CVEs {priority} #devops +cli.claude-code.k8s <cli.cve-scanner"
+        prefix = f"Update {image} — "
+        title = f"{prefix}{sev_str} fixable CVEs {priority} #devops +cli.claude-code.k8s <cli.cve-scanner"
 
         cve_list = list(info['cves'].values())
+        cve_ids = list(info['cves'].keys())
         notes = '\n'.join(f"* {c}" for c in cve_list[:10])
         if len(cve_list) > 10:
             notes += f"\n* ... and {len(cve_list) - 10} more CVEs"
         notes += '\n* Workloads: ' + ', '.join(sorted(info['workloads']))
+        fingerprint = cve_hash(cve_ids)
+        notes += f'\n* CVEHash: {fingerprint}'
+        full_text = title + '\n' + notes
 
-        r = subprocess.run(
-            ['curl', '-sf', '-X', 'POST', TM_API,
-             '-H', 'Content-Type: application/json',
-             '-d', json.dumps({'text': title + '\n' + notes})],
-            capture_output=True
+        existing = find_task(prefix, cve_scanner_tasks)
+        if existing is None:
+            create_task(full_text)
+            continue
+
+        if existing.get('status') == 'wait':
+            print(f'Skipping {image}: existing task {existing["id"]} is §wait (already triaged)')
+            continue
+
+        old_hash_m = re.search(r'CVEHash:\s*(\S+)', existing.get('text', ''))
+        old_hash = old_hash_m.group(1) if old_hash_m else None
+        if old_hash == fingerprint:
+            print(f'Skipping {image}: unchanged since existing task {existing["id"]}')
+            continue
+
+        print(f'Updating {image}: CVE set changed on existing task {existing["id"]}')
+        update_task(existing['id'], full_text)
+
+    # --- Auto-close open tasks for images no longer flagged ---
+    for t in cve_scanner_tasks:
+        if t.get('status') != 'open':
+            continue
+        # Non-greedy: image itself may contain a space before its "(distro)" suffix,
+        # e.g. "telegraf:1.38.3-patched (debian 12.13)" — stop at " — <digit>" instead.
+        m = re.match(r'^Update (.+?) — \d', t.get('text', ''))
+        if not m:
+            continue
+        image = m.group(1)
+        if image in seen_images or any(image.startswith(p) for p in patched_by_image):
+            continue
+        print(f'Auto-closing {t["id"]}: {image} no longer flagged')
+        note = f"\n* Resolved: no longer flagged as of this scan"
+        update_task(t['id'], set_status(t['text'] + note, 'closed'))
+
+    # --- Reconciliation: has upstream caught up with any tracked fork? ---
+    reconcile_tasks = [t for t in existing_tasks if '<cli.reconcile-scanner' in t.get('text', '')]
+    for idx, entry in enumerate(patched_entries):
+        upstream = entry.get('upstream_image')
+        if not upstream:
+            continue
+        report_path = os.path.join(RECONCILE_DIR, f'{idx}.json')
+        if not os.path.exists(report_path):
+            print(f'Warning: no reconcile scan output for entry {idx} ({upstream})', file=sys.stderr)
+            continue
+        try:
+            rdata = json.load(open(report_path))
+        except Exception as e:
+            print(f'Warning: could not parse reconcile output for {upstream}: {e}', file=sys.stderr)
+            continue
+
+        crit = high = 0
+        for result in (rdata.get('Results') or []):
+            for v in (result.get('Vulnerabilities') or []):
+                sev = v.get('Severity', '')
+                if sev == 'CRITICAL':
+                    crit += 1
+                elif sev == 'HIGH':
+                    high += 1
+
+        baseline = entry.get('critical', 0) + entry.get('high', 0)
+        current = crit + high
+        workload = entry.get('workload', 'unknown')
+        print(f'Reconcile check: {upstream} now {crit} CRITICAL + {high} HIGH (baseline {baseline})')
+
+        if current > baseline:
+            continue  # upstream hasn't caught up yet
+
+        prefix = f"Revert {workload} to upstream {upstream} — "
+        if find_task(prefix, reconcile_tasks) is not None:
+            continue  # already filed, awaiting the specialist
+
+        text = (
+            f"{prefix}maintainers shipped equivalent fix !2 #devops "
+            f"+cli.claude-code.k8s <cli.reconcile-scanner\n"
+            f"* Upstream {upstream} now scans at {crit} CRITICAL + {high} HIGH "
+            f"(was {entry.get('critical', 0)} CRITICAL + {entry.get('high', 0)} HIGH when forked "
+            f"on {entry.get('patched_date', 'unknown')})\n"
+            f"* Fork reason was: {entry.get('reason', 'unknown')}\n"
+            f"* Strategy: {entry.get('strategy', 'unknown')}"
         )
-        if r.returncode != 0:
-            print(f'tm task creation failed for {image}', file=sys.stderr)
-        else:
-            resp = json.loads(r.stdout)
-            print(f'tm task created for {image}:', resp.get('id', '?'))
+        create_task(text)
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -197,6 +386,21 @@ spec:
               mountPath: /report
             - name: cache
               mountPath: /root/.cache/trivy
+          - name: reconcile
+            image: ghcr.io/ennui2342/aquasec-trivy:0.70.0-patched
+            imagePullPolicy: Never
+            command:
+            - /bin/sh
+            - /scripts/reconcile.sh
+            volumeMounts:
+            - name: report
+              mountPath: /report
+            - name: cache
+              mountPath: /root/.cache/trivy
+            - name: patched-images
+              mountPath: /config
+            - name: reconcile-scripts
+              mountPath: /scripts
           containers:
           - name: notify
             image: alpine:latest
@@ -210,19 +414,27 @@ spec:
             - /bin/sh
             - -c
             - |
-              apk add --no-cache --quiet curl python3
+              apk add --no-cache --quiet curl python3 py3-yaml
               python3 /scripts/notify.py
             volumeMounts:
             - name: report
               mountPath: /report
             - name: scripts
               mountPath: /scripts
+            - name: patched-images
+              mountPath: /config
           volumes:
           - name: report
             emptyDir: {}
           - name: scripts
             configMap:
               name: trivy-notify-script
+          - name: reconcile-scripts
+            configMap:
+              name: trivy-reconcile-script
+          - name: patched-images
+            configMap:
+              name: trivy-patched-images
           - name: cache
             persistentVolumeClaim:
               claimName: trivy-cache-pvc
