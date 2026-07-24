@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wallabag
+  namespace: wallabag
+  annotations:
+    kubernetes.io/ingress.class: traefik
+spec:
+  rules:
+    - host: later.k8s.ecafe.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: wallabag
+                port:
+                  number: 80

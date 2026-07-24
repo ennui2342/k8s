@@ -24,4 +24,6 @@ resources:
   - webdav/
   - epigone/
   - linkding/
+  - freshrss/
+  - wallabag/
   - traefik/

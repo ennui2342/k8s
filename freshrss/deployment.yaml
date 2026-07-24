@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: freshrss
+  namespace: freshrss
+  labels:
+    app: freshrss
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: freshrss
+  template:
+    metadata:
+      labels:
+        app: freshrss
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      containers:
+        - name: freshrss
+          image: freshrss/freshrss:1.29.1
+          ports:
+            - name: freshrss
+              containerPort: 80
+          env:
+            - name: TZ
+              value: Europe/London
+            - name: CRON_MIN
+              value: "3,33"
+            - name: FRESHRSS_INSTALL
+              valueFrom:
+                secretKeyRef:
+                  name: freshrss-secret
+                  key: FRESHRSS_INSTALL
+            - name: FRESHRSS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: freshrss-secret
+                  key: FRESHRSS_USER
+          volumeMounts:
+            - name: data
+              mountPath: /var/www/FreshRSS/data
+            - name: extensions
+              mountPath: /var/www/FreshRSS/extensions
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: freshrss-data-pvc
+        - name: extensions
+          persistentVolumeClaim:
+            claimName: freshrss-extensions-pvc

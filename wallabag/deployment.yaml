@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wallabag
+  namespace: wallabag
+  labels:
+    app: wallabag
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: wallabag
+  template:
+    metadata:
+      labels:
+        app: wallabag
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      containers:
+        - name: wallabag
+          image: wallabag/wallabag:2.6.14
+          args: ["wallabag"]
+          ports:
+            - name: wallabag
+              containerPort: 80
+          env:
+            - name: SYMFONY__ENV__DOMAIN_NAME
+              value: http://later.k8s.ecafe.org
+            - name: SYMFONY__ENV__SERVER_NAME
+              value: Homelab Wallabag
+            - name: SYMFONY__ENV__SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: wallabag-secret
+                  key: SYMFONY__ENV__SECRET
+          volumeMounts:
+            - name: data
+              mountPath: /var/www/wallabag/data
+            - name: images
+              mountPath: /var/www/wallabag/web/assets/images
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: wallabag-data-pvc
+        - name: images
+          persistentVolumeClaim:
+            claimName: wallabag-images-pvc
