@@ -51,6 +51,10 @@ spec:
               mountPath: /var/www/FreshRSS/data
             - name: extensions
               mountPath: /var/www/FreshRSS/extensions
+            - name: constants
+              mountPath: /var/www/FreshRSS/constants.local.php
+              subPath: constants.local.php
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -58,3 +62,6 @@ spec:
         - name: extensions
           persistentVolumeClaim:
             claimName: freshrss-extensions-pvc
+        - name: constants
+          configMap:
+            name: freshrss-constants

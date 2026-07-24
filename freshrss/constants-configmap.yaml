@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: freshrss-constants
+  namespace: freshrss
+data:
+  constants.local.php: |
+    <?php
+    // Default FreshRSS user agent starts with "FreshRSS/<version>" plus OS and a
+    // link to the FreshRSS website, which is trivial for WAFs/Cloudflare bot
+    // management to fingerprint and block — several subscribed feeds (medium.com,
+    // jisc.ac.uk, reactormag.com, locusmag.com) were returning 403s specifically
+    // because of this. A generic browser user agent avoids that self-identification.
+    define('FRESHRSS_USERAGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
