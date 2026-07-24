@@ -83,10 +83,14 @@ data:
 
 
     def bookmark_id_from_text(text):
-        if not text.startswith('[linkding#'):
+        # No '#' here: tm's SmartAdd parser treats "#<word>" as a tag token
+        # anywhere in the text, so a literal '#' in this marker would get
+        # stripped out and turned into a spurious tag instead of staying
+        # part of the task name.
+        if not text.startswith('[linkding-'):
             return None
         try:
-            return int(text.split('[linkding#', 1)[1].split(']', 1)[0])
+            return int(text.split('[linkding-', 1)[1].split(']', 1)[0])
         except (IndexError, ValueError):
             return None
 
@@ -106,7 +110,7 @@ data:
             continue
         title = b.get('title') or b.get('url')
         text = (
-            f"[linkding#{b['id']}] {title} !3 #bookmarks +cli.claude-code.k8s {PROVENANCE}\n"
+            f"[linkding-{b['id']}] {title} !3 #bookmarks +cli.claude-code.k8s {PROVENANCE}\n"
             f"* {b['url']}"
         )
         create_task(text)
