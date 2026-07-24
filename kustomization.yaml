@@ -23,4 +23,5 @@ resources:
   - mdns/
   - webdav/
   - epigone/
+  - linkding/
   - traefik/
