@@ -5,16 +5,20 @@ metadata:
   namespace: linkding
 data:
   sync.py: |
-    import json, re, subprocess, os, sys
+    import json, subprocess, os, sys
     from urllib.parse import quote
 
     TM_API = 'http://api.taskmgt.svc.cluster.local:8081'
     LINKDING_API = 'http://linkding.linkding.svc.cluster.local:9090/api'
     LINKDING_TOKEN = os.environ['LINKDING_API_TOKEN']
     LINKDING_TS_HOST = 'https://pinboard.tail611131.ts.net'
+    # -task is an imperative "file this" trigger, not a category to keep —
+    # once processed it's stripped from the bookmark (see untag_bookmark)
+    # so this job never has to re-examine it. That means there's no dedupe
+    # or auto-close bookkeeping here: once a tm task exists, its lifecycle
+    # belongs entirely to tm.
     TAG = '-task'
     PROVENANCE = '<cli.linkding-task-sync'
-    BOOKMARK_LINK_RE = re.compile(r'/bookmarks/(\d+)/edit')
 
 
     def curl_json(url, *extra_args):
@@ -41,20 +45,6 @@ data:
         return [b for b in data.get('results', []) if TAG in b.get('tag_names', [])]
 
 
-    def get_tracked_tasks():
-        r = subprocess.run(['curl', '-sf', f'{TM_API}/tasks'], capture_output=True, text=True)
-        if r.returncode != 0:
-            print('Warning: could not fetch existing tasks from taskmgt', file=sys.stderr)
-            return []
-        try:
-            data = json.loads(r.stdout)
-            tasks = data if isinstance(data, list) else data.get('tasks', [])
-            return [t for t in tasks if PROVENANCE in t.get('text', '')]
-        except Exception as e:
-            print(f'Warning: could not parse task list: {e}', file=sys.stderr)
-            return []
-
-
     def create_task(text):
         r = subprocess.run(
             ['curl', '-sf', '-X', 'POST', f'{TM_API}/tasks',
@@ -69,28 +59,22 @@ data:
         return resp.get('id')
 
 
-    def close_task(task_id, text):
-        first, _, rest = text.partition('\n')
-        closed_text = f'{first} §closed' + (f'\n{rest}' if rest else '')
+    def untag_bookmark(b, remaining_tags):
         r = subprocess.run(
-            ['curl', '-sf', '-X', 'PATCH', f'{TM_API}/tasks/{task_id}',
-             '-H', 'Content-Type: application/json', '-d', json.dumps({'text': closed_text})],
+            ['curl', '-sf', '-X', 'PATCH', f"{LINKDING_API}/bookmarks/{b['id']}/",
+             '-H', f'Authorization: Token {LINKDING_TOKEN}',
+             '-H', 'Content-Type: application/json',
+             '-d', json.dumps({'tag_names': remaining_tags})],
             capture_output=True, text=True
         )
         if r.returncode != 0:
-            print(f'tm task close failed for {task_id}', file=sys.stderr)
+            print(f"Warning: failed to remove {TAG} tag from bookmark {b['id']}", file=sys.stderr)
             return False
-        print(f'Closed task {task_id} (tag removed / bookmark gone)')
         return True
 
 
-    def build_task_text(b):
+    def build_task_text(b, other_tags):
         title = b.get('title') or b.get('url')
-        # Carry the bookmark's own tags into tm so they can be filed the same
-        # way as everything else there. The trigger tag itself is excluded —
-        # otherwise every synced task would carry it and never fall into the
-        # inbox view, even when the bookmark has no other categorization.
-        other_tags = [t for t in b.get('tag_names', []) if t != TAG]
         tag_tokens = ''.join(f' #{t}' for t in other_tags)
         lines = [
             f"{title}{tag_tokens} {PROVENANCE}",
@@ -101,36 +85,24 @@ data:
             if len(description) > 300:
                 description = description[:300].rstrip() + '...'
             lines.append(f"* {description}")
-        # Also doubles as the dedupe/close key (see bookmark_id_from_text) —
-        # no separate marker needed since the bookmark ID already lives here.
         lines.append(f"* [View in linkding]({LINKDING_TS_HOST}/bookmarks/{b['id']}/edit)")
         return '\n'.join(lines)
-
-
-    def bookmark_id_from_text(text):
-        m = BOOKMARK_LINK_RE.search(text)
-        return int(m.group(1)) if m else None
 
 
     bookmarks = get_tagged_bookmarks()
     print(f'Bookmarks tagged #{TAG}: {len(bookmarks)}')
 
-    tracked_tasks = get_tracked_tasks()
-    print(f'Existing open/wait linkding-task-sync tasks: {len(tracked_tasks)}')
-    tracked_by_bookmark = {bookmark_id_from_text(t['text']): t for t in tracked_tasks}
-
-    # --- Create tasks for newly tagged bookmarks (dedupe on bookmark ID) ---
-    current_ids = set()
     for b in bookmarks:
-        current_ids.add(b['id'])
-        if b['id'] in tracked_by_bookmark:
-            continue
-        create_task(build_task_text(b))
-
-    # --- Auto-close tasks whose bookmark lost the tag or was deleted ---
-    for bid, task in tracked_by_bookmark.items():
-        if bid is not None and bid not in current_ids:
-            close_task(task['id'], task['text'])
+        # Carry the bookmark's own tags into tm so it can be filed the same
+        # way as everything else there — minus the trigger tag itself, so a
+        # bookmark with no other categorization produces an untagged task
+        # that falls into the inbox view for triage.
+        other_tags = [t for t in b.get('tag_names', []) if t != TAG]
+        task_id = create_task(build_task_text(b, other_tags))
+        if task_id is not None:
+            # Only untag on confirmed success — if task creation failed,
+            # leave the tag in place so the next run retries it.
+            untag_bookmark(b, other_tags)
 
     print('Done')
 ---
