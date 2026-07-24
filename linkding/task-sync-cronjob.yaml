@@ -82,6 +82,21 @@ data:
         return True
 
 
+    def build_task_text(b):
+        title = b.get('title') or b.get('url')
+        lines = [
+            f"[linkding-{b['id']}] {title} !3 #bookmarks +cli.claude-code.k8s {PROVENANCE}",
+            f"* [Source]({b['url']})",
+        ]
+        description = (b.get('description') or '').strip()
+        if description:
+            if len(description) > 300:
+                description = description[:300].rstrip() + '...'
+            lines.append(f"* {description}")
+        lines.append(f"* [View in linkding](https://pinboard.tail611131.ts.net/bookmarks/{b['id']}/edit)")
+        return '\n'.join(lines)
+
+
     def bookmark_id_from_text(text):
         # No '#' here: tm's SmartAdd parser treats "#<word>" as a tag token
         # anywhere in the text, so a literal '#' in this marker would get
@@ -108,12 +123,7 @@ data:
         current_ids.add(b['id'])
         if b['id'] in tracked_by_bookmark:
             continue
-        title = b.get('title') or b.get('url')
-        text = (
-            f"[linkding-{b['id']}] {title} !3 #bookmarks +cli.claude-code.k8s {PROVENANCE}\n"
-            f"* {b['url']}"
-        )
-        create_task(text)
+        create_task(build_task_text(b))
 
     # --- Auto-close tasks whose bookmark lost the tag or was deleted ---
     for bid, task in tracked_by_bookmark.items():
