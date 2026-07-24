@@ -5,14 +5,16 @@ metadata:
   namespace: linkding
 data:
   sync.py: |
-    import json, subprocess, os, sys
+    import json, re, subprocess, os, sys
     from urllib.parse import quote
 
     TM_API = 'http://api.taskmgt.svc.cluster.local:8081'
     LINKDING_API = 'http://linkding.linkding.svc.cluster.local:9090/api'
     LINKDING_TOKEN = os.environ['LINKDING_API_TOKEN']
+    LINKDING_TS_HOST = 'https://pinboard.tail611131.ts.net'
     TAG = '-task'
     PROVENANCE = '<cli.linkding-task-sync'
+    BOOKMARK_LINK_RE = re.compile(r'/bookmarks/(\d+)/edit')
 
 
     def curl_json(url, *extra_args):
@@ -91,7 +93,7 @@ data:
         other_tags = [t for t in b.get('tag_names', []) if t != TAG]
         tag_tokens = ''.join(f' #{t}' for t in other_tags)
         lines = [
-            f"[linkding-{b['id']}] {title}{tag_tokens} !3 +cli.claude-code.k8s {PROVENANCE}",
+            f"{title}{tag_tokens} {PROVENANCE}",
             f"* [Source]({b['url']})",
         ]
         description = (b.get('description') or '').strip()
@@ -99,21 +101,15 @@ data:
             if len(description) > 300:
                 description = description[:300].rstrip() + '...'
             lines.append(f"* {description}")
-        lines.append(f"* [View in linkding](https://pinboard.tail611131.ts.net/bookmarks/{b['id']}/edit)")
+        # Also doubles as the dedupe/close key (see bookmark_id_from_text) —
+        # no separate marker needed since the bookmark ID already lives here.
+        lines.append(f"* [View in linkding]({LINKDING_TS_HOST}/bookmarks/{b['id']}/edit)")
         return '\n'.join(lines)
 
 
     def bookmark_id_from_text(text):
-        # No '#' here: tm's SmartAdd parser treats "#<word>" as a tag token
-        # anywhere in the text, so a literal '#' in this marker would get
-        # stripped out and turned into a spurious tag instead of staying
-        # part of the task name.
-        if not text.startswith('[linkding-'):
-            return None
-        try:
-            return int(text.split('[linkding-', 1)[1].split(']', 1)[0])
-        except (IndexError, ValueError):
-            return None
+        m = BOOKMARK_LINK_RE.search(text)
+        return int(m.group(1)) if m else None
 
 
     bookmarks = get_tagged_bookmarks()
