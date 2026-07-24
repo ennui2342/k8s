@@ -1,0 +1,15 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: linkding-ts
+  namespace: linkding
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: linkding
+      port:
+        number: 9090
+  tls:
+    - hosts:
+        - pinboard

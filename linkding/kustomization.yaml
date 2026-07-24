@@ -6,4 +6,5 @@ resources:
   - deployment.yaml
   - service.yaml
   - ingress.yaml
+  - tailscale-ingress.yaml
   - linkding-secret.yaml

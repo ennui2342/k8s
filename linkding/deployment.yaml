@@ -33,7 +33,7 @@ spec:
               containerPort: 9090
           env:
             - name: LD_CSRF_TRUSTED_ORIGINS
-              value: http://pinboard.k8s.ecafe.org
+              value: http://pinboard.k8s.ecafe.org,https://pinboard.tail611131.ts.net
             - name: LD_SUPERUSER_NAME
               valueFrom:
                 secretKeyRef:
