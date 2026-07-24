@@ -84,8 +84,14 @@ data:
 
     def build_task_text(b):
         title = b.get('title') or b.get('url')
+        # Carry the bookmark's own tags into tm so they can be filed the same
+        # way as everything else there. The trigger tag itself is excluded —
+        # otherwise every synced task would carry it and never fall into the
+        # inbox view, even when the bookmark has no other categorization.
+        other_tags = [t for t in b.get('tag_names', []) if t != TAG]
+        tag_tokens = ''.join(f' #{t}' for t in other_tags)
         lines = [
-            f"[linkding-{b['id']}] {title} !3 #bookmarks +cli.claude-code.k8s {PROVENANCE}",
+            f"[linkding-{b['id']}] {title}{tag_tokens} !3 +cli.claude-code.k8s {PROVENANCE}",
             f"* [Source]({b['url']})",
         ]
         description = (b.get('description') or '').strip()
