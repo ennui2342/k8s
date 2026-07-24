@@ -8,3 +8,5 @@ resources:
   - ingress.yaml
   - tailscale-ingress.yaml
   - linkding-secret.yaml
+  - linkding-api-secret.yaml
+  - task-sync-cronjob.yaml
