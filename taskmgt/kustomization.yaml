@@ -6,3 +6,4 @@ resources:
   - api.yaml
   - frontend.yaml
   - ingress.yaml
+  - tailscale-ingress.yaml
