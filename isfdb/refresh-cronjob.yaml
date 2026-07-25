@@ -15,7 +15,10 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 2
-      activeDeadlineSeconds: 1800
+      # NFS-backed MariaDB import of the ~1.6GB uncompressed dump routinely
+      # takes 25-30+ minutes on its own (observed empirically) — this isn't
+      # a bug, just NFS write latency at this data volume. Generous budget.
+      activeDeadlineSeconds: 3600
       template:
         spec:
           restartPolicy: Never
