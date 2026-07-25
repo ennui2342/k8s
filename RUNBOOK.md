@@ -216,12 +216,15 @@ waiting for Sunday:
 kubectl create job --from=cronjob/isfdb-refresh isfdb-refresh-manual -n isfdb
 ```
 
-**This takes 25-35 minutes**, almost entirely spent importing the ~1.6GB uncompressed dump into
-NFS-backed MariaDB (`activeDeadlineSeconds: 3600` accounts for this — don't shrink it, an earlier
-30-minute budget got killed mid-import on the first live run). A failed/killed run is harmless —
-the atomic swap in `refresh.py` only happens after the staging import passes a row-count sanity
-check, so it just leaves the mirror empty (fresh cluster) or last week's data (routine refresh)
-rather than serving partial data.
+**This takes 20-25 minutes** (confirmed on a live run — was 34 minutes before `refresh.py` started
+filtering the dump down to the 11 tables `adapter.py` actually queries, dropping the ~65 MediaWiki
+editing/moderation tables — user accounts, edit history, view-count analytics — that make up
+roughly half the dump's rows but are never read), almost entirely spent importing into NFS-backed
+MariaDB (`activeDeadlineSeconds: 3600` accounts for this with headroom — don't shrink it below
+~30 min, an earlier tighter budget got killed mid-import on the first live run). A failed/killed
+run is harmless — the atomic swap in `refresh.py` only happens after the staging import passes a
+row-count sanity check, so it just leaves the mirror empty (fresh cluster) or last week's data
+(routine refresh) rather than serving partial data.
 
 The refresh job's login to the ISFDB wiki occasionally gets a transient `403` on the very first
 attempt of a session (observed during initial testing; unclear whether it's Cloudflare-side or
