@@ -205,11 +205,18 @@ def health():
 
 @app.get("/isbn/{isbn}")
 def lookup_isbn(isbn: str):
+    # Query pub_isbn directly (unwrapped) so MySQL can use its existing
+    # index. An earlier version wrapped it in REPLACE(REPLACE(...)) to
+    # tolerate hyphens/spaces "just in case" — that defensive wrapping
+    # disables the index and forces a full ~950K-row scan on every lookup
+    # (took 2.5+ minutes cold in production). ISFDB's pub_isbn is verified
+    # clean (checked: 0 of 664044 non-empty values contain a hyphen or
+    # space), so candidates are normalized client-side instead.
     candidates = isbn_candidates(isbn)
     with db() as conn, conn.cursor() as cur:
         placeholders = ", ".join(["%s"] * len(candidates))
         cur.execute(
-            f"SELECT * FROM pubs WHERE REPLACE(REPLACE(pub_isbn, '-', ''), ' ', '') IN ({placeholders}) "
+            f"SELECT * FROM pubs WHERE pub_isbn IN ({placeholders}) "
             f"ORDER BY pub_year DESC LIMIT 1",
             candidates,
         )
@@ -221,24 +228,42 @@ def lookup_isbn(isbn: str):
 
 @app.get("/search")
 def search_books(q: str, limit: int = 20):
+    """Title/author freetext search.
+
+    Uses MATCH...AGAINST against FULLTEXT indexes (ft_title_title,
+    ft_author_canonical — created by refresh.py after each import) rather
+    than LIKE '%...%'. A leading-wildcard LIKE can't use any index and does
+    a full scan; at ~2.5M rows in `titles` that timed out client-side
+    (observed during development — a 20s search took 200+ seconds server
+    side before being killed). MATCH...AGAINST returns in well under a
+    second on the same data.
+    """
     if len(q.strip()) < 2:
         raise HTTPException(status_code=400, detail="query too short")
-    like = f"%{q.strip()}%"
+    term = q.strip()
     with db() as conn, conn.cursor() as cur:
         cur.execute(
             """
-            SELECT DISTINCT t.title_id
-            FROM titles t
-            LEFT JOIN canonical_author ca ON ca.title_id = t.title_id
-            LEFT JOIN authors a ON a.author_id = ca.author_id
-            WHERE t.title_ttype IN %s
-              AND (t.title_title LIKE %s OR a.author_canonical LIKE %s)
-            ORDER BY t.title_copyright DESC
+            (SELECT t.title_id, MATCH(t.title_title) AGAINST(%s IN NATURAL LANGUAGE MODE) AS score
+             FROM titles t
+             WHERE t.title_ttype IN %s AND MATCH(t.title_title) AGAINST(%s IN NATURAL LANGUAGE MODE))
+            UNION
+            (SELECT t.title_id, MATCH(a.author_canonical) AGAINST(%s IN NATURAL LANGUAGE MODE) AS score
+             FROM titles t
+             JOIN canonical_author ca ON ca.title_id = t.title_id
+             JOIN authors a ON a.author_id = ca.author_id
+             WHERE t.title_ttype IN %s AND MATCH(a.author_canonical) AGAINST(%s IN NATURAL LANGUAGE MODE))
+            ORDER BY score DESC
             LIMIT %s
             """,
-            (BOOK_TTYPES, like, like, limit),
+            (term, BOOK_TTYPES, term, term, BOOK_TTYPES, term, limit),
         )
-        title_ids = [r["title_id"] for r in cur.fetchall()]
+        seen: set[int] = set()
+        title_ids = []
+        for r in cur.fetchall():
+            if r["title_id"] not in seen:
+                seen.add(r["title_id"])
+                title_ids.append(r["title_id"])
         results = []
         for tid in title_ids:
             cur.execute(

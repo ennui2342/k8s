@@ -20,6 +20,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zipfile
 
 import cloudscraper
 import gdown
@@ -113,6 +114,20 @@ def drive_id_from_url(url: str) -> str:
     return m.group(1)
 
 
+def extract_dump(zip_path: str, tmpdir: str) -> str:
+    """ISFDB's backup download is a zip containing a single .sql file at an
+    arbitrary (sometimes odd, e.g. Windows-path-shaped) internal name — pick
+    the largest member rather than assuming a fixed filename."""
+    with zipfile.ZipFile(zip_path) as zf:
+        members = [i for i in zf.infolist() if not i.is_dir()]
+        if not members:
+            raise RuntimeError("backup zip is empty")
+        largest = max(members, key=lambda i: i.file_size)
+        log.info("extracting %s (%d bytes) from backup zip", largest.filename, largest.file_size)
+        extracted_path = zf.extract(largest, path=tmpdir)
+    return extracted_path
+
+
 def db_conn(database: str | None = None):
     return pymysql.connect(
         host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD,
@@ -137,6 +152,20 @@ def import_dump(dump_path: str, target_db: str):
         )
     if result.returncode != 0:
         raise RuntimeError(f"mariadb import failed: {result.stderr[-2000:]}")
+
+
+def build_search_indexes(database: str):
+    """FULLTEXT indexes for the /search endpoint. Not part of ISFDB's own
+    dump — a plain LIKE '%...%' scan over ~2.5M rows in `titles` took 200+
+    seconds (discovered in production); MATCH...AGAINST needs these to stay
+    under a second. Rebuilt every refresh since each one is a fresh staging
+    database with none of the previous week's indexes."""
+    log.info("building search indexes on %s...", database)
+    conn = db_conn(database)
+    with conn.cursor() as cur:
+        cur.execute(f"ALTER TABLE `{database}`.titles ADD FULLTEXT INDEX ft_title_title (title_title)")
+        cur.execute(f"ALTER TABLE `{database}`.authors ADD FULLTEXT INDEX ft_author_canonical (author_canonical)")
+    conn.close()
 
 
 def sanity_check(database: str):
@@ -190,14 +219,17 @@ def main():
     log.info("latest 5.5-compatible backup: %s (%s)", backup_date, drive_url)
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        dump_path = os.path.join(tmpdir, "isfdb-backup.sql")
+        zip_path = os.path.join(tmpdir, "isfdb-backup.zip")
         file_id = drive_id_from_url(drive_url)
         log.info("downloading via gdown (id=%s)...", file_id)
         start = time.time()
-        gdown.download(f"https://drive.google.com/uc?id={file_id}", output=dump_path, quiet=False)
-        log.info("download complete in %.0fs, size=%d bytes", time.time() - start, os.path.getsize(dump_path))
+        gdown.download(f"https://drive.google.com/uc?id={file_id}", output=zip_path, quiet=False)
+        log.info("download complete in %.0fs, size=%d bytes", time.time() - start, os.path.getsize(zip_path))
+
+        dump_path = extract_dump(zip_path, tmpdir)
 
         import_dump(dump_path, "isfdb_staging")
+        build_search_indexes("isfdb_staging")
         sanity_check("isfdb_staging")
         atomic_swap("isfdb_staging", "isfdb")
 
