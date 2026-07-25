@@ -46,6 +46,17 @@ LOGIN_URL = "https://www.isfdb.org/wiki/index.php/Special:UserLogin?returnto=ISF
 MIN_TITLES = 500_000
 MIN_PUBS = 200_000
 
+# Tables adapter.py actually queries. Everything else in ISFDB's dump is the
+# site's own MediaWiki editing/moderation machinery — user accounts, edit
+# history, view-count analytics, verification workflow queues — roughly half
+# the dump's total row count (~12.9M of ~26M rows) that we never touch.
+# Skipping it at import time (not just dropping it after) is what actually
+# saves time, since writing the rows is the expensive part.
+WANTED_TABLES = frozenset({
+    "authors", "canonical_author", "languages", "notes", "pseudonyms",
+    "pub_authors", "pub_content", "publishers", "pubs", "series", "titles",
+})
+
 
 def login_and_get_downloads_page() -> tuple[cloudscraper.CloudScraper, str]:
     scraper = cloudscraper.create_scraper()
@@ -126,6 +137,71 @@ def extract_dump(zip_path: str, tmpdir: str) -> str:
         log.info("extracting %s (%d bytes) from backup zip", largest.filename, largest.file_size)
         extracted_path = zf.extract(largest, path=tmpdir)
     return extracted_path
+
+
+# Matches mysqldump's per-table section header comments, e.g.:
+#   -- Table structure for table `authors`
+#   -- Dumping data for table `authors`
+_TABLE_MARKER_RE = re.compile(r"^-- (?:Table structure for table|Dumping data for table) `([^`]+)`")
+
+
+def filter_unused_tables(dump_path: str, out_path: str, wanted: frozenset[str]) -> None:
+    """Rewrite a mysqldump file, dropping CREATE/INSERT/LOCK/UNLOCK blocks for
+    every table not in `wanted`.
+
+    Safe by construction, not by careful semicolon-counting: mysqldump always
+    emits a "-- Table structure for table `X`" / "-- Dumping data for table
+    `X`" comment on its own line immediately before that table's DDL/data, so
+    we only ever act on these marker lines, never try to parse statement
+    boundaries inside the row data itself (which can contain arbitrary text,
+    including semicolons in prose — e.g. `notes.note_note`). A table's data
+    can span many physical lines (mysqldump splits large text-heavy tables
+    into several INSERT statements), which is fine: we skip everything
+    between one marker and the next regardless of line count.
+
+    Earlier version also treated *any* other `--`-prefixed line as a reset
+    to "keep" — meant to protect global preamble/footer content outside any
+    table's section, but wrong: mysqldump wraps every marker in bare `--`
+    divider lines (a blank "--" comment line immediately before and after
+    each marker), so that fallback fired on the very next line after every
+    marker and undid the skip decision before a single data line was
+    reached. Confirmed against a real dump: filtering barely changed the
+    file size (8KB of 1.6GB) when it should have dropped ~12.9M of ~26M
+    rows. Fixed by only ever toggling `skip` on an actual table marker —
+    the preamble is naturally kept because `skip` starts False, and the
+    file's small SET-statement footer (harmless to lose on a fresh import
+    into an empty database) is the only content that can be affected if
+    the dump's last table happens to be unwanted.
+    """
+    kept_tables: set[str] = set()
+    skip = False
+    lines_in = lines_out = 0
+
+    with open(dump_path, "r", encoding="utf-8", errors="replace") as fin, \
+            open(out_path, "w", encoding="utf-8") as fout:
+        for line in fin:
+            lines_in += 1
+            m = _TABLE_MARKER_RE.match(line)
+            if m:
+                table = m.group(1)
+                skip = table not in wanted
+                if not skip:
+                    kept_tables.add(table)
+
+            if not skip:
+                fout.write(line)
+                lines_out += 1
+
+    missing = wanted - kept_tables
+    if missing:
+        raise RuntimeError(
+            f"filter_unused_tables: expected tables not found in dump (dump format may "
+            f"have changed): {sorted(missing)}"
+        )
+    log.info(
+        "filtered dump: %d/%d lines kept, %d/%d wanted tables found",
+        lines_out, lines_in, len(kept_tables), len(wanted),
+    )
 
 
 def db_conn(database: str | None = None):
@@ -228,7 +304,11 @@ def main():
 
         dump_path = extract_dump(zip_path, tmpdir)
 
-        import_dump(dump_path, "isfdb_staging")
+        filtered_path = os.path.join(tmpdir, "isfdb-filtered.sql")
+        filter_unused_tables(dump_path, filtered_path, WANTED_TABLES)
+        os.remove(dump_path)  # the ~1.6GB unfiltered copy — no need to hold both
+
+        import_dump(filtered_path, "isfdb_staging")
         build_search_indexes("isfdb_staging")
         sanity_check("isfdb_staging")
         atomic_swap("isfdb_staging", "isfdb")
