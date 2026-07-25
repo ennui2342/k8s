@@ -27,7 +27,7 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: nginx
-          image: nginx
+          image: nginx:1.31.3-trixie
           ports:
           - containerPort: 80
             name: web
