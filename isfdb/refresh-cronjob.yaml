@@ -1,0 +1,46 @@
+# ISFDB publishes a new "5.5-compatible" MySQL backup every Saturday.
+# Sunday 08:00 UTC gives a buffer after that. A failed run is safe — the
+# atomic swap in refresh.py only happens after the staging import passes
+# its row-count sanity check, so last week's data stays live on failure.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: isfdb-refresh
+  namespace: isfdb
+spec:
+  schedule: "0 8 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          restartPolicy: Never
+          affinity:
+            nodeAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  preference:
+                    matchExpressions:
+                      - key: node-role.kubernetes.io/control-plane
+                        operator: DoesNotExist
+          containers:
+            - name: isfdb-refresh
+              image: ghcr.io/ennui2342/isfdb-mirror:local
+              imagePullPolicy: Never
+              command: ["python", "refresh.py"]
+              env:
+                - name: DB_HOST
+                  value: isfdb-db
+              envFrom:
+                - secretRef:
+                    name: isfdb-secrets
+              resources:
+                requests:
+                  cpu: 200m
+                  memory: 256Mi
+                limits:
+                  memory: 512Mi
