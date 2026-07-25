@@ -1,0 +1,19 @@
+# Non-sensitive configuration for librarium-api. Edit and re-apply, then:
+#   kubectl rollout restart deploy/librarium-api -n librarium
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: librarium-config
+  namespace: librarium
+data:
+  LOG_LEVEL: "info"
+  COVER_STORAGE_PATH: "/data/covers"
+  EBOOK_STORAGE_PATH: "/data/media/ebooks"
+  AUDIOBOOK_STORAGE_PATH: "/data/media/audiobooks"
+  EBOOK_PATH_TEMPLATE: "{title}"
+  AUDIOBOOK_PATH_TEMPLATE: "{title}"
+  JWT_ACCESS_TTL: "15m"
+  JWT_REFRESH_TTL: "168h"
+  # Single-user instance: leave true until the admin account is created via
+  # the web UI, then flip to "false" and restart the api deployment.
+  REGISTRATION_ENABLED: "true"

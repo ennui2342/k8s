@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: librarium
+  namespace: librarium
+  annotations:
+    kubernetes.io/ingress.class: traefik
+spec:
+  rules:
+    - host: librarium.k8s.ecafe.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: librarium-web
+                port:
+                  number: 3000

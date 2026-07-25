@@ -175,6 +175,21 @@ SyncThing config is persisted on NFS (`/mnt/md0/sync/config`), so device
 identity and folder config survive a cluster rebuild without any extra steps.
 Verify the pod is up and the web UI is reachable at `syncthing.k8s.ecafe.org`.
 
+### Librarium
+
+Postgres data, covers, and media all live on NFS-backed PVCs (`librarium/postgres.yaml`,
+`librarium/api-pvc.yaml`), so the book catalog survives a cluster rebuild without any
+extra steps — just verify `kubectl get pods -n librarium` comes up healthy and
+`librarium.k8s.ecafe.org` (or the Tailscale hostname on `librarium-ts`) loads.
+
+On a genuinely fresh instance (empty database), `REGISTRATION_ENABLED` starts `"true"` in
+`librarium/configmap.yaml` so you can create the first admin account through the web UI.
+Once that account exists, set `REGISTRATION_ENABLED: "false"`, commit, and:
+
+```sh
+kubectl rollout restart deploy/librarium-api -n librarium
+```
+
 ### WebDAV (Zotero) — Tailscale Funnel
 
 `webdav/funnel-ingress.yaml` exposes webdav at a stable `*.ts.net` hostname via the

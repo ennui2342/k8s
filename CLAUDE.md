@@ -61,6 +61,7 @@ tolerations:
 | `epigone` | epigone routing | `epigone/` | Owns the `epigone.ecafe.org` cert-manager Certificate + Traefik IngressRoute for Home Assistant. Kept as its own namespace (decoupled from home-assistant) since it was briefly shared with webdav too; webdav now uses Tailscale Funnel instead (see below), so this currently only fronts Home Assistant, but stays separate in case another service needs the same public hostname later. |
 | `home-assistant` | homeassistant | `home-assistant/ha-*.yaml` | HA 2026.4.4, hostNetwork, config on NFS; reachable at `home-assistant.k8s.ecafe.org` and, via `epigone/`, at `epigone.ecafe.org` |
 | `home-assistant` | ring-mqtt | `ring-mqtt/` | Ring doorbell → MQTT bridge, RTSP port 30002 |
+| `librarium` | librarium | `librarium/` | Self-hosted print book/manga/comic tracker (Go API + React web + Postgres 16, all in-namespace); `librarium.k8s.ecafe.org` ingress plus a Tailscale ingress (`librarium-ts`) for the iOS barcode-scanning app away from home; covers + media PVCs on `nfs-client`, Postgres data also on `nfs-client` (no local-disk StorageClass exists in this cluster) |
 | `monitoring` | cve-scanner | `trivy/` | Weekly Trivy scan → dedupes/files/auto-closes `tm` tasks; see CVE Patch Management below |
 | `monitoring` | grafana | `prometheus/helmrelease.yaml` | grafana.k8s.ecafe.org, anonymous viewer access; managed by kube-prometheus-stack chart |
 | `monitoring` | health-monitor | `health-monitor/` | CronJob: CrashLoopBackOff/failed-kustomization/NotReady-node checks → `tm` tasks |
@@ -75,6 +76,7 @@ tolerations:
 ### Key Ingress Hostnames
 - `k8s.ecafe.org` — website
 - `home-assistant.k8s.ecafe.org` — Home Assistant (internal DNS only)
+- `librarium.k8s.ecafe.org` — Librarium (book tracker), internal DNS only; also reachable on Tailscale via the `librarium-ts` ingress
 - `epigone.ecafe.org` — public hostname for Home Assistant (TLS via cert-manager, real Let's Encrypt cert), routed by `epigone/`'s IngressRoute
 - `grafana.k8s.ecafe.org` — Grafana
 - `tasks.k8s.ecafe.org` — taskmgt frontend (also on Tailscale as `taskmgt`)
@@ -115,6 +117,7 @@ The age public key is embedded there. The **private key** lives only at
 - `webdav/webdav-secret.yaml` — hacdias/webdav config.yaml, contains bcrypt-hashed basic-auth password for the `zotero` user
 - `tailscale/operator-oauth-secret.yaml` — Tailscale OAuth client ID + secret
 - `prometheus/grafana-admin-secret.yaml` — Grafana admin username + password
+- `librarium/librarium-secret.yaml` — `JWT_SECRET`, `DATABASE_URL`, `POSTGRES_PASSWORD` for the librarium api + bundled Postgres
 
 **Secrets NOT in git (provisioned imperatively or auto-managed):**
 - `epigone/epigone.ecafe.org-production` — TLS cert (managed by cert-manager, auto-renewed)
@@ -178,6 +181,7 @@ dashboards/       — Custom Grafana dashboard ConfigMaps (Solar, Observatory, N
 epigone/          — epigone.ecafe.org namespace: cert-manager Certificate + IngressRoute fronting Home Assistant
 health-monitor/   — CronJob: cluster health checks (CrashLoopBackOff, failed Flux kustomizations, NotReady nodes) → tm tasks
 home-assistant/   — HA deployment, service, ingress, cleanup CronJob
+librarium/        — Librarium book tracker: api + web Deployments, bundled Postgres StatefulSet, covers/media PVCs, internal + Tailscale ingress
 mdns/             — mdns-repeater DaemonSets (master + worker), hostNetwork mDNS relay
 monitoring/       — InfluxDB, Telegraf, Loki, Promtail; all monitoring stack manifests
 prometheus/       — kube-prometheus-stack HelmRelease + HelmRepository + grafana-admin secret

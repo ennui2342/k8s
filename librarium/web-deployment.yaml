@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: librarium-web
+  namespace: librarium
+spec:
+  type: ClusterIP
+  selector:
+    app: librarium-web
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: librarium-web
+  namespace: librarium
+spec:
+  replicas: 2  # stateless, safe to scale
+  selector:
+    matchLabels:
+      app: librarium-web
+  template:
+    metadata:
+      labels:
+        app: librarium-web
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      containers:
+        - name: librarium-web
+          image: ghcr.io/fireball1725/librarium-web:26.4.3
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              memory: 128Mi

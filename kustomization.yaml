@@ -27,3 +27,4 @@ resources:
   - freshrss/
   - wallabag/
   - traefik/
+  - librarium/
