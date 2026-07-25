@@ -14,6 +14,5 @@ data:
   AUDIOBOOK_PATH_TEMPLATE: "{title}"
   JWT_ACCESS_TTL: "15m"
   JWT_REFRESH_TTL: "168h"
-  # Single-user instance: leave true until the admin account is created via
-  # the web UI, then flip to "false" and restart the api deployment.
-  REGISTRATION_ENABLED: "true"
+  # Single-user instance: admin account already created via the web UI.
+  REGISTRATION_ENABLED: "false"
