@@ -91,13 +91,33 @@ def isbn_candidates(raw: str) -> list[str]:
 def date_str(value) -> str:
     """ISFDB stores partial/zero dates ("1973-00-00", "0000-00-00") that
     MySQL can't represent as a real date; PyMySQL falls back to returning
-    the raw string for those instead of raising. Handle both shapes."""
+    the raw string for those instead of raising.
+
+    Normalize month/day "00" (ISFDB's "unknown" placeholder) down to
+    whatever precision is actually known — "1973-00-00" -> "1973",
+    "1974-09-00" -> "1974-09" — rather than passing it through raw.
+    Librarium's date parser doesn't recognize ISFDB's zero-padding
+    convention and silently drops the whole value to null when it fails
+    to parse, discarding even the year we do know (found via a real
+    apply: a book's publish date came back empty after refreshing from
+    an ISFDB edition whose day/month were unknown).
+    """
     if not value:
         return ""
     if hasattr(value, "isoformat"):
         return value.isoformat()
     s = str(value)
-    return "" if s.startswith("0000-00-00") else s
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})", s)
+    if not m:
+        return s
+    year, month, day = m.groups()
+    if year in ("0000", "8888"):
+        return ""
+    if month == "00":
+        return year
+    if day == "00":
+        return f"{year}-{month}"
+    return s
 
 
 def date_year(value) -> int | None:
