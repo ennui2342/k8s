@@ -135,6 +135,16 @@
   critical: 0
   high: 0
 
+- workload: botkube/Deployment/botkube
+  strategy: frozen-rebuild
+  patched_image: ghcr.io/ennui2342/botkube:v1.14.0-patched
+  upstream_image: ghcr.io/kubeshop/botkube:v1.14.0
+  build_recipe: trivy/patched-images/botkube/Dockerfile
+  reason: "git/musl CVEs in Alpine 3.18.9 base; botkube upstream inactive since v1.14.0 (2024-11-13), no newer release exists"
+  patched_date: "2026-07-25"
+  critical: 0
+  high: 2
+
 - workload: monitoring/StatefulSet/influxdb
   strategy: deferred-migration
   patched_image: "influxdb:1.8.0"

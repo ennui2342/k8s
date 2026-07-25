@@ -25,6 +25,12 @@ spec:
       name: botkube-discord
       valuesKey: values.yaml
   values:
+    image:
+      registry: ghcr.io
+      repository: ennui2342/botkube
+      tag: v1.14.0-patched
+      pullPolicy: Never
+
     affinity:
       nodeAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
