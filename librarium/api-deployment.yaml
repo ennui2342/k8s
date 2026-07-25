@@ -39,8 +39,11 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: librarium-api
-          image: ghcr.io/fireball1725/librarium-api:26.4.4
-          imagePullPolicy: IfNotPresent
+          # Locally-built fork image (PRs #45/#46 not yet merged upstream) — see
+          # RUNBOOK.md "Librarium local fork images" for the build/import steps
+          # and revert-to-upstream instructions once those PRs land.
+          image: ghcr.io/ennui2342/librarium-api:local-isfdb
+          imagePullPolicy: Never
           ports:
             - containerPort: 8080
               name: http

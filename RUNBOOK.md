@@ -190,6 +190,52 @@ Once that account exists, set `REGISTRATION_ENABLED: "false"`, commit, and:
 kubectl rollout restart deploy/librarium-api -n librarium
 ```
 
+### Librarium local fork images
+
+`librarium/api-deployment.yaml` and `librarium/web-deployment.yaml` currently reference
+**locally built, not-registry-pushed** images (`ghcr.io/ennui2342/librarium-api:local-isfdb`,
+`ghcr.io/ennui2342/librarium-web:local-isfdb`, both `imagePullPolicy: Never`) instead of the
+upstream `ghcr.io/fireball1725/*` tags. This is temporary: it carries the ISFDB metadata
+provider and its generic provider-config-fields UI, which are out as PRs against upstream but
+not yet merged —
+
+- `github.com/ennui2342/librarium-api` branch `feat/isfdb-provider` (rebased on
+  `feat/metadata-provider-config-fields`) — upstream PRs #45 and #46
+- `github.com/ennui2342/librarium-web` branch `feat/metadata-provider-config-fields` — upstream
+  PR #44
+
+On a cluster rebuild (or if containerd's image cache is lost on a worker), rebuild and
+reimport on both workers:
+
+```sh
+git clone https://github.com/ennui2342/librarium-api.git && cd librarium-api
+git checkout feat/isfdb-provider
+docker build --build-arg VERSION=26.4.4-isfdb -t ghcr.io/ennui2342/librarium-api:local-isfdb .
+docker save ghcr.io/ennui2342/librarium-api:local-isfdb -o /tmp/librarium-api-isfdb.tar
+cd ..
+
+git clone https://github.com/ennui2342/librarium-web.git && cd librarium-web
+git checkout feat/metadata-provider-config-fields
+docker build --build-arg LIBRARIUM_VERSION=26.4.3-isfdb -t ghcr.io/ennui2342/librarium-web:local-isfdb .
+docker save ghcr.io/ennui2342/librarium-web:local-isfdb -o /tmp/librarium-web-isfdb.tar
+cd ..
+
+scp /tmp/librarium-api-isfdb.tar /tmp/librarium-web-isfdb.tar ubuntu@k8s.local:/tmp/
+ssh ubuntu@k8s.local "scp /tmp/librarium-*-isfdb.tar k8s-1:/tmp/ && scp /tmp/librarium-*-isfdb.tar k8s-2:/tmp/"
+ssh ubuntu@k8s.local "ssh k8s-1 'sudo k3s ctr images import /tmp/librarium-api-isfdb.tar && sudo k3s ctr images import /tmp/librarium-web-isfdb.tar'"
+ssh ubuntu@k8s.local "ssh k8s-2 'sudo k3s ctr images import /tmp/librarium-api-isfdb.tar && sudo k3s ctr images import /tmp/librarium-web-isfdb.tar'"
+```
+
+**Once PRs #44/#45/#46 merge upstream and ship in a tagged `fireball1725` release**, revert
+`librarium/api-deployment.yaml` and `librarium/web-deployment.yaml` back to
+`ghcr.io/fireball1725/librarium-{api,web}:<new-version>` with `imagePullPolicy: IfNotPresent`,
+commit, and remove the local images from both workers (`sudo k3s ctr images rm
+ghcr.io/ennui2342/librarium-api:local-isfdb ghcr.io/ennui2342/librarium-web:local-isfdb`).
+
+The ISFDB provider itself is configured, not auto-enabled: in Librarium's admin settings
+(Metadata Providers), set ISFDB's **Mirror base URL** to
+`http://isfdb-adapter.isfdb.svc.cluster.local:8080` and enable it.
+
 ### ISFDB mirror
 
 Unlike everything else in this repo, `isfdb/adapter-deployment.yaml` and `isfdb/refresh-cronjob.yaml`
