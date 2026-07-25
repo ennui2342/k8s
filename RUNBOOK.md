@@ -190,6 +190,44 @@ Once that account exists, set `REGISTRATION_ENABLED: "false"`, commit, and:
 kubectl rollout restart deploy/librarium-api -n librarium
 ```
 
+### ISFDB mirror
+
+Unlike everything else in this repo, `isfdb/adapter-deployment.yaml` and `isfdb/refresh-cronjob.yaml`
+reference a **locally built, not-registry-pushed** image (`ghcr.io/ennui2342/isfdb-mirror:local`,
+`imagePullPolicy: Never`) — same pattern as `mdns-repeater`, but unlike that one there's no
+committed Dockerfile-only fork; the full source lives in this repo at `isfdb/adapter/`. On a
+cluster rebuild, before the adapter/CronJob pods can schedule, build and import it on both workers:
+
+```sh
+cd isfdb/adapter
+docker build -t ghcr.io/ennui2342/isfdb-mirror:local .
+docker save ghcr.io/ennui2342/isfdb-mirror:local -o /tmp/isfdb-mirror.tar
+
+scp /tmp/isfdb-mirror.tar ubuntu@k8s.local:/tmp/isfdb-mirror.tar
+ssh ubuntu@k8s.local "scp /tmp/isfdb-mirror.tar k8s-1:/tmp/ && scp /tmp/isfdb-mirror.tar k8s-2:/tmp/"
+ssh ubuntu@k8s.local "ssh k8s-1 'sudo k3s ctr images import /tmp/isfdb-mirror.tar'"
+ssh ubuntu@k8s.local "ssh k8s-2 'sudo k3s ctr images import /tmp/isfdb-mirror.tar'"
+```
+
+The MariaDB PVC is empty on a fresh cluster — trigger an initial import manually rather than
+waiting for Sunday:
+
+```sh
+kubectl create job --from=cronjob/isfdb-refresh isfdb-refresh-manual -n isfdb
+```
+
+**This takes 25-35 minutes**, almost entirely spent importing the ~1.6GB uncompressed dump into
+NFS-backed MariaDB (`activeDeadlineSeconds: 3600` accounts for this — don't shrink it, an earlier
+30-minute budget got killed mid-import on the first live run). A failed/killed run is harmless —
+the atomic swap in `refresh.py` only happens after the staging import passes a row-count sanity
+check, so it just leaves the mirror empty (fresh cluster) or last week's data (routine refresh)
+rather than serving partial data.
+
+The refresh job's login to the ISFDB wiki occasionally gets a transient `403` on the very first
+attempt of a session (observed during initial testing; unclear whether it's Cloudflare-side or
+something about connection reuse) but succeeds on retry — `backoffLimit: 2` on the CronJob handles
+this automatically, no action needed unless it fails 3 times in a row.
+
 ### WebDAV (Zotero) — Tailscale Funnel
 
 `webdav/funnel-ingress.yaml` exposes webdav at a stable `*.ts.net` hostname via the
