@@ -227,7 +227,7 @@ def lookup_isbn(isbn: str):
 
 
 @app.get("/search")
-def search_books(q: str, limit: int = 20):
+def search_books(q: str, limit: int = 20, editions_per_title: int = 10):
     """Title/author freetext search.
 
     Uses MATCH...AGAINST against FULLTEXT indexes (ft_title_title,
@@ -237,6 +237,24 @@ def search_books(q: str, limit: int = 20):
     (observed during development — a 20s search took 200+ seconds server
     side before being killed). MATCH...AGAINST returns in well under a
     second on the same data.
+
+    Title and author are matched as two independent NATURAL LANGUAGE MODE
+    branches (a query mixes title words and an author surname, e.g. "camp
+    concentration disch", and neither field alone contains all of it — a
+    strict AND within one column would match nothing). Scores are UNION
+    ALL'd and summed per title_id rather than UNION'd and dedup-on-first-seen,
+    so a title matching *both* branches (the actual right book) outranks
+    titles that only coincidentally match one branch (e.g. other books by
+    the same author, or foreign-language editions that share the English
+    title string) — without that, we saw an exact double-match (title score
+    18.0 + author score 10.8) rank below same-author noise that only ever
+    hit the author branch once.
+
+    Each matched title can have many editions in ISFDB (Camp Concentration
+    has ~15) — return up to `editions_per_title` of them instead of
+    collapsing to a single "earliest" one, so the specific edition a user
+    owns has a chance of showing up. Editions with an unknown/placeholder
+    ISFDB date ("0000-00-00", "8888-00-00") sort last rather than first.
     """
     if len(q.strip()) < 2:
         raise HTTPException(status_code=400, detail="query too short")
@@ -244,40 +262,41 @@ def search_books(q: str, limit: int = 20):
     with db() as conn, conn.cursor() as cur:
         cur.execute(
             """
-            (SELECT t.title_id, MATCH(t.title_title) AGAINST(%s IN NATURAL LANGUAGE MODE) AS score
-             FROM titles t
-             WHERE t.title_ttype IN %s AND MATCH(t.title_title) AGAINST(%s IN NATURAL LANGUAGE MODE))
-            UNION
-            (SELECT t.title_id, MATCH(a.author_canonical) AGAINST(%s IN NATURAL LANGUAGE MODE) AS score
-             FROM titles t
-             JOIN canonical_author ca ON ca.title_id = t.title_id
-             JOIN authors a ON a.author_id = ca.author_id
-             WHERE t.title_ttype IN %s AND MATCH(a.author_canonical) AGAINST(%s IN NATURAL LANGUAGE MODE))
-            ORDER BY score DESC
+            SELECT title_id, SUM(score) AS total_score
+            FROM (
+                (SELECT t.title_id, MATCH(t.title_title) AGAINST(%s IN NATURAL LANGUAGE MODE) AS score
+                 FROM titles t
+                 WHERE t.title_ttype IN %s AND MATCH(t.title_title) AGAINST(%s IN NATURAL LANGUAGE MODE))
+                UNION ALL
+                (SELECT t.title_id, MATCH(a.author_canonical) AGAINST(%s IN NATURAL LANGUAGE MODE) AS score
+                 FROM titles t
+                 JOIN canonical_author ca ON ca.title_id = t.title_id
+                 JOIN authors a ON a.author_id = ca.author_id
+                 WHERE t.title_ttype IN %s AND MATCH(a.author_canonical) AGAINST(%s IN NATURAL LANGUAGE MODE))
+            ) matches
+            GROUP BY title_id
+            ORDER BY total_score DESC
             LIMIT %s
             """,
             (term, BOOK_TTYPES, term, term, BOOK_TTYPES, term, limit),
         )
-        seen: set[int] = set()
-        title_ids = []
-        for r in cur.fetchall():
-            if r["title_id"] not in seen:
-                seen.add(r["title_id"])
-                title_ids.append(r["title_id"])
+        title_ids = [r["title_id"] for r in cur.fetchall()]
         results = []
         for tid in title_ids:
+            if len(results) >= limit:
+                break
             cur.execute(
                 """
                 SELECT p.* FROM pub_content pc
                 JOIN pubs p ON p.pub_id = pc.pub_id
                 WHERE pc.title_id = %s
-                ORDER BY p.pub_year ASC
-                LIMIT 1
+                ORDER BY (p.pub_year IS NULL OR p.pub_year IN ('0000-00-00', '8888-00-00')) ASC,
+                         p.pub_year ASC
+                LIMIT %s
                 """,
-                (tid,),
+                (tid, min(editions_per_title, limit - len(results))),
             )
-            pub = cur.fetchone()
-            if pub:
+            for pub in cur.fetchall():
                 results.append(book_result_from_pub(cur, pub))
         return results
 
