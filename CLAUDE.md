@@ -76,7 +76,7 @@ tolerations:
 ### Key Ingress Hostnames
 - `k8s.ecafe.org` — website
 - `home-assistant.k8s.ecafe.org` — Home Assistant (internal DNS only)
-- `librarium.k8s.ecafe.org` — Librarium (book tracker), internal DNS only; also reachable on Tailscale via the `librarium-ts` ingress
+- `librarium.k8s.ecafe.org` — Librarium (book tracker), internal DNS only; also reachable at `librarium.tail611131.ts.net` via Tailscale (`librarium-ts` ingress), for the iOS app away from home
 - `epigone.ecafe.org` — public hostname for Home Assistant (TLS via cert-manager, real Let's Encrypt cert), routed by `epigone/`'s IngressRoute
 - `grafana.k8s.ecafe.org` — Grafana
 - `tasks.k8s.ecafe.org` — taskmgt frontend (also on Tailscale as `taskmgt`)
