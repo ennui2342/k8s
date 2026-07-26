@@ -238,14 +238,15 @@ The ISFDB provider itself is configured, not auto-enabled: in Librarium's admin 
 
 ### ISFDB mirror
 
-Unlike everything else in this repo, `isfdb/adapter-deployment.yaml` and `isfdb/refresh-cronjob.yaml`
-reference a **locally built, not-registry-pushed** image (`ghcr.io/ennui2342/isfdb-mirror:local`,
-`imagePullPolicy: Never`) — same pattern as `mdns-repeater`, but unlike that one there's no
-committed Dockerfile-only fork; the full source lives in this repo at `isfdb/adapter/`. On a
-cluster rebuild, before the adapter/CronJob pods can schedule, build and import it on both workers:
+`isfdb/adapter-deployment.yaml` and `isfdb/refresh-cronjob.yaml` reference a **locally built,
+not-registry-pushed** image (`ghcr.io/ennui2342/isfdb-mirror:local`, `imagePullPolicy: Never`) —
+same pattern as the Librarium local fork images above. Source is the standalone public repo
+`github.com/ennui2342/isfdb-adapter` (a clean reference implementation anyone can self-host — see
+its own `CLAUDE.md`/`README.md`), not anything embedded in this repo. On a cluster rebuild, before
+the adapter/CronJob pods can schedule, clone, build, and import it on both workers:
 
 ```sh
-cd isfdb/adapter
+git clone https://github.com/ennui2342/isfdb-adapter.git && cd isfdb-adapter
 docker build -t ghcr.io/ennui2342/isfdb-mirror:local .
 docker save ghcr.io/ennui2342/isfdb-mirror:local -o /tmp/isfdb-mirror.tar
 
@@ -254,6 +255,10 @@ ssh ubuntu@k8s.local "scp /tmp/isfdb-mirror.tar k8s-1:/tmp/ && scp /tmp/isfdb-mi
 ssh ubuntu@k8s.local "ssh k8s-1 'sudo k3s ctr images import /tmp/isfdb-mirror.tar'"
 ssh ubuntu@k8s.local "ssh k8s-2 'sudo k3s ctr images import /tmp/isfdb-mirror.tar'"
 ```
+
+Config (`MARIADB_ROOT_PASSWORD`, `ISFDB_WIKI_USERNAME`, `ISFDB_WIKI_PASSWORD`) stays as-is —
+`isfdb/isfdb-secret.yaml` (SOPS-encrypted) is unaffected by where the image source lives; it's
+passed into the built image as env vars by the Deployment/CronJob either way.
 
 The MariaDB PVC is empty on a fresh cluster — trigger an initial import manually rather than
 waiting for Sunday:
