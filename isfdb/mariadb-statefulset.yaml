@@ -56,6 +56,37 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/mysql
+          # Re-warms both cache layers (MyISAM key buffer + OS/NFS page
+          # cache) on every container start, not just after the weekly
+          # isfdb-refresh CronJob (which does the same warm-up itself, see
+          # isfdb-adapter's refresh.py warm_caches()) — a pod restart for
+          # any other reason (CVE image patch, node maintenance, manual
+          # rollout restart) would otherwise leave searches cold until the
+          # following Sunday. Waits for the server to accept connections
+          # first since postStart fires as soon as the container process
+          # starts, not once mariadbd is actually ready. `|| true` at the
+          # end is required for a fresh cluster's first-ever start, before
+          # any refresh has run and these tables exist yet — postStart
+          # failing would otherwise block/crash the container.
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - sh
+                  - -c
+                  - |
+                    for i in $(seq 1 60); do
+                      mariadb-admin ping -uroot -p"$MARIADB_ROOT_PASSWORD" >/dev/null 2>&1 && break
+                      sleep 2
+                    done
+                    mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" -e "
+                      LOAD INDEX INTO CACHE isfdb.titles, isfdb.authors, isfdb.canonical_author, isfdb.pubs, isfdb.pub_content;
+                      SELECT COUNT(*) FROM isfdb.titles WHERE title_id >= 0;
+                      SELECT COUNT(*) FROM isfdb.authors WHERE author_id >= 0;
+                      SELECT COUNT(*) FROM isfdb.canonical_author WHERE title_id >= 0;
+                      SELECT COUNT(*) FROM isfdb.pubs WHERE pub_id >= 0;
+                      SELECT COUNT(*) FROM isfdb.pub_content WHERE pub_id >= 0;
+                    " || true
           readinessProbe:
             exec:
               command:
