@@ -16,6 +16,8 @@ spec:
     metadata:
       labels:
         app: syncthing
+      annotations:
+        kubectl.kubernetes.io/restartedAt: "2026-07-26T00:00:00Z"
     spec:
       affinity:
         nodeAffinity:
