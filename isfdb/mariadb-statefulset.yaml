@@ -52,6 +52,7 @@ spec:
               value: isfdb
           args:
             - --max_allowed_packet=256M
+            - --key_buffer_size=1200M
           volumeMounts:
             - name: data
               mountPath: /var/lib/mysql
@@ -74,9 +75,9 @@ spec:
           resources:
             requests:
               cpu: 200m
-              memory: 512Mi
-            limits:
               memory: 1Gi
+            limits:
+              memory: 2Gi
   volumeClaimTemplates:
     - metadata:
         name: data
