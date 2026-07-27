@@ -604,7 +604,8 @@ spec:
               mountPath: /scripts
           containers:
           - name: notify
-            image: alpine:latest
+            image: ghcr.io/ennui2342/k8s-toolbox:1.32.13
+            imagePullPolicy: Never
             env:
             - name: DISCORD_WEBHOOK
               valueFrom:
@@ -615,7 +616,6 @@ spec:
             - /bin/sh
             - -c
             - |
-              apk add --no-cache --quiet curl python3 py3-yaml
               python3 /scripts/notify.py
             volumeMounts:
             - name: report

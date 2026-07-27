@@ -276,7 +276,8 @@ spec:
           restartPolicy: OnFailure
           containers:
           - name: monitor
-            image: alpine/k8s:1.32.13
+            image: ghcr.io/ennui2342/k8s-toolbox:1.32.13
+            imagePullPolicy: Never
             env:
             - name: DISCORD_WEBHOOK
               valueFrom:
@@ -287,12 +288,6 @@ spec:
             - /bin/sh
             - -c
             - |
-              # Same image + live-upgrade pattern as health-monitor's own CronJob
-              # (see that file's comment) — bundles kubectl pinned to the k3s
-              # server version; only openssh-client needs adding here.
-              apk update --quiet
-              apk upgrade --no-cache --quiet
-              apk add --no-cache --quiet openssh-client python3 curl
               python3 /scripts/monitor.py
             volumeMounts:
             - name: scripts

@@ -12,12 +12,12 @@ spec:
           restartPolicy: OnFailure
           containers:
           - name: monitor
-            image: alpine:latest
+            image: ghcr.io/ennui2342/k8s-toolbox:1.32.13
+            imagePullPolicy: Never
             command:
             - /bin/sh
             - -c
             - |
-              apk add --no-cache --quiet curl jq
               conflicts=$(find /data -name "*.sync-conflict-*" -type f 2>/dev/null)
               if [ -z "$conflicts" ]; then
                 echo "No conflicts found"
