@@ -8143,8 +8143,8 @@ spec:
             resourceFieldRef:
               containerName: manager
               resource: limits.memory
-        image: ghcr.io/fluxcd/image-automation-controller:v1.1.2
-        imagePullPolicy: IfNotPresent
+        image: ghcr.io/ennui2342/image-automation-controller:v1.1.2-patched
+        imagePullPolicy: Never
         livenessProbe:
           httpGet:
             path: /healthz

@@ -55,6 +55,16 @@
   critical: 1
   high: 6
 
+- workload: flux-system/Deployment/image-automation-controller
+  strategy: frozen-rebuild
+  patched_image: ghcr.io/ennui2342/image-automation-controller:v1.1.2-patched
+  upstream_image: ghcr.io/fluxcd/image-automation-controller:v1.1.2
+  build_recipe: trivy/patched-images/image-automation-controller/Dockerfile
+  reason: "openssl CVE-2026-45447 in Alpine base; fix only ships upstream from v1.2.1, which crosses a breaking CRD API removal (image.toolkit.fluxcd.io/v1beta2) — out of scope for a routine OS-CVE patch"
+  patched_date: "2026-07-27"
+  critical: 0
+  high: 1
+
 - workload: flux-system/Deployment/kustomize-controller
   strategy: frozen-rebuild
   patched_image: ghcr.io/ennui2342/kustomize-controller:v1.8.4-patched
