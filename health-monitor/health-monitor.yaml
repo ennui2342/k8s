@@ -259,7 +259,7 @@ data:
         return f'AlertFingerprint: {fp}'
 
     r = subprocess.run(
-        ['curl', '-sf', f'{ALERTMANAGER_API}/alerts',
+        ['curl', '-sf', '-G', f'{ALERTMANAGER_API}/alerts',
          '--data-urlencode', 'active=true', '--data-urlencode', 'silenced=false',
          '--data-urlencode', 'inhibited=false'],
         capture_output=True, text=True
