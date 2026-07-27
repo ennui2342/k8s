@@ -1,0 +1,298 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pvc-usage-monitor
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pvc-usage-monitor-reader
+rules:
+- apiGroups: [""]
+  resources: ["persistentvolumes"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pvc-usage-monitor-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pvc-usage-monitor-reader
+subjects:
+- kind: ServiceAccount
+  name: pvc-usage-monitor
+  namespace: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pvc-usage-monitor-script
+  namespace: monitoring
+data:
+  monitor.py: |
+    # Real per-PVC "did this app write more than we budgeted" check —
+    # doesn't exist anywhere in kubelet_volume_stats_*, since kubelet uses
+    # a cheap statfs() on NFS mounts, which returns the *whole shared
+    # export's* stats for every PVC identically (confirmed live 2026-07-27,
+    # see prometheus/alerting-rules.yaml's PersistentVolumeFillingUp
+    # comment). The only way to get real per-directory usage is to actually
+    # walk the NAS filesystem, so this SSHes to the NAS (same key as
+    # nas-monitor) and runs `du` directly, then matches each directory back
+    # to its owning PVC via the PV's own spec.nfs.path — robust regardless
+    # of naming convention (some PVs use the auto-generated
+    # <namespace>-<pvc>-<pv> path, some use a custom short path like
+    # "wallabag-data").
+    #
+    # This is a self-imposed-budget check, not a real quota: nfs-subdir-
+    # external-provisioner (this cluster's provisioner) enforces nothing —
+    # a PVC's declared Gi size is bookkeeping only. Nothing stops an app
+    # writing far past it; this is what catches that before it starves
+    # every other app sharing the same physical disk.
+    import json, subprocess, os, sys, re, hashlib
+
+    TM_API = 'http://api.taskmgt.svc.cluster.local:8081'
+    DISCORD_WEBHOOK = os.environ.get('DISCORD_WEBHOOK', '')
+    NAS_HOST = 'ennui2342@192.168.0.76'
+    NAS_PORT = '9222'
+    NAS_BASE_PATH = '/mnt/md0/k8s'
+    THRESHOLD = 0.90
+
+    STATUS_TOKEN_RE = re.compile(r'\s*§\S+')
+
+    def strip_status(text):
+        lines = text.split('\n', 1)
+        first = STATUS_TOKEN_RE.sub('', lines[0])
+        return first if len(lines) == 1 else first + '\n' + lines[1]
+
+    def set_status(text, status):
+        return strip_status(text).split('\n', 1)[0] + f' §{status}' + (
+            '\n' + text.split('\n', 1)[1] if '\n' in text else ''
+        )
+
+    def get_existing_tasks():
+        r = subprocess.run(['curl', '-sf', f'{TM_API}/tasks'], capture_output=True, text=True)
+        if r.returncode != 0:
+            print('Warning: could not fetch existing tasks from taskmgt', file=sys.stderr)
+            return []
+        try:
+            data = json.loads(r.stdout)
+            tasks = data if isinstance(data, list) else data.get('tasks', [])
+            return [t for t in tasks if '<cli.cluster-health' in t.get('text', '')]
+        except Exception as e:
+            print(f'Warning: could not parse task list: {e}', file=sys.stderr)
+            return []
+
+    def create_task(title, notes, priority):
+        text = f"{title} {priority} #devops +cli.claude-code.k8s <cli.cluster-health\n{notes}"
+        r = subprocess.run(
+            ['curl', '-sf', '-X', 'POST', f'{TM_API}/tasks',
+             '-H', 'Content-Type: application/json', '-d', json.dumps({'text': text})],
+            capture_output=True, text=True
+        )
+        if r.returncode == 0:
+            try:
+                resp = json.loads(r.stdout)
+                print(f'Created task {resp.get("id", "?")} : {title}')
+            except Exception:
+                print(f'Created task: {title}')
+            return True
+        print(f'Failed to create task: {title}', file=sys.stderr)
+        return False
+
+    def update_task(task_id, text):
+        r = subprocess.run(
+            ['curl', '-sf', '-X', 'PATCH', f'{TM_API}/tasks/{task_id}',
+             '-H', 'Content-Type: application/json', '-d', json.dumps({'text': text})],
+            capture_output=True, text=True
+        )
+        if r.returncode != 0:
+            print(f'tm task update failed for {task_id}', file=sys.stderr)
+            return False
+        return True
+
+    def marker(namespace, name):
+        return f'PVCUsageCheck: {namespace}/{name}'
+
+    def parse_quantity_to_bytes(q):
+        m = re.match(r'^(\d+(?:\.\d+)?)([EPTGMK]i?)?$', q)
+        if not m:
+            return None
+        value = float(m.group(1))
+        suffix = m.group(2) or ''
+        binary = {'Ki': 1024, 'Mi': 1024**2, 'Gi': 1024**3, 'Ti': 1024**4, 'Pi': 1024**5, 'Ei': 1024**6}
+        decimal = {'K': 1000, 'M': 1000**2, 'G': 1000**3, 'T': 1000**4, 'P': 1000**5, 'E': 1000**6}
+        mult = binary.get(suffix) or decimal.get(suffix) or 1
+        return int(value * mult)
+
+    # --- Load every bound PV backed by the nfs-client path, keyed by directory basename ---
+    r = subprocess.run(['kubectl', 'get', 'pv', '-o', 'json'], capture_output=True, text=True)
+    if r.returncode != 0:
+        print(f'kubectl get pv failed: {r.stderr[:200]}', file=sys.stderr)
+        sys.exit(1)
+    pv_data = json.loads(r.stdout)
+
+    pv_by_basename = {}
+    for pv in pv_data.get('items', []):
+        nfs = pv['spec'].get('nfs')
+        claim = pv['spec'].get('claimRef')
+        if not nfs or not claim or not nfs.get('path', '').startswith(NAS_BASE_PATH):
+            continue
+        requested = parse_quantity_to_bytes(pv['spec'].get('capacity', {}).get('storage', ''))
+        if requested is None:
+            continue
+        basename = nfs['path'].rsplit('/', 1)[-1]
+        pv_by_basename[basename] = {
+            'namespace': claim.get('namespace', 'unknown'),
+            'name': claim.get('name', 'unknown'),
+            'requested_bytes': requested,
+        }
+
+    print(f'Tracking {len(pv_by_basename)} nfs-client-backed PV(s)')
+
+    # --- Real per-directory usage from the NAS itself ---
+    r = subprocess.run(
+        ['ssh', '-p', NAS_PORT, '-i', '/ssh/id_rsa',
+         '-o', 'StrictHostKeyChecking=no', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10',
+         NAS_HOST, f'du -sk -d 1 {NAS_BASE_PATH}'],
+        capture_output=True, text=True
+    )
+    # Nonzero exit is expected — du reports "Permission denied" on some
+    # subdirectories it can't descend into (that's fine, -d 1 doesn't need
+    # to) but still exits 1 for it. stdout is unaffected either way.
+    if not r.stdout.strip():
+        print(f'Warning: could not reach NAS or got no du output: {r.stderr[:300]}', file=sys.stderr)
+        sys.exit(0)
+
+    issues = []
+    existing_tasks = get_existing_tasks()
+    seen_markers = set()
+
+    for line in r.stdout.strip().split('\n'):
+        parts = line.split('\t', 1)
+        if len(parts) != 2:
+            continue
+        size_kb_str, path = parts
+        if path == NAS_BASE_PATH:
+            continue  # grand total line, not a per-PVC entry
+        basename = path.rsplit('/', 1)[-1]
+        pv_info = pv_by_basename.get(basename)
+        if not pv_info:
+            continue  # not a currently-bound PVC's directory (orphaned data, or non-nfs-client)
+
+        try:
+            used_bytes = int(size_kb_str) * 1024
+        except ValueError:
+            continue
+
+        ns, name = pv_info['namespace'], pv_info['name']
+        requested = pv_info['requested_bytes']
+        ratio = used_bytes / requested if requested else 0
+        m = marker(ns, name)
+        seen_markers.add(m)
+
+        if ratio <= THRESHOLD:
+            continue
+
+        if any(m in t.get('text', '') for t in existing_tasks):
+            print(f'Already tracked: {ns}/{name} ({ratio:.0%})')
+            continue
+
+        issues.append({
+            'title': f'PVC {ns}/{name} is using {ratio:.0%} of its requested size',
+            'notes': (
+                f'* Used: {used_bytes / 1024**3:.2f}Gi of {requested / 1024**3:.2f}Gi requested\n'
+                f'* No real quota enforced (nfs-subdir-external-provisioner) — this is a '
+                f'self-imposed-budget check, not a hard limit. Investigate before it grows '
+                f'further; every PVC shares one physical disk, so a runaway app here can '
+                f'starve every other app.\n'
+                f'* {m}'
+            ),
+            'priority': '!2',
+        })
+
+    # Close tasks whose PVC has dropped back under threshold (or been deleted/unmatched)
+    for t in existing_tasks:
+        if t.get('status') != 'open':
+            continue
+        mm = re.search(r'PVCUsageCheck:\s*(\S+)', t.get('text', ''))
+        if not mm or mm.group(0) in seen_markers:
+            continue
+        print(f'Closing {t["id"]}: {mm.group(1)} back under {THRESHOLD:.0%}')
+        update_task(t['id'], set_status(t['text'] + '\n* Resolved: usage back under threshold', 'closed'))
+
+    if not issues:
+        print('No PVCs over threshold')
+        sys.exit(0)
+
+    print(f'Creating {len(issues)} new task(s)...')
+    created = []
+    for issue in issues:
+        if create_task(issue['title'], issue['notes'], issue['priority']):
+            created.append(issue)
+
+    if created and DISCORD_WEBHOOK:
+        lines = ['**PVC Usage Monitor** — over-budget PVC(s) found', '```']
+        for issue in created:
+            lines.append(issue['title'])
+        lines.append('```')
+        subprocess.run(
+            ['curl', '-sf', '-X', 'POST', DISCORD_WEBHOOK,
+             '-H', 'Content-Type: application/json',
+             '-d', json.dumps({'username': 'k8s homelab', 'content': '\n'.join(lines)[:2000]})],
+            capture_output=True
+        )
+
+    print(f'Done: {len(created)} task(s) created')
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pvc-usage-monitor
+  namespace: monitoring
+spec:
+  schedule: "0 */2 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 300
+      template:
+        spec:
+          serviceAccountName: pvc-usage-monitor
+          restartPolicy: OnFailure
+          containers:
+          - name: monitor
+            image: alpine/k8s:1.32.13
+            env:
+            - name: DISCORD_WEBHOOK
+              valueFrom:
+                secretKeyRef:
+                  name: discord-webhook
+                  key: address
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Same image + live-upgrade pattern as health-monitor's own CronJob
+              # (see that file's comment) — bundles kubectl pinned to the k3s
+              # server version; only openssh-client needs adding here.
+              apk update --quiet
+              apk upgrade --no-cache --quiet
+              apk add --no-cache --quiet openssh-client python3 curl
+              python3 /scripts/monitor.py
+            volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: ssh-key
+              mountPath: /ssh
+              readOnly: true
+          volumes:
+          - name: scripts
+            configMap:
+              name: pvc-usage-monitor-script
+          - name: ssh-key
+            secret:
+              secretName: nas-ssh-key
+              defaultMode: 0600

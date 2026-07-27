@@ -29,3 +29,4 @@ resources:
   - traefik/
   - librarium/
   - isfdb/
+  - pvc-usage-monitor/
