@@ -186,6 +186,23 @@ every PVC reports identical values, since kubelet does a cheap `statfs()` on the
 a real per-directory walk — this is also why `prometheus/alerting-rules.yaml`'s
 `PersistentVolumeFillingUp` is a single cluster-wide alert rather than per-PVC).
 
+**Principle: lightweight/periodic CronJobs should use `k8s-toolbox/` (or another pre-built,
+`imagePullPolicy: Never` image), never `apk add`/`apk update && apk upgrade` at runtime.**
+Confirmed live 2026-07-27: a "flapping NodeHighIOWait" alert on k8s-2 (a Pi-class node whose entire
+root filesystem is one already-79%-full eMMC/SD card) turned out to have nothing to do with the NFS
+server — its physical disk stayed under 6% utilization throughout, including during a confirmed
+35% CPU-iowait spike on k8s-2 at the same instant. The real cause was several CronJobs
+(`nas-raid-monitor`, `cluster-health-monitor`, `linkding-task-sync`, ...) each reinstalling Alpine
+packages from scratch on every single invocation — real local disk writes, every 15-30 minutes, on
+whatever node the scheduler picked, compounding whenever multiple jobs landed on the same node
+together (as they did at the exact spike moment). `health-monitor`'s original "live-upgrade"
+pattern (apk update/upgrade every run, to dodge a static image going stale on CVEs) predates the
+reconcile-scanner mechanism above and made sense before it existed — it no longer does, since a
+static image now gets caught and flagged like any other image if it accumulates CVEs. Use
+`ghcr.io/ennui2342/k8s-toolbox:1.32.13` (source: `k8s-toolbox/Dockerfile` — `alpine/k8s` base for
+kubectl + `openssh-client curl jq python3 py3-yaml`) for any new lightweight CronJob needing these
+tools; extend that Dockerfile rather than reaching for `apk add` in a `command:` block.
+
 ## CVE Patch Management
 
 Weekly Trivy scan (`monitoring/cve-scanner` CronJob, Monday 07:00, `trivy/trivy.yaml`) files one
@@ -214,6 +231,7 @@ epigone/          — epigone.ecafe.org namespace: cert-manager Certificate + In
 health-monitor/   — CronJob: Flux Kustomization/HelmRelease checks + Alertmanager→tm bridge (see Monitoring & Alerting)
 home-assistant/   — HA deployment, service, ingress, cleanup CronJob
 isfdb/            — Self-hosted ISFDB mirror: MariaDB StatefulSet, adapter Deployment (JSON API over the mirror), weekly refresh CronJob; adapter/ holds the custom image source (Dockerfile, adapter.py, refresh.py)
+k8s-toolbox/      — Dockerfile only, no manifests: shared image for lightweight CronJobs (kubectl + openssh-client/curl/jq/python3/py3-yaml), see Monitoring & Alerting
 librarium/        — Librarium book tracker: api + web Deployments, bundled Postgres StatefulSet, covers/media PVCs, internal + Tailscale ingress
 mdns/             — mdns-repeater DaemonSets (master + worker), hostNetwork mDNS relay
 monitoring/       — InfluxDB, Telegraf, Loki, Promtail; all monitoring stack manifests
