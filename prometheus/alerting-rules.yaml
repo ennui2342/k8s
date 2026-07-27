@@ -10,11 +10,21 @@ spec:
     - name: storage
       interval: 1m
       rules:
+        # Thresholds calibrated for this cluster's actual hardware, not generic
+        # server defaults — k8s-1/k8s-2 are Pi-class nodes on eMMC/SD storage,
+        # not SSD/NVMe. Confirmed live 2026-07-27: a real fix (CronJobs no
+        # longer reinstalling packages every run, see the k8s-toolbox principle
+        # below) brought peak iowait on k8s-2 down from 35% to a 13-16% band
+        # that's just normal for ~40 pods sharing one eMMC card — the old 10%
+        # threshold fired continuously on that new, harmless baseline. Per this
+        # repo's own alert-needs-a-task principle: if we're not going to act on
+        # an alert, it shouldn't fire — 20% leaves real margin above the normal
+        # band while still well under the 30% critical threshold.
         - alert: NodeHighIOWait
           expr: |
             avg by (instance) (
               rate(node_cpu_seconds_total{mode="iowait", job="node-exporter"}[5m])
-            ) * 100 > 10
+            ) * 100 > 20
           for: 5m
           labels:
             severity: warning
@@ -22,7 +32,10 @@ spec:
             summary: High I/O wait on {{ $labels.instance }}
             description: >-
               Average iowait is {{ $value | printf "%.1f" }}% on {{ $labels.instance }}.
-              Typically indicates NFS or disk saturation — check NAS load and active transfers.
+              Check both the local node disk (confirmed the actual cause once —
+              node_disk_io_time_seconds_total per device) and NFS/NAS load; don't
+              assume it's the NAS without checking, the physical NAS array can be
+              nearly idle while a node's own local disk is saturated.
 
         - alert: NodeCriticalIOWait
           expr: |
@@ -36,7 +49,8 @@ spec:
             summary: Critical I/O wait on {{ $labels.instance }}
             description: >-
               Average iowait is {{ $value | printf "%.1f" }}% on {{ $labels.instance }}.
-              NFS mounts are likely stalling — check NAS immediately.
+              Check both the local node disk and NFS/NAS load — see NodeHighIOWait's
+              annotation for why not to assume it's the NAS.
 
         # Every PVC on the nfs-client StorageClass is a subdirectory of the
         # same underlying NFS export (192.168.0.76:/mnt/md0/k8s) — confirmed
