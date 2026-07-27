@@ -38,15 +38,24 @@ spec:
               Average iowait is {{ $value | printf "%.1f" }}% on {{ $labels.instance }}.
               NFS mounts are likely stalling — check NAS immediately.
 
+        # Every PVC on the nfs-client StorageClass is a subdirectory of the
+        # same underlying NFS export (192.168.0.76:/mnt/md0/k8s) — confirmed
+        # live 2026-07-27: every PVC across every namespace reports
+        # identical available/capacity bytes (differing only by scrape-time
+        # noise), since subdir provisioning has no real per-PVC quota. The
+        # un-aggregated version of this query fired once per PVC (23 near-
+        # simultaneous alerts) for what is really one problem — max() here
+        # collapses every PVC's identical series into a single alert.
         - alert: PersistentVolumeFillingUp
           expr: |
-            kubelet_volume_stats_used_bytes
-              / kubelet_volume_stats_capacity_bytes > 0.85
+            max(kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) > 0.90
           for: 5m
           labels:
             severity: warning
           annotations:
-            summary: PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is {{ $value | humanizePercentage }} full
+            summary: Shared NFS storage (nfs-client) is {{ $value | humanizePercentage }} full
             description: >-
-              PVC {{ $labels.persistentvolumeclaim }} in namespace {{ $labels.namespace }}
-              is {{ $value | humanizePercentage }} full. Consider expanding or pruning.
+              All nfs-client PVCs share one underlying export
+              (192.168.0.76:/mnt/md0/k8s), now {{ $value | humanizePercentage }}
+              full. This fires once for the whole share, not per-PVC — check
+              the NAS directly, expanding or pruning any single PVC won't help.

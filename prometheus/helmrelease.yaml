@@ -207,6 +207,16 @@ spec:
               - alertname="NodeHighIOWait"
             target_matchers:
               - alertname=~"KubePodCrashLooping|KubePodNotReady|KubeDeploymentReplicasMismatch"
+          # Our own consolidated (one-alert-for-the-whole-share) PersistentVolumeFillingUp
+          # supersedes the default per-PVC rules, which would otherwise fire once per PVC
+          # for the exact same underlying NFS export (confirmed live 2026-07-27: 23
+          # near-simultaneous alerts for one real problem). No `equal` needed — our alert
+          # has no per-PVC labels to match against, it's meant to suppress unconditionally
+          # whenever it's firing.
+          - source_matchers:
+              - alertname="PersistentVolumeFillingUp"
+            target_matchers:
+              - alertname=~"KubePersistentVolumeFillingUp|KubePersistentVolumeInodesFillingUp"
 
     # --- node-exporter ---
     # Must run on all nodes including master to collect control-plane metrics
