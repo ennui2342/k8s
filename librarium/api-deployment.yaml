@@ -40,10 +40,10 @@ spec:
       containers:
         - name: librarium-api
           # Locally-built fork image (PRs #45/#46 not yet merged upstream) — see
-          # RUNBOOK.md "Librarium local fork images" for the build/import steps
+          # RUNBOOK.md "Librarium local fork images" for the build/push steps
           # and revert-to-upstream instructions once those PRs land.
-          image: ghcr.io/ennui2342/librarium-api:local-isfdb
-          imagePullPolicy: Never
+          image: 127.0.0.1:30500/librarium-api:1.20260727.2341
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
               name: http
