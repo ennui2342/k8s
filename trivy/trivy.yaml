@@ -463,8 +463,8 @@ data:
                     n_high += 1
         n_current = n_crit + n_high
         print(f'Reconcile check: newer tag for {upstream} now {n_crit} CRITICAL + {n_high} HIGH (was {baseline} when forked)')
-        if n_current > 0:
-            continue  # newer tag exists but doesn't fully resolve this either
+        if n_current >= current:
+            continue  # newer tag isn't actually an improvement over the pinned one — nothing to act on
 
         repo = upstream.rsplit(':', 1)[0]
         newest_tag_path = f'/report/newer-tags/{idx}.txt'
@@ -475,23 +475,54 @@ data:
         if not newest_tag:
             continue
 
-        prefix = f"Upgrade {workload} to newer upstream {repo}:{newest_tag} — "
-        if find_task(prefix, reconcile_tasks) is not None:
-            continue  # already filed, awaiting the specialist
+        if n_current == 0:
+            prefix = f"Upgrade {workload} to newer upstream {repo}:{newest_tag} — "
+            if find_task(prefix, reconcile_tasks) is not None:
+                continue  # already filed, awaiting the specialist
 
-        text = (
-            f"{prefix}resolves the CVE this fork was patching !2 #devops "
-            f"+cli.claude-code.k8s <cli.reconcile-scanner\n"
-            f"* {repo}:{newest_tag} scans at {n_crit} CRITICAL + {n_high} HIGH — "
-            f"resolves what {upstream} (still {crit} CRITICAL + {high} HIGH) hasn't\n"
-            f"* Currently forked as {entry.get('patched_image', 'unknown')} since "
-            f"{entry.get('patched_date', 'unknown')}\n"
-            f"* Fork reason was: {entry.get('reason', 'unknown')}\n"
-            f"* This is a version jump, not a same-tag revert — research the changelog "
-            f"from {upstream.rsplit(':', 1)[-1]} to {newest_tag} for breaking changes "
-            f"before adopting it, same as any other upgrade"
-        )
-        create_task(text)
+            text = (
+                f"{prefix}resolves the CVE this fork was patching !2 #devops "
+                f"+cli.claude-code.k8s <cli.reconcile-scanner\n"
+                f"* {repo}:{newest_tag} scans at {n_crit} CRITICAL + {n_high} HIGH — "
+                f"resolves what {upstream} (still {crit} CRITICAL + {high} HIGH) hasn't\n"
+                f"* Currently forked as {entry.get('patched_image', 'unknown')} since "
+                f"{entry.get('patched_date', 'unknown')}\n"
+                f"* Fork reason was: {entry.get('reason', 'unknown')}\n"
+                f"* This is a version jump, not a same-tag revert — research the changelog "
+                f"from {upstream.rsplit(':', 1)[-1]} to {newest_tag} for breaking changes "
+                f"before adopting it, same as any other upgrade"
+            )
+            create_task(text)
+        else:
+            # Genuinely better than what's pinned now, but not fully clean —
+            # silently dropping this (as opposed to the n_current == 0 case
+            # above) would recreate the exact "permanently trapped fork"
+            # problem for actively-developed projects whose upstream image
+            # keeps shipping real fixes without ever fully catching up on
+            # base-OS CVEs. Framed as a rebase, not an upgrade: the fix here
+            # is adopting the newer app version *and* re-patching on top of
+            # it (Gate D's "build a new patched image" flow), not a plain
+            # revert.
+            prefix = f"Rebase {workload} onto newer upstream {repo}:{newest_tag} — "
+            if find_task(prefix, reconcile_tasks) is not None:
+                continue  # already filed, awaiting the specialist
+
+            text = (
+                f"{prefix}improves but doesn't fully resolve, needs re-patching !2 #devops "
+                f"+cli.claude-code.k8s <cli.reconcile-scanner\n"
+                f"* {repo}:{newest_tag} scans at {n_crit} CRITICAL + {n_high} HIGH — "
+                f"better than {upstream} (still {crit} CRITICAL + {high} HIGH) but not clean\n"
+                f"* Currently forked as {entry.get('patched_image', 'unknown')} since "
+                f"{entry.get('patched_date', 'unknown')}\n"
+                f"* Fork reason was: {entry.get('reason', 'unknown')}\n"
+                f"* Not a plain adopt-and-drop-the-fork case — research the changelog from "
+                f"{upstream.rsplit(':', 1)[-1]} to {newest_tag} for breaking changes, then if "
+                f"safe, rebuild the patched image against {repo}:{newest_tag} as the new base "
+                f"(same recipe as trivy/patched-images/{workload.rsplit('/', 1)[-1]}/Dockerfile, "
+                f"updated) and update the patched-images.yaml entry's upstream_image/"
+                f"patched_image/critical/high to match — this replaces the fork, it doesn't remove it"
+            )
+            create_task(text)
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
