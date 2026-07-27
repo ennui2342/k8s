@@ -9,9 +9,6 @@ kind: ClusterRole
 metadata:
   name: health-monitor-reader
 rules:
-- apiGroups: [""]
-  resources: ["pods", "nodes", "persistentvolumeclaims"]
-  verbs: ["get", "list"]
 - apiGroups: ["kustomize.toolkit.fluxcd.io"]
   resources: ["kustomizations"]
   verbs: ["get", "list"]
@@ -147,27 +144,6 @@ data:
     existing_tasks = get_existing_health_tasks()
     print(f'Existing cluster-health tasks: {len(existing_tasks)}')
 
-    # --- CrashLoopBackOff pods (>=20 restarts) ---
-    data = kubectl_json('get', 'pods', '-A')
-    for pod in data.get('items', []):
-        ns = pod['metadata']['namespace']
-        name = pod['metadata']['name']
-        for cs in pod.get('status', {}).get('containerStatuses', []):
-            restarts = cs.get('restartCount', 0)
-            waiting = cs.get('state', {}).get('waiting', {})
-            if waiting.get('reason') == 'CrashLoopBackOff' and restarts >= 20:
-                resource_id = f'pod/{name}'
-                if issue_tracked(resource_id, existing_tasks):
-                    print(f'Already tracked: {resource_id}')
-                    continue
-                priority = '!1' if restarts >= 50 else '!2'
-                issues.append({
-                    'resource': resource_id,
-                    'title': f'{resource_id} in {ns}: CrashLoopBackOff ({restarts} restarts)',
-                    'notes': f'* Namespace: {ns}\n* Container: {cs["name"]}\n* Restarts: {restarts}',
-                    'priority': priority,
-                })
-
     # --- Flux kustomizations: failed or stalled ---
     data = kubectl_json('get', 'kustomizations.kustomize.toolkit.fluxcd.io', '-A')
     for k in data.get('items', []):
@@ -202,41 +178,6 @@ data:
                 'title': f'{resource_id} in {ns}: {"stalled" if priority == "!1" else "failed"}',
                 'notes': f'* Namespace: {ns}\n* Reason: {cond.get("reason", "")}\n* Message: {cond.get("message", "")[:200]}',
                 'priority': priority,
-            })
-
-    # --- Unbound / Lost PVCs ---
-    data = kubectl_json('get', 'pvc', '-A')
-    for pvc in data.get('items', []):
-        ns = pvc['metadata']['namespace']
-        name = pvc['metadata']['name']
-        phase = pvc.get('status', {}).get('phase', '')
-        if phase in ('Pending', 'Lost'):
-            resource_id = f'pvc/{name}'
-            if issue_tracked(resource_id, existing_tasks):
-                print(f'Already tracked: {resource_id}')
-                continue
-            issues.append({
-                'resource': resource_id,
-                'title': f'{resource_id} in {ns}: {phase}',
-                'notes': f'* Namespace: {ns}\n* Phase: {phase}',
-                'priority': '!1',
-            })
-
-    # --- Nodes NotReady ---
-    data = kubectl_json('get', 'nodes')
-    for node in data.get('items', []):
-        name = node['metadata']['name']
-        ready = next((c for c in node.get('status', {}).get('conditions', []) if c['type'] == 'Ready'), None)
-        if ready and ready.get('status') != 'True':
-            resource_id = f'node/{name}'
-            if issue_tracked(resource_id, existing_tasks):
-                print(f'Already tracked: {resource_id}')
-                continue
-            issues.append({
-                'resource': resource_id,
-                'title': f'{resource_id}: NotReady',
-                'notes': f'* Status: {ready.get("status")}\n* Reason: {ready.get("reason", "unknown")}',
-                'priority': '!1',
             })
 
     # --- Alertmanager bridge ---
