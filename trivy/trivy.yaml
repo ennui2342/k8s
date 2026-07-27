@@ -42,7 +42,14 @@ data:
     #!/bin/sh
     # For each tracked patched-image entry, scan the plain upstream image
     # standalone so notify.py can compare it against the CVE count we patched
-    # at fork time and detect when upstream has caught up.
+    # at fork time and detect when upstream has caught up. Also scans
+    # whatever newer tag discover.sh found (if any) — see that script's
+    # comment for why "the exact pinned tag became clean" and "a newer tag
+    # exists that resolves this" are two independent, both-worth-checking
+    # signals: a forked component can sit stuck behind a breaking change
+    # forever if only the former is checked (found live 2026-07-27 —
+    # image-automation-controller's pinned v1.1.2 was never going to be
+    # republished clean, but v1.2.3 already existed and fixed it).
     set -e
     mkdir -p /report/reconcile
     i=0
@@ -68,6 +75,85 @@ data:
             --timeout 10m \
             --output "/report/reconcile/${i}.json" \
             "$img" || echo '{}' > "/report/reconcile/${i}.json"
+
+          newest_tag_file="/report/newer-tags/${i}.txt"
+          if [ -s "$newest_tag_file" ]; then
+            newest_tag=$(cat "$newest_tag_file")
+            repo="${img%:*}"
+            echo "reconcile: scanning newer candidate ${repo}:${newest_tag} (index $i)"
+            trivy image \
+              --severity HIGH,CRITICAL \
+              --ignore-unfixed \
+              --format json \
+              --quiet \
+              --timeout 10m \
+              --output "/report/reconcile/${i}.newest.json" \
+              "${repo}:${newest_tag}" || echo '{}' > "/report/reconcile/${i}.newest.json"
+          fi
+          i=$((i + 1))
+        done
+  discover.sh: |
+    #!/bin/sh
+    # For each tracked patched-image entry, check whether a newer version
+    # tag exists upstream beyond the one currently pinned/forked from.
+    # Writes the newest matching tag (same numeric-core "shape" as the
+    # pinned tag, e.g. a "-alpine" variant only compares against other
+    # "-alpine" tags) to /report/newer-tags/<idx>.txt, empty if none found,
+    # not parseable as a version, or discovery failed. This is a cheap,
+    # mechanical existence check only — reconcile.sh scans whatever tag
+    # this finds with trivy, and it's the specialist's job (not this
+    # script's) to judge whether adopting it is actually safe.
+    set -e
+    mkdir -p /report/newer-tags
+    i=0
+    grep '^\s*upstream_image:' /config/patched-images.yaml \
+      | sed -E 's/^[^:]+:[[:space:]]*//; s/^"//; s/"$//' \
+      | while IFS= read -r img; do
+          out="/report/newer-tags/${i}.txt"
+          : > "$out"
+          if [ -z "$img" ] || [ "$img" = "null" ]; then
+            i=$((i + 1))
+            continue
+          fi
+          repo="${img%:*}"
+          tag="${img##*:}"
+          if ! echo "$tag" | grep -Eq '^v?[0-9]+(\.[0-9]+)*'; then
+            echo "discover: $img has no parseable numeric version, skipping (index $i)" >&2
+            i=$((i + 1))
+            continue
+          fi
+          core=$(echo "$tag" | sed -E 's/^v?([0-9]+(\.[0-9]+)*).*/\1/')
+          suffix=$(echo "$tag" | sed -E 's/^v?[0-9]+(\.[0-9]+)*//')
+          echo "discover: listing tags for $repo (pinned $tag, core $core, suffix '$suffix')" >&2
+          newest_line=$(crane ls "$repo" 2>/dev/null | while IFS= read -r cand; do
+            echo "$cand" | grep -Eq '^v?[0-9]+(\.[0-9]+)*' || continue
+            cand_suffix=$(echo "$cand" | sed -E 's/^v?[0-9]+(\.[0-9]+)*//')
+            [ "$cand_suffix" = "$suffix" ] || continue
+            cand_core=$(echo "$cand" | sed -E 's/^v?([0-9]+(\.[0-9]+)*).*/\1/')
+            echo "$cand_core $cand"
+          done | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n | tail -1)
+          newest_core=$(echo "$newest_line" | cut -d' ' -f1)
+          newest=$(echo "$newest_line" | cut -d' ' -f2)
+          if [ -n "$newest" ]; then
+            greater=$(awk -v a="$newest_core" -v b="$core" 'BEGIN {
+              n=split(a,A,"."); m=split(b,B,".");
+              mx = n>m?n:m;
+              for (k=1;k<=mx;k++) {
+                ai = (k<=n)?A[k]:0; bi = (k<=m)?B[k]:0;
+                if (ai+0 > bi+0) { print 1; exit }
+                if (ai+0 < bi+0) { print 0; exit }
+              }
+              print 0
+            }')
+            if [ "$greater" = "1" ]; then
+              echo "$newest" > "$out"
+              echo "discover: $repo newest matching tag is $newest (pinned $tag)" >&2
+            else
+              echo "discover: $repo no newer tag than $tag (best candidate $newest)" >&2
+            fi
+          else
+            echo "discover: $repo no comparable tags found" >&2
+          fi
           i=$((i + 1))
         done
 ---
@@ -321,26 +407,89 @@ data:
                 elif sev == 'HIGH':
                     high += 1
 
+        # baseline is the count *found* at patch time (documentation/context
+        # only, e.g. "was 1 HIGH when forked") — NOT the bar to clear. Every
+        # frozen-rebuild entry's reason describes a clean apk-upgrade fix, so
+        # the actual bar is 0: comparing against baseline instead would let
+        # an upstream tag that never changed at all (current == baseline,
+        # the steady state for an unmodified image re-scanned week after
+        # week) trigger a false "upstream caught up" revert on its very
+        # first check, since nothing requires current to have improved.
         baseline = entry.get('critical', 0) + entry.get('high', 0)
         current = crit + high
         workload = entry.get('workload', 'unknown')
-        print(f'Reconcile check: {upstream} now {crit} CRITICAL + {high} HIGH (baseline {baseline})')
+        print(f'Reconcile check: {upstream} now {crit} CRITICAL + {high} HIGH (was {baseline} when forked)')
 
-        if current > baseline:
-            continue  # upstream hasn't caught up yet
+        if current == 0:
+            prefix = f"Revert {workload} to upstream {upstream} — "
+            if find_task(prefix, reconcile_tasks) is not None:
+                continue  # already filed, awaiting the specialist
 
-        prefix = f"Revert {workload} to upstream {upstream} — "
+            text = (
+                f"{prefix}maintainers shipped equivalent fix !2 #devops "
+                f"+cli.claude-code.k8s <cli.reconcile-scanner\n"
+                f"* Upstream {upstream} now scans at {crit} CRITICAL + {high} HIGH "
+                f"(was {entry.get('critical', 0)} CRITICAL + {entry.get('high', 0)} HIGH when forked "
+                f"on {entry.get('patched_date', 'unknown')})\n"
+                f"* Fork reason was: {entry.get('reason', 'unknown')}\n"
+                f"* Strategy: {entry.get('strategy', 'unknown')}"
+            )
+            create_task(text)
+            continue
+
+        # Pinned tag hasn't caught up on its own — but discover.sh may have
+        # found a genuinely newer release that does resolve it (this is how
+        # a fork that's stuck behind a breaking change gets a way out, e.g.
+        # image-automation-controller staying pinned at v1.1.2 forever
+        # while v1.2.1+ already had the fix — found live 2026-07-27).
+        newest_report_path = os.path.join(RECONCILE_DIR, f'{idx}.newest.json')
+        if not os.path.exists(newest_report_path):
+            continue  # discover.sh found nothing newer, or scan didn't run
+        try:
+            newest_rdata = json.load(open(newest_report_path))
+        except Exception as e:
+            print(f'Warning: could not parse newest-tag reconcile output for {upstream}: {e}', file=sys.stderr)
+            continue
+        if not newest_rdata:
+            continue  # empty {} placeholder — no newer tag was found, or its scan failed
+
+        n_crit = n_high = 0
+        for result in (newest_rdata.get('Results') or []):
+            for v in (result.get('Vulnerabilities') or []):
+                sev = v.get('Severity', '')
+                if sev == 'CRITICAL':
+                    n_crit += 1
+                elif sev == 'HIGH':
+                    n_high += 1
+        n_current = n_crit + n_high
+        print(f'Reconcile check: newer tag for {upstream} now {n_crit} CRITICAL + {n_high} HIGH (was {baseline} when forked)')
+        if n_current > 0:
+            continue  # newer tag exists but doesn't fully resolve this either
+
+        repo = upstream.rsplit(':', 1)[0]
+        newest_tag_path = f'/report/newer-tags/{idx}.txt'
+        try:
+            newest_tag = open(newest_tag_path).read().strip()
+        except FileNotFoundError:
+            continue
+        if not newest_tag:
+            continue
+
+        prefix = f"Upgrade {workload} to newer upstream {repo}:{newest_tag} — "
         if find_task(prefix, reconcile_tasks) is not None:
             continue  # already filed, awaiting the specialist
 
         text = (
-            f"{prefix}maintainers shipped equivalent fix !2 #devops "
+            f"{prefix}resolves the CVE this fork was patching !2 #devops "
             f"+cli.claude-code.k8s <cli.reconcile-scanner\n"
-            f"* Upstream {upstream} now scans at {crit} CRITICAL + {high} HIGH "
-            f"(was {entry.get('critical', 0)} CRITICAL + {entry.get('high', 0)} HIGH when forked "
-            f"on {entry.get('patched_date', 'unknown')})\n"
+            f"* {repo}:{newest_tag} scans at {n_crit} CRITICAL + {n_high} HIGH — "
+            f"resolves what {upstream} (still {crit} CRITICAL + {high} HIGH) hasn't\n"
+            f"* Currently forked as {entry.get('patched_image', 'unknown')} since "
+            f"{entry.get('patched_date', 'unknown')}\n"
             f"* Fork reason was: {entry.get('reason', 'unknown')}\n"
-            f"* Strategy: {entry.get('strategy', 'unknown')}"
+            f"* This is a version jump, not a same-tag revert — research the changelog "
+            f"from {upstream.rsplit(':', 1)[-1]} to {newest_tag} for breaking changes "
+            f"before adopting it, same as any other upgrade"
         )
         create_task(text)
 ---
@@ -395,6 +544,18 @@ spec:
               mountPath: /report
             - name: cache
               mountPath: /root/.cache/trivy
+          - name: discover-newer-tags
+            image: gcr.io/go-containerregistry/crane:debug
+            command:
+            - /busybox/sh
+            - /scripts/discover.sh
+            volumeMounts:
+            - name: report
+              mountPath: /report
+            - name: patched-images
+              mountPath: /config
+            - name: reconcile-scripts
+              mountPath: /scripts
           - name: reconcile
             image: ghcr.io/ennui2342/aquasec-trivy:0.70.0-patched
             imagePullPolicy: Never
