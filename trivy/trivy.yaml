@@ -553,8 +553,8 @@ spec:
           restartPolicy: OnFailure
           initContainers:
           - name: scan
-            image: ghcr.io/ennui2342/aquasec-trivy:0.70.0-patched
-            imagePullPolicy: Never
+            image: 127.0.0.1:30500/aquasec-trivy:0.70.0-patched
+            imagePullPolicy: IfNotPresent
             command:
             - /bin/sh
             - -c
@@ -588,8 +588,8 @@ spec:
             - name: reconcile-scripts
               mountPath: /scripts
           - name: reconcile
-            image: ghcr.io/ennui2342/aquasec-trivy:0.70.0-patched
-            imagePullPolicy: Never
+            image: 127.0.0.1:30500/aquasec-trivy:0.70.0-patched
+            imagePullPolicy: IfNotPresent
             command:
             - /bin/sh
             - /scripts/reconcile.sh
