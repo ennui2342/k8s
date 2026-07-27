@@ -39,10 +39,23 @@ metadata:
   namespace: monitoring
 data:
   monitor.py: |
-    import json, subprocess, os, sys
+    import json, subprocess, os, sys, re, hashlib
 
     TM_API = 'http://api.taskmgt.svc.cluster.local:8081'
+    ALERTMANAGER_API = 'http://kube-prometheus-stack-alertmanager.monitoring.svc:9093/api/v2'
     DISCORD_WEBHOOK = os.environ.get('DISCORD_WEBHOOK', '')
+
+    STATUS_TOKEN_RE = re.compile(r'\s*§\S+')
+
+    def strip_status(text):
+        lines = text.split('\n', 1)
+        first = STATUS_TOKEN_RE.sub('', lines[0])
+        return first if len(lines) == 1 else first + '\n' + lines[1]
+
+    def set_status(text, status):
+        return strip_status(text).split('\n', 1)[0] + f' §{status}' + (
+            '\n' + text.split('\n', 1)[1] if '\n' in text else ''
+        )
 
 
     def kubectl_json(*args):
@@ -116,6 +129,18 @@ data:
             return True
         print(f'Failed to create task: {title}', file=sys.stderr)
         return False
+
+
+    def update_task(task_id, text):
+        r = subprocess.run(
+            ['curl', '-sf', '-X', 'PATCH', f'{TM_API}/tasks/{task_id}',
+             '-H', 'Content-Type: application/json', '-d', json.dumps({'text': text})],
+            capture_output=True, text=True
+        )
+        if r.returncode != 0:
+            print(f'tm task update failed for {task_id}', file=sys.stderr)
+            return False
+        return True
 
 
     issues = []
@@ -213,6 +238,83 @@ data:
                 'notes': f'* Status: {ready.get("status")}\n* Reason: {ready.get("reason", "unknown")}',
                 'priority': '!1',
             })
+
+    # --- Alertmanager bridge ---
+    # Prometheus's default kube-prometheus-stack rules already detect most of
+    # what this script's own checks above do (and more — e.g. KubeContainerWaiting
+    # catches a stuck-Init pod like the cve-scanner job hitting ErrImageNeverPull
+    # on 2026-07-27, which none of the checks above would have caught, since
+    # they're all pod/node-condition checks, not container-waiting-reason
+    # checks), continuously rather than every 30 minutes, using mature
+    # community-maintained expressions. But Alertmanager only ever reaches
+    # Discord — nothing turned a firing alert into a tracked, worked task, so
+    # alerts that fired correctly (confirmed live 2026-07-27: KubeJobFailed
+    # firing over 24h with nobody acting on it) just sat as unactioned noise.
+    # This bridges that gap without duplicating any detection logic: poll
+    # Alertmanager's own alerts, not the cluster directly.
+    SKIP_LABELS = {'alertname', 'severity', 'prometheus', 'job', 'instance', 'endpoint', 'service', 'container', 'cluster'}
+    SEVERITY_PRIORITY = {'critical': '!1', 'warning': '!2'}
+
+    def alert_fingerprint_marker(fp):
+        return f'AlertFingerprint: {fp}'
+
+    r = subprocess.run(
+        ['curl', '-sf', f'{ALERTMANAGER_API}/alerts',
+         '--data-urlencode', 'active=true', '--data-urlencode', 'silenced=false',
+         '--data-urlencode', 'inhibited=false'],
+        capture_output=True, text=True
+    )
+    active_alerts = []
+    if r.returncode != 0:
+        print('Warning: could not fetch alerts from Alertmanager', file=sys.stderr)
+    else:
+        try:
+            active_alerts = json.loads(r.stdout)
+        except Exception as e:
+            print(f'Warning: could not parse Alertmanager response: {e}', file=sys.stderr)
+
+    active_fingerprints = set()
+    for alert in active_alerts:
+        labels = alert.get('labels', {})
+        name = labels.get('alertname', 'unknown')
+        if name == 'Watchdog':
+            continue
+        fp = alert.get('fingerprint', '')
+        active_fingerprints.add(fp)
+        if issue_tracked(alert_fingerprint_marker(fp), existing_tasks):
+            print(f'Already tracked: alert {name} ({fp})')
+            continue
+
+        priority = SEVERITY_PRIORITY.get(labels.get('severity', ''), '!3')
+        kept_labels = {k: v for k, v in labels.items() if k not in SKIP_LABELS}
+        label_str = ', '.join(f'{k}={v}' for k, v in sorted(kept_labels.items()))
+        annotations = alert.get('annotations', {})
+        summary = annotations.get('summary') or annotations.get('description') or ''
+
+        issues.append({
+            'resource': f'alert/{name}',
+            'title': f'AlertManager: {name} ({kept_labels.get("namespace", "cluster-wide")})',
+            'notes': (
+                f'* {summary}\n' if summary else ''
+            ) + (
+                f'* Labels: {label_str}\n'
+                f'* Firing since: {alert.get("startsAt", "unknown")}\n'
+                f'* {alert_fingerprint_marker(fp)}'
+            ),
+            'priority': priority,
+        })
+
+    # Close tasks for alerts that stopped firing since they were created —
+    # only ones with a fingerprint marker (i.e. bridge-created), so this
+    # never touches this script's own kubectl-based checks above.
+    for t in existing_tasks:
+        if t.get('status') != 'open':
+            continue
+        m = re.search(r'AlertFingerprint:\s*(\S+)', t.get('text', ''))
+        if not m or m.group(1) in active_fingerprints:
+            continue
+        print(f'Closing {t["id"]}: alert {m.group(1)} no longer firing')
+        update_task(t['id'], set_status(t['text'] + '\n* Resolved: no longer firing in Alertmanager', 'closed'))
 
     if not issues:
         print('No new cluster health issues detected')
