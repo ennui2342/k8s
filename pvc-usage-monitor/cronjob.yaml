@@ -214,36 +214,48 @@ data:
         })
 
     # Close tasks whose PVC has dropped back under threshold (or been deleted/unmatched)
+    closed = []
     for t in existing_tasks:
         if t.get('status') != 'open':
             continue
         mm = re.search(r'PVCUsageCheck:\s*(\S+)', t.get('text', ''))
-        if not mm or mm.group(0) in seen_markers:
+        if not mm or mm.group(1) in {s.split(': ', 1)[-1] for s in seen_markers}:
             continue
         print(f'Closing {t["id"]}: {mm.group(1)} back under {THRESHOLD:.0%}')
-        update_task(t['id'], set_status(t['text'] + '\n* Resolved: usage back under threshold', 'closed'))
+        if update_task(t['id'], set_status(t['text'] + '\n* Resolved: usage back under threshold', 'closed')):
+            closed.append(t['text'].split('\n', 1)[0])
 
-    if not issues:
-        print('No PVCs over threshold')
-        sys.exit(0)
-
-    print(f'Creating {len(issues)} new task(s)...')
     created = []
-    for issue in issues:
-        if create_task(issue['title'], issue['notes'], issue['priority']):
-            created.append(issue)
+    if issues:
+        print(f'Creating {len(issues)} new task(s)...')
+        for issue in issues:
+            if create_task(issue['title'], issue['notes'], issue['priority']):
+                created.append(issue)
+    else:
+        print('No PVCs over threshold')
 
-    if created and DISCORD_WEBHOOK:
-        lines = ['**PVC Usage Monitor** — over-budget PVC(s) found', '```']
-        for issue in created:
-            lines.append(issue['title'])
-        lines.append('```')
+    if (created or closed) and DISCORD_WEBHOOK:
+        lines = ['**PVC Usage Monitor**']
+        if created:
+            lines.append(f'{len(created)} over-budget PVC(s):')
+            lines.append('```')
+            for issue in created:
+                lines.append(issue['title'])
+            lines.append('```')
+        if closed:
+            lines.append(f'{len(closed)} resolved:')
+            lines.append('```')
+            for title in closed:
+                lines.append(f'✅ {title}')
+            lines.append('```')
         subprocess.run(
             ['curl', '-sf', '-X', 'POST', DISCORD_WEBHOOK,
              '-H', 'Content-Type: application/json',
              '-d', json.dumps({'username': 'k8s homelab', 'content': '\n'.join(lines)[:2000]})],
             capture_output=True
         )
+
+    print(f'Done: {len(created)} task(s) created, {len(closed)} task(s) closed')
 
     print(f'Done: {len(created)} task(s) created')
 ---

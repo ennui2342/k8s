@@ -248,6 +248,7 @@ data:
     # Close tasks for alerts that stopped firing since they were created —
     # only ones with a fingerprint marker (i.e. bridge-created), so this
     # never touches this script's own kubectl-based checks above.
+    closed = []
     for t in existing_tasks:
         if t.get('status') != 'open':
             continue
@@ -255,23 +256,32 @@ data:
         if not m or m.group(1) in active_fingerprints:
             continue
         print(f'Closing {t["id"]}: alert {m.group(1)} no longer firing')
-        update_task(t['id'], set_status(t['text'] + '\n* Resolved: no longer firing in Alertmanager', 'closed'))
+        if update_task(t['id'], set_status(t['text'] + '\n* Resolved: no longer firing in Alertmanager', 'closed')):
+            closed.append(t['text'].split('\n', 1)[0])
 
-    if not issues:
-        print('No new cluster health issues detected')
-        sys.exit(0)
-
-    print(f'Creating {len(issues)} new task(s)...')
     created = []
-    for issue in issues:
-        if create_task(issue['title'], issue['notes'], issue['priority']):
-            created.append(issue)
+    if issues:
+        print(f'Creating {len(issues)} new task(s)...')
+        for issue in issues:
+            if create_task(issue['title'], issue['notes'], issue['priority']):
+                created.append(issue)
+    else:
+        print('No new cluster health issues detected')
 
-    if created and DISCORD_WEBHOOK:
-        lines = [f'**Cluster Health Monitor** — {len(created)} new issue(s)', '```']
-        for issue in created:
-            lines.append(f"{issue['priority']} {issue['resource']}")
-        lines.append('```')
+    if (created or closed) and DISCORD_WEBHOOK:
+        lines = ['**Cluster Health Monitor**']
+        if created:
+            lines.append(f'{len(created)} new issue(s):')
+            lines.append('```')
+            for issue in created:
+                lines.append(f"{issue['priority']} {issue['resource']}")
+            lines.append('```')
+        if closed:
+            lines.append(f'{len(closed)} resolved:')
+            lines.append('```')
+            for title in closed:
+                lines.append(f'✅ {title}')
+            lines.append('```')
         subprocess.run(
             ['curl', '-sf', '-X', 'POST', DISCORD_WEBHOOK,
              '-H', 'Content-Type: application/json',
@@ -279,7 +289,7 @@ data:
             capture_output=True
         )
 
-    print(f'Done: {len(created)} task(s) created')
+    print(f'Done: {len(created)} task(s) created, {len(closed)} task(s) closed')
 ---
 apiVersion: batch/v1
 kind: CronJob
