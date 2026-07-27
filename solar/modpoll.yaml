@@ -27,8 +27,8 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: modpoll
-          image: ghcr.io/ennui2342/modpoll:1.6.0-patched
-          imagePullPolicy: Never
+          image: 127.0.0.1:30500/modpoll:1.6.0-patched
+          imagePullPolicy: IfNotPresent
           command: ["modpoll", "--tcp=192.168.0.188", "-f", "/etc/modpoll.cfg", "--mqtt-host=mosquitto", "--mqtt-publish-topic-pattern", "solar/{{device_name}}", "--mqtt-version", "5.0"]
           volumeMounts:
           - name: modpoll-config-volume

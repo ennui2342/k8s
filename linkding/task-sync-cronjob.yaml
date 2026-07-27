@@ -121,8 +121,8 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: sync
-              image: ghcr.io/ennui2342/k8s-toolbox:1.32.13
-              imagePullPolicy: Never
+              image: 127.0.0.1:30500/k8s-toolbox:1.32.13
+              imagePullPolicy: IfNotPresent
               env:
                 - name: LINKDING_API_TOKEN
                   valueFrom:

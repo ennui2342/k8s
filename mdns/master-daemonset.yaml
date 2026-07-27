@@ -26,8 +26,8 @@ spec:
                     operator: Exists
       containers:
         - name: mdns-repeater
-          image: ghcr.io/ennui2342/mdns-repeater:latest-patched
-          imagePullPolicy: Never
+          image: 127.0.0.1:30500/mdns-repeater:latest-patched
+          imagePullPolicy: IfNotPresent
           command: ["/bin/mdns-repeater"]
           args: ["-f", "wlan0", "eth0"]
           securityContext:
