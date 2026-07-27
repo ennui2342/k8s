@@ -65,9 +65,10 @@ tolerations:
 | `librarium` | librarium | `librarium/` | Self-hosted print book/manga/comic tracker (Go API + React web + Postgres 16, all in-namespace); `librarium.k8s.ecafe.org` ingress plus a Tailscale ingress (`librarium-ts`) for the iOS barcode-scanning app away from home; covers + media PVCs on `nfs-client`, Postgres data also on `nfs-client` (no local-disk StorageClass exists in this cluster). **App source (forks under active development, PRs against upstream) lives at `~/projects/librarium/`, not in this repo** — this repo only has the deployment manifests. See that directory's own `CLAUDE.md` for the fork relationship, PR status, and the local-build-and-import workflow used because the PRs aren't merged upstream yet. |
 | `monitoring` | cve-scanner | `trivy/` | Weekly Trivy scan → dedupes/files/auto-closes `tm` tasks; see CVE Patch Management below |
 | `monitoring` | grafana | `prometheus/helmrelease.yaml` | grafana.k8s.ecafe.org, anonymous viewer access; managed by kube-prometheus-stack chart |
-| `monitoring` | health-monitor | `health-monitor/` | CronJob: CrashLoopBackOff/failed-kustomization/NotReady-node checks → `tm` tasks |
+| `monitoring` | health-monitor | `health-monitor/` | CronJob, 30min: Flux Kustomization/HelmRelease failed-or-stalled checks (the only kubectl-based check left — CrashLoopBackOff/PVC/Node checks were removed 2026-07-27, now redundant with kube-prometheus-stack's default rules) **plus bridges every firing Alertmanager alert into a `<cli.cluster-health` `tm` task** (dedup/close on the alert's own fingerprint) — see Monitoring & Alerting below |
 | `monitoring` | influxdb | `monitoring/influxdb.yaml` | InfluxDB 1.8.0, 8Gi NFS PV |
-| `monitoring` | kube-prometheus-stack | `prometheus/` | Flux HelmRelease (70.x.x); Prometheus + Alertmanager + Grafana + node-exporter + kube-state-metrics |
+| `monitoring` | kube-prometheus-stack | `prometheus/` | Flux HelmRelease (70.x.x); Prometheus + Alertmanager + Grafana + node-exporter + kube-state-metrics. Alertmanager → Discord routing exists (`prometheus/helmrelease.yaml`) but was silently broken from when it was first configured until 2026-07-27 (this Alertmanager version doesn't support `discord_configs`' `webhook_url_file`, so every operator reconcile failed — fixed via `HelmRelease.spec.valuesFrom` injecting the secret value directly instead) |
+| `monitoring` | pvc-usage-monitor | `pvc-usage-monitor/` | CronJob, 2h: real per-PVC usage vs. each PVC's own requested size, via `du` over SSH to the NAS (reuses `nas-monitor`'s key) — `kubelet_volume_stats_*` can't do this on this StorageClass, see that directory's script comment. Fires a `<cli.cluster-health` task at 90% of request; `nfs-subdir-external-provisioner` enforces no real quota, so this is a self-imposed budget check, not a hard limit |
 | `monitoring` | loki | `monitoring/loki.yaml` | Flux HelmRelease (6.x.x); log aggregation, 31-day retention, NFS storage |
 | `monitoring` | promtail | `monitoring/promtail.yaml` | Flux HelmRelease (6.x.x); ships pod logs to Loki |
 | `monitoring` | telegraf | `monitoring/telegraf.yaml` | Scrapes MQTT (mosquitto.default:1883), statsd, SNMP (NAS at 192.168.0.76) |
@@ -156,6 +157,35 @@ Manifests: `flux-system/taskmgt-image-automation.yaml`
 Flux alerts on deployment events via Discord webhook.
 Manifests: `flux-system/discord-alert.yaml`
 
+## Monitoring & Alerting
+
+**Principle: an alert that needs action must produce a tracked task, not just a Discord message.**
+A Discord ping alone is easy to miss or forget — it competes with every other channel message,
+has no owner, no priority, and nothing re-surfaces it. Confirmed live 2026-07-27: Alertmanager's
+Discord delivery had been silently broken since it was first configured (this Alertmanager
+version doesn't support `discord_configs`' `webhook_url_file` — every operator reconcile failed),
+and separately, once fixed, a correctly-firing `KubeJobFailed` alert had already been sitting
+unactioned for 24+ hours because nothing turned "alert fires" into "someone/something is on the
+hook to look at it." Every alerting mechanism in this cluster should end in a `tm` task (usually
+via the `<cli.cluster-health` or `<cli.cve-scanner`/`<cli.reconcile-scanner` source tags, which
+route through the nightly-agents pipeline — see CVE Patch Management below), with Discord as a
+secondary, immediate-visibility notification alongside it, not a replacement for it. This applies
+symmetrically to closing: a task that auto-closes should also post to Discord, not just go quiet.
+
+`kube-prometheus-stack`'s default `PrometheusRule`s (Alertmanager, routed to Discord via
+`prometheus/helmrelease.yaml`) already cover most general cluster-health failure modes
+(CrashLoopBackOff, NotReady nodes, PVC errors, stuck Jobs, container-waiting-reason problems like
+`ImagePullBackOff`/`ErrImageNeverPull` — this last one is what let a stuck `cve-scanner` pod run
+for over an hour undetected before this repo had anything watching for it) — prefer relying on
+and, if needed, tuning these over writing new bespoke Python detection scripts. `health-monitor/`
+bridges every firing Alertmanager alert into a `tm` task this way; only write a new custom
+`PrometheusRule` (`prometheus/alerting-rules.yaml`) or a genuinely custom script when the data
+Prometheus already collects can't answer the question — e.g. `pvc-usage-monitor/` exists because
+`kubelet_volume_stats_*` cannot give real per-PVC usage on this NFS StorageClass (confirmed live:
+every PVC reports identical values, since kubelet does a cheap `statfs()` on the shared mount, not
+a real per-directory walk — this is also why `prometheus/alerting-rules.yaml`'s
+`PersistentVolumeFillingUp` is a single cluster-wide alert rather than per-PVC).
+
 ## CVE Patch Management
 
 Weekly Trivy scan (`monitoring/cve-scanner` CronJob, Monday 07:00, `trivy/trivy.yaml`) files one
@@ -181,16 +211,17 @@ coredns/          — CoreDNS custom config (*.k8s.ecafe.org wildcard)
 flux-system/      — Flux bootstrap output + SOPS patch + alert config
 dashboards/       — Custom Grafana dashboard ConfigMaps (Solar, Observatory, NAS Monitor, Weather Station)
 epigone/          — epigone.ecafe.org namespace: cert-manager Certificate + IngressRoute fronting Home Assistant
-health-monitor/   — CronJob: cluster health checks (CrashLoopBackOff, failed Flux kustomizations, NotReady nodes) → tm tasks
+health-monitor/   — CronJob: Flux Kustomization/HelmRelease checks + Alertmanager→tm bridge (see Monitoring & Alerting)
 home-assistant/   — HA deployment, service, ingress, cleanup CronJob
 isfdb/            — Self-hosted ISFDB mirror: MariaDB StatefulSet, adapter Deployment (JSON API over the mirror), weekly refresh CronJob; adapter/ holds the custom image source (Dockerfile, adapter.py, refresh.py)
 librarium/        — Librarium book tracker: api + web Deployments, bundled Postgres StatefulSet, covers/media PVCs, internal + Tailscale ingress
 mdns/             — mdns-repeater DaemonSets (master + worker), hostNetwork mDNS relay
 monitoring/       — InfluxDB, Telegraf, Loki, Promtail; all monitoring stack manifests
-prometheus/       — kube-prometheus-stack HelmRelease + HelmRepository + grafana-admin secret
+prometheus/       — kube-prometheus-stack HelmRelease + HelmRepository + grafana-admin secret + custom PrometheusRule (alerting-rules.yaml)
 mosquitto/        — Mosquitto deployment, configmap, service
 nas-monitor/      — CronJob: SSH to NAS, parse /proc/mdstat, Discord alert
 nfs/              — NFS provisioner Helm template
+pvc-usage-monitor/ — CronJob: real per-PVC usage vs. requested size via NAS-side `du` over SSH (see Monitoring & Alerting)
 ring-mqtt/        — ring-mqtt deployment, PVC, service
 solar/            — modpoll deployment and Modbus configmap
 syncthing/        — SyncThing deployment, PVCs, service, ingress, conflict CronJob
