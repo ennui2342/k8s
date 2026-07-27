@@ -12,6 +12,19 @@ spec:
   upgrade:
     remediation:
       retries: 3
+  # Injects the discord-webhook secret's plaintext value directly into the
+  # rendered Helm values at deploy time — this Alertmanager version's
+  # discord_configs doesn't support webhook_url_file (confirmed live
+  # 2026-07-27: "field webhook_url_file not found in type
+  # alertmanager.discordConfig", failing every operator reconcile since,
+  # silently leaving the pod on a stale pre-Discord config), only the plain
+  # webhook_url field, which can't itself be a file path — so the value has
+  # to be merged in from the secret rather than referenced by mounted path.
+  valuesFrom:
+    - kind: Secret
+      name: discord-webhook
+      valuesKey: address
+      targetPath: alertmanager.config.receivers[1].discord_configs[0].webhook_url
   chart:
     spec:
       chart: kube-prometheus-stack
@@ -145,9 +158,6 @@ spec:
     # --- Alertmanager ---
     alertmanager:
       alertmanagerSpec:
-        # Mount the discord-webhook secret so AlertManager can read the URL from a file
-        secrets:
-          - discord-webhook
         affinity:
           nodeAffinity:
             preferredDuringSchedulingIgnoredDuringExecution:
@@ -176,7 +186,7 @@ spec:
           - name: "null"
           - name: discord
             discord_configs:
-              - webhook_url_file: /etc/alertmanager/secrets/discord-webhook/address
+              - webhook_url: ""  # overwritten at deploy time by spec.valuesFrom above
                 send_resolved: true
 
         inhibit_rules:
