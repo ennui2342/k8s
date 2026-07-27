@@ -30,3 +30,4 @@ resources:
   - librarium/
   - isfdb/
   - pvc-usage-monitor/
+  - registry/
