@@ -114,8 +114,8 @@ The age public key is embedded there. The **private key** lives only at
 **Secrets managed in git (SOPS-encrypted):**
 - `flux-system/discord-webhook-secret.yaml` — Discord webhook for Flux notifications
 - `syncthing/discord-webhook-secret.yaml` — Discord webhook for SyncThing conflict monitor
-- `nas-monitor/discord-webhook-secret.yaml` — Discord webhook for NAS RAID alerts
-- `nas-monitor/nas-ssh-key-secret.yaml` — SSH key for NAS RAID monitoring (port 9222)
+- `nas-monitor/discord-webhook-secret.yaml` — creates `discord-webhook` in the `monitoring` namespace; despite living in `nas-monitor/`, this is the shared secret `health-monitor`, `trivy`, and `pvc-usage-monitor` also read (each just references it by name, no separate copy) — don't assume it's NAS-specific or safe to remove if `nas-monitor` is ever decommissioned
+- `nas-monitor/nas-ssh-key-secret.yaml` — SSH key for the NAS (port 9222), used by both `nas-monitor` (RAID monitoring) and `pvc-usage-monitor` (per-PVC `du`) — same multi-consumer caveat as above
 - `webdav/webdav-secret.yaml` — hacdias/webdav config.yaml, contains bcrypt-hashed basic-auth password for the `zotero` user
 - `tailscale/operator-oauth-secret.yaml` — Tailscale OAuth client ID + secret
 - `prometheus/grafana-admin-secret.yaml` — Grafana admin username + password
