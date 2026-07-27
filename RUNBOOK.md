@@ -162,6 +162,78 @@ Grafana is managed by kube-prometheus-stack (`prometheus/helmrelease.yaml`).
 To update a custom dashboard: edit in the UI, export the JSON, update the ConfigMap in
 `dashboards/dashboard-<name>.yaml`, and commit. The sidecar reloads without a pod restart.
 
+### Local container registry
+
+`registry/deployment.yaml` deploys `registry:2` (NFS-backed PVC, NodePort 30500) as the
+target for locally-built custom/CVE-patched images going forward, replacing the `docker
+save` / `scp` / `k3s ctr images import` workflow used throughout this repo's history (see
+`### Librarium local fork images` and `### ISFDB mirror` below, and every entry in
+`trivy/patched-images.yaml` — all still on the old workflow as of 2026-07-27, migrating
+opportunistically on each one's next rebuild rather than all at once).
+
+Two steps here are **not** managed by Flux/GitOps and must be redone by hand on a fresh
+cluster — they're node-local and workstation-local config, outside Kubernetes' object model
+entirely:
+
+**1. Containerd trust, on every node (master + both workers):**
+
+```sh
+cat <<'EOF' > /tmp/registries.yaml
+mirrors:
+  "127.0.0.1:30500":
+    endpoint:
+      - "http://127.0.0.1:30500"
+EOF
+
+# Master
+scp /tmp/registries.yaml ubuntu@k8s.local:/tmp/registries.yaml
+ssh ubuntu@k8s.local "sudo mkdir -p /etc/rancher/k3s && sudo cp /tmp/registries.yaml /etc/rancher/k3s/registries.yaml && sudo systemctl restart k3s"
+
+# Workers (via master hop) — /etc/rancher/k3s/ doesn't exist by default on a fresh worker, mkdir -p first
+ssh ubuntu@k8s.local "scp /tmp/registries.yaml k8s-1:/tmp/ && scp /tmp/registries.yaml k8s-2:/tmp/"
+ssh ubuntu@k8s.local "ssh k8s-1 'sudo mkdir -p /etc/rancher/k3s && sudo cp /tmp/registries.yaml /etc/rancher/k3s/registries.yaml && sudo systemctl restart k3s-agent'"
+ssh ubuntu@k8s.local "ssh k8s-2 'sudo mkdir -p /etc/rancher/k3s && sudo cp /tmp/registries.yaml /etc/rancher/k3s/registries.yaml && sudo systemctl restart k3s-agent'"
+```
+
+The endpoint is deliberately `127.0.0.1:30500`, not a specific node's IP — a NodePort
+service is reachable via *every* node's own address including localhost, regardless of
+which node the registry pod actually lands on, so the same config file is correct
+unchanged on all three nodes rather than needing to know/hardcode where the pod is
+scheduled.
+
+**2. Docker Desktop trust, on the Mac (for `docker push` from the build machine):**
+
+Add to `~/.docker/daemon.json`:
+```json
+"insecure-registries": ["192.168.0.8:30500"]
+```
+(`192.168.0.8` is the master's LAN IP / `k8s.local` — a real address, unlike the
+node-local `127.0.0.1:30500` above, since the Mac isn't a cluster node.) Then either
+Docker Desktop → Settings → Docker Engine → **Apply & Restart**, or quit/relaunch Docker
+Desktop from the CLI — either way this restarts the whole Docker daemon, briefly stopping
+*every* currently-running container on the Mac, not just anything k8s-related. Check what
+else is running first (`docker ps`) and confirm before restarting; containers without a
+`restart: unless-stopped`/`always` policy won't come back on their own afterward.
+
+Both are genuinely one-time per node/machine — plain HTTP + anonymous access, deliberately
+simple since this registry is never reachable outside the LAN.
+
+**New image workflow, once both are set up:**
+```sh
+docker build -t 192.168.0.8:30500/<name>:<tag> .
+docker push 192.168.0.8:30500/<name>:<tag>
+```
+Then in the manifest, reference `127.0.0.1:30500/<name>:<tag>` (matching the containerd
+mirror config — not the `192.168.0.8` address used for the push, that's Mac-only) with
+`imagePullPolicy: IfNotPresent`. No SSH, no per-node `ctr images import`, kubelet just
+pulls it the normal way on whichever node schedules the pod.
+
+Registry storage has no automatic garbage collection — `registry:2` never deletes old
+tags/layers on its own. Not a problem yet at this repo's current image count/churn, but
+worth knowing before the 20Gi PVC fills up someday (`registry garbage-collect`, run inside
+the pod, is the standard fix — `REGISTRY_STORAGE_DELETE_ENABLED=true` is already set to
+allow this).
+
 ### Tailscale
 
 The operator is deployed via `tailscale/helmrelease.yaml`. OAuth credentials

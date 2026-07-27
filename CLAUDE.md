@@ -69,6 +69,7 @@ tolerations:
 | `monitoring` | influxdb | `monitoring/influxdb.yaml` | InfluxDB 1.8.0, 8Gi NFS PV |
 | `monitoring` | kube-prometheus-stack | `prometheus/` | Flux HelmRelease (70.x.x); Prometheus + Alertmanager + Grafana + node-exporter + kube-state-metrics. Alertmanager → Discord routing exists (`prometheus/helmrelease.yaml`) but was silently broken from when it was first configured until 2026-07-27 (this Alertmanager version doesn't support `discord_configs`' `webhook_url_file`, so every operator reconcile failed — fixed via `HelmRelease.spec.valuesFrom` injecting the secret value directly instead) |
 | `monitoring` | pvc-usage-monitor | `pvc-usage-monitor/` | CronJob, 2h: real per-PVC usage vs. each PVC's own requested size, via `du` over SSH to the NAS (reuses `nas-monitor`'s key) — `kubelet_volume_stats_*` can't do this on this StorageClass, see that directory's script comment. Fires a `<cli.cluster-health` task at 90% of request; `nfs-subdir-external-provisioner` enforces no real quota, so this is a self-imposed budget check, not a hard limit |
+| `registry` | registry | `registry/` | `registry:2`, NFS-backed PVC, NodePort 30500, plain HTTP + anonymous (LAN-only, never exposed beyond it). Target for locally-built images going forward, replacing `docker save`/`scp`/`ctr images import` — see `RUNBOOK.md`'s "Local container registry" for the one-time per-node containerd trust config and Mac-side Docker Desktop config this needs (neither is GitOps-managed, both are node/workstation-local). Existing custom images haven't migrated yet, moving opportunistically on next rebuild |
 | `monitoring` | loki | `monitoring/loki.yaml` | Flux HelmRelease (6.x.x); log aggregation, 31-day retention, NFS storage |
 | `monitoring` | promtail | `monitoring/promtail.yaml` | Flux HelmRelease (6.x.x); ships pod logs to Loki |
 | `monitoring` | telegraf | `monitoring/telegraf.yaml` | Scrapes MQTT (mosquitto.default:1883), statsd, SNMP (NAS at 192.168.0.76) |
@@ -240,6 +241,7 @@ mosquitto/        — Mosquitto deployment, configmap, service
 nas-monitor/      — CronJob: SSH to NAS, parse /proc/mdstat, Discord alert
 nfs/              — NFS provisioner Helm template
 pvc-usage-monitor/ — CronJob: real per-PVC usage vs. requested size via NAS-side `du` over SSH (see Monitoring & Alerting)
+registry/         — local container registry (registry:2), target for future custom image builds — see RUNBOOK.md
 ring-mqtt/        — ring-mqtt deployment, PVC, service
 solar/            — modpoll deployment and Modbus configmap
 syncthing/        — SyncThing deployment, PVCs, service, ingress, conflict CronJob
