@@ -26,10 +26,10 @@ spec:
       valuesKey: values.yaml
   values:
     image:
-      registry: ghcr.io
-      repository: ennui2342/botkube
+      registry: 127.0.0.1:30500
+      repository: botkube
       tag: v1.14.0-patched
-      pullPolicy: Never
+      pullPolicy: IfNotPresent
 
     affinity:
       nodeAffinity:
