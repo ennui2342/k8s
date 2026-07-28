@@ -1,6 +1,5 @@
 # Inactive / not-yet-cleaned-up service directories
 magic-mirror/
-openhab/
 resilosync/
 
 # Separate git repos (manage independently)
@@ -12,7 +11,6 @@ home-assistant/old/
 home-assistant/ha-ingress.yaml.old
 nfs/old/
 tick/old/
-openhab/old/
 **/*.old
 **/*.bak
 **/*.new
