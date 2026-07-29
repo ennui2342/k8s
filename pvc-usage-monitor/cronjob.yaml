@@ -269,6 +269,7 @@ spec:
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
+      ttlSecondsAfterFinished: 604800
       activeDeadlineSeconds: 300
       template:
         spec:

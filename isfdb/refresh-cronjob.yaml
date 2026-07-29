@@ -14,6 +14,7 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
+      ttlSecondsAfterFinished: 604800
       backoffLimit: 2
       # NFS-backed MariaDB import of the ~1.6GB uncompressed dump routinely
       # takes 25-30+ minutes on its own (observed empirically) — this isn't

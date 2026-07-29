@@ -7,6 +7,7 @@ spec:
   schedule: "*/15 * * * *"
   jobTemplate:
     spec:
+      ttlSecondsAfterFinished: 604800
       template:
         spec:
           restartPolicy: OnFailure

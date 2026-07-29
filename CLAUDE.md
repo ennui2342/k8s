@@ -45,6 +45,23 @@ tolerations:
     effect: NoSchedule
 ```
 
+### Every CronJob must set `ttlSecondsAfterFinished`
+Confirmed live 2026-07-28: 6 of the 7 CronJobs in this repo had no `ttlSecondsAfterFinished`
+(only `syncthing/cronjob.yaml` did), so completed Job pods never got cleaned up on their own.
+This isn't just tidiness — `trivy/trivy.yaml`'s CronJob mounts a real RWO PVC
+(`trivy-cache-pvc`), and stale completed pods from it ended up pinning that PVC and blocking
+a later run, caught mid-way through a nightly automated update rather than by design. Every
+`CronJob.spec.jobTemplate.spec` (sibling of `template:`, not inside it) must set:
+
+```yaml
+ttlSecondsAfterFinished: 604800
+```
+
+7 days — long enough to inspect a failed run's logs before it's swept, short enough that pods
+don't accumulate indefinitely. `successfulJobsHistoryLimit`/`failedJobsHistoryLimit` (k8s
+defaults: 3/1) are a different, complementary mechanism — they cap how many Job *objects* are
+kept, not when the underlying pod's resources (including PVC mounts) actually get released.
+
 ## Actively Deployed Services
 
 | Namespace | Service | Manifests | Notes |
