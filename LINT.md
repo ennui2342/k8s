@@ -103,9 +103,26 @@ control-plane exclusion rather than the literal soft-preference block, which is 
 rule asks for and was treated as compliant, not a violation. No fix or ticket needed — recorded
 here so the next audit doesn't have to re-derive the check from prose.
 
+**Every `Ingress` must set `spec.ingressClassName`, never the deprecated
+`kubernetes.io/ingress.class` annotation.** Found and fixed repo-wide 2026-07-29 (Phase 2 research
+pass): 10 `Ingress` objects across 9 manifests, plus the Grafana ingress values in
+`prometheus/helmrelease.yaml`, still used the long-deprecated annotation instead of the field —
+this repo already used the modern field consistently for every Tailscale-backed ingress
+(`ingressClassName: tailscale`), so these were pure stragglers. Same-behavior swap (Traefik treats
+both identically), fixed directly rather than ticketed.
+
+**Namespaces that run privileged/`hostNetwork` workloads should be a conscious, documented
+exception, not a default.** Checked live 2026-07-29 (Phase 2 research pass): only
+`mdns/master-daemonset.yaml` and `mdns/worker-daemonset.yaml` (both `default` namespace) set
+`privileged: true`/`hostNetwork: true` anywhere in the repo — CLAUDE.md's home-assistant row
+incorrectly claimed `hostNetwork` too (corrected same run). Whether to formally adopt Pod Security
+Admission (`pod-security.kubernetes.io/enforce` namespace labels — the GA replacement for the
+long-removed PodSecurityPolicy) to make this an enforced boundary rather than an implicit one is a
+security-posture decision, not a mechanical fix: ticketed as `tm` task `403129f3` (`#k8s #ops`)
+rather than adopted directly, since this is a trusted single-tenant homelab and blast-radius
+tradeoffs need a human call, not a default-on assumption.
+
 ## Starter items — not yet verified repo-wide
 
-All three items seeded here for the first fleet-audit run (2026-07-29) were audited and promoted
-to confirmed rules above this run (two ticketed rather than fixed directly, since they needed
-judgement calls — see each entry). Empty for now; the next durable finding (from a future audit's
-research pass, or from any session) seeds this list again.
+Empty as of 2026-07-29. The next durable finding (from a future audit's research pass, or from
+any session) seeds this list again.
