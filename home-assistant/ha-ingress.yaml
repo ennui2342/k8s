@@ -3,9 +3,8 @@ kind: Ingress
 metadata:
   name: homeassistant-ingress
   namespace: home-assistant # <--- This is your Home Assistant namespace
-  annotations:
-    kubernetes.io/ingress.class: traefik
 spec:
+  ingressClassName: traefik
   rules:
   - host: home-assistant.k8s.ecafe.org
     http:

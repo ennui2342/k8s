@@ -3,9 +3,8 @@ kind: Ingress
 metadata:
   name: linkding
   namespace: linkding
-  annotations:
-    kubernetes.io/ingress.class: traefik
 spec:
+  ingressClassName: traefik
   rules:
     - host: pinboard.k8s.ecafe.org
       http:

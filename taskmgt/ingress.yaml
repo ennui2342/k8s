@@ -3,9 +3,8 @@ kind: Ingress
 metadata:
   name: taskmgt
   namespace: taskmgt
-  annotations:
-    kubernetes.io/ingress.class: traefik
 spec:
+  ingressClassName: traefik
   rules:
     - host: tasks.k8s.ecafe.org
       http:

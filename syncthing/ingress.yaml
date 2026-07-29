@@ -3,9 +3,8 @@ kind: Ingress
 metadata:
   name: syncthing
   namespace: default
-  annotations:
-    kubernetes.io/ingress.class: traefik
 spec:
+  ingressClassName: traefik
   rules:
   - host: syncthing.k8s.ecafe.org
     http:

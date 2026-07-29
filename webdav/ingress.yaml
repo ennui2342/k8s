@@ -3,9 +3,8 @@ kind: Ingress
 metadata:
   name: webdav
   namespace: default
-  annotations:
-    kubernetes.io/ingress.class: traefik
 spec:
+  ingressClassName: traefik
   rules:
   - host: webdav.k8s.ecafe.org
     http:

@@ -61,8 +61,7 @@ spec:
 
       ingress:
         enabled: true
-        annotations:
-          kubernetes.io/ingress.class: traefik
+        ingressClassName: traefik
         hosts:
           - grafana.k8s.ecafe.org
 
