@@ -61,29 +61,32 @@ too.
 | `botkube` | botkube | `botkube/` | Flux HelmRelease; Discord alerts + kubectl/helm/flux executors |
 | `cert-manager` | cert-manager | `cert-manager/` | Flux HelmRelease (v1.x.x); ClusterIssuer for ecafe.org |
 | `default` | mosquitto | `mosquitto/` | MQTT broker, anonymous access, port 31883 (NodePort) |
-| `default` | mdns-repeater | `mdns/` | DaemonSets (master + worker) repeating mDNS packets across host interfaces so mDNS-discoverable devices are visible cluster-wide; `hostNetwork: true`, `privileged: true`; image `ghcr.io/ennui2342/mdns-repeater:latest-patched` (locally patched, imagePullPolicy Never) |
+| `default` | mdns-repeater | `mdns/` | DaemonSets (master + worker) repeating mDNS packets across host interfaces so mDNS-discoverable devices are visible cluster-wide; `hostNetwork: true`, `privileged: true`; image `127.0.0.1:30500/mdns-repeater:latest-patched` (locally patched, served from the local registry, `imagePullPolicy: IfNotPresent`) |
 | `default` | modpoll | `solar/` | Reads FoxESS inverter via Modbus at 192.168.0.188, publishes to `solar/foxess` on MQTT |
 | `default` | nfs-provisioner | `nfs/template.yaml` | NFS subdir external provisioner |
 | `default` | syncthing | `syncthing/` | SyncThing file sync; config + data on NFS |
 | `default` | webdav | `webdav/` | hacdias/webdav server for Zotero PDF attachment sync; 20Gi NFS PV; `webdav.k8s.ecafe.org` ingress (internal/Tailscale, used by desktop Zotero) plus a Tailscale-operator Funnel Ingress (`webdav-funnel`) giving a trusted `*.ts.net` cert that works identically on-LAN and off — needed because Zotero for Android refuses self-signed/internal certs and the epigone.ecafe.org path hit home-router NAT-hairpin issues when accessed from inside the LAN; basic-auth user `zotero`, bcrypt password in `webdav-secret.yaml` |
 | `default` | web | `website/` | nginx + PHP-FPM StatefulSet; serves k8s.ecafe.org |
 | `epigone` | epigone routing | `epigone/` | Owns the `epigone.ecafe.org` cert-manager Certificate + Traefik IngressRoute for Home Assistant. Kept as its own namespace (decoupled from home-assistant) since it was briefly shared with webdav too; webdav now uses Tailscale Funnel instead (see below), so this currently only fronts Home Assistant, but stays separate in case another service needs the same public hostname later. |
+| `freshrss` | freshrss | `freshrss/` | Self-hosted RSS reader, replacing Feedly — phase 1 of a Readwise Reader self-hosted evaluation (see `linkding`/`wallabag` below for the other phases). NFS-backed data + extensions PVCs; `rss.k8s.ecafe.org` ingress plus a Tailscale ingress for PWA/app installability testing. Custom `User-Agent` override (see recent commits) to fix bot-blocked feeds. |
 | `home-assistant` | homeassistant | `home-assistant/ha-*.yaml` | HA 2026.4.4, hostNetwork, config on NFS; reachable at `home-assistant.k8s.ecafe.org` and, via `epigone/`, at `epigone.ecafe.org` |
 | `home-assistant` | ring-mqtt | `ring-mqtt/` | Ring doorbell → MQTT bridge, RTSP port 30002 |
-| `isfdb` | isfdb-mirror | `isfdb/` | Self-hosted mirror of the Internet Speculative Fiction Database (ISFDB) — MariaDB StatefulSet (NFS PVC) seeded from ISFDB's weekly "5.5-compatible" MySQL backup, fronted by a small adapter service (`isfdb-adapter`, custom image `ghcr.io/ennui2342/isfdb-mirror:local`, containerd-imported like `mdns-repeater`) exposing ISBN/title/series/author lookups as JSON. A weekly CronJob (`isfdb-refresh`, Sunday 08:00 UTC) logs into the Cloudflare-protected + login-gated ISFDB wiki (`cloudscraper` + a plain MediaWiki form POST), scrapes the current Google Drive backup link, downloads it (`gdown`), and atomically swaps it into the live DB only after a row-count sanity check — a failed refresh leaves last week's data live. Exists to back a self-hosted ISFDB metadata provider for `librarium/` (see `librarium/` and upstream PRs against `fireball1725/librarium-api`/`librarium-web`), since ISFDB has no public API and Open Library/Google Books/Hardcover are too sparse for older or small-press SFF editions. **The adapter's source lives at `~/projects/isfdb-adapter/`** (public repo `ennui2342/isfdb-adapter`, its own reference implementation) — not in this repo. See `RUNBOOK.md`'s "ISFDB mirror" section for the clone/build/import rebuild steps, same pattern as the Librarium local fork images. |
+| `isfdb` | isfdb-mirror | `isfdb/` | Self-hosted mirror of the Internet Speculative Fiction Database (ISFDB) — MariaDB StatefulSet (NFS PVC) seeded from ISFDB's weekly "5.5-compatible" MySQL backup, fronted by a small adapter service (`isfdb-adapter`, custom image `127.0.0.1:30500/isfdb-mirror:<tag>`, served from the local registry) exposing ISBN/title/series/author lookups as JSON. A weekly CronJob (`isfdb-refresh`, Sunday 08:00 UTC) logs into the Cloudflare-protected + login-gated ISFDB wiki (`cloudscraper` + a plain MediaWiki form POST), scrapes the current Google Drive backup link, downloads it (`gdown`), and atomically swaps it into the live DB only after a row-count sanity check — a failed refresh leaves last week's data live. Exists to back a self-hosted ISFDB metadata provider for `librarium/` (see `librarium/` and upstream PRs against `fireball1725/librarium-api`/`librarium-web`), since ISFDB has no public API and Open Library/Google Books/Hardcover are too sparse for older or small-press SFF editions. **The adapter's source lives at `~/projects/isfdb-adapter/`** (public repo `ennui2342/isfdb-adapter`, its own reference implementation) — not in this repo. See `RUNBOOK.md`'s "ISFDB mirror" section for the clone/build/import rebuild steps, same pattern as the Librarium local fork images. |
 | `librarium` | librarium | `librarium/` | Self-hosted print book/manga/comic tracker (Go API + React web + Postgres 16, all in-namespace); `librarium.k8s.ecafe.org` ingress plus a Tailscale ingress (`librarium-ts`) for the iOS barcode-scanning app away from home; covers + media PVCs on `nfs-client`, Postgres data also on `nfs-client` (no local-disk StorageClass exists in this cluster). **App source (forks under active development, PRs against upstream) lives at `~/projects/librarium/`, not in this repo** — this repo only has the deployment manifests. See that directory's own `CLAUDE.md` for the fork relationship, PR status, and the local-build-and-import workflow used because the PRs aren't merged upstream yet. |
+| `linkding` | linkding | `linkding/` | Self-hosted bookmark manager ("pinboard" — see the `pinboard` Claude Code skill), at `pinboard.k8s.ecafe.org` plus a Tailscale ingress for PWA installability. A CronJob (`linkding-task-sync`) polls linkding for bookmarks tagged `-task`, creates a corresponding `tm` task (`<cli.linkding-task-sync` provenance) for each, then strips the tag so the bookmark isn't re-processed — task lifecycle then belongs entirely to `tm`, no separate dedupe/auto-close bookkeeping in the sync job itself. |
 | `monitoring` | cve-scanner | `trivy/` | Weekly Trivy scan → dedupes/files/auto-closes `tm` tasks; see CVE Patch Management below |
 | `monitoring` | grafana | `prometheus/helmrelease.yaml` | grafana.k8s.ecafe.org, anonymous viewer access; managed by kube-prometheus-stack chart |
 | `monitoring` | health-monitor | `health-monitor/` | CronJob, 30min: Flux Kustomization/HelmRelease failed-or-stalled checks (the only kubectl-based check left — CrashLoopBackOff/PVC/Node checks were removed 2026-07-27, now redundant with kube-prometheus-stack's default rules) **plus bridges every firing Alertmanager alert into a `<cli.cluster-health` `tm` task** (dedup/close on the alert's own fingerprint) — see Monitoring & Alerting below |
 | `monitoring` | influxdb | `monitoring/influxdb.yaml` | InfluxDB 1.8.0, 8Gi NFS PV |
 | `monitoring` | kube-prometheus-stack | `prometheus/` | Flux HelmRelease (70.x.x); Prometheus + Alertmanager + Grafana + node-exporter + kube-state-metrics. Alertmanager → Discord routing exists (`prometheus/helmrelease.yaml`) but was silently broken from when it was first configured until 2026-07-27 (this Alertmanager version doesn't support `discord_configs`' `webhook_url_file`, so every operator reconcile failed — fixed via `HelmRelease.spec.valuesFrom` injecting the secret value directly instead) |
 | `monitoring` | pvc-usage-monitor | `pvc-usage-monitor/` | CronJob, 2h: real per-PVC usage vs. each PVC's own requested size, via `du` over SSH to the NAS (reuses `nas-monitor`'s key) — `kubelet_volume_stats_*` can't do this on this StorageClass, see that directory's script comment. Fires a `<cli.cluster-health` task at 90% of request; `nfs-subdir-external-provisioner` enforces no real quota, so this is a self-imposed budget check, not a hard limit |
-| `registry` | registry | `registry/` | `registry:2`, NFS-backed PVC, NodePort 30500, plain HTTP + anonymous (LAN-only, never exposed beyond it). Target for locally-built images going forward, replacing `docker save`/`scp`/`ctr images import` — see `RUNBOOK.md`'s "Local container registry" for the one-time per-node containerd trust config and Mac-side Docker Desktop config this needs (neither is GitOps-managed, both are node/workstation-local). Existing custom images haven't migrated yet, moving opportunistically on next rebuild |
+| `registry` | registry | `registry/` | `registry:2`, NFS-backed PVC, NodePort 30500, plain HTTP + anonymous (LAN-only, never exposed beyond it). Target for locally-built images, replacing `docker save`/`scp`/`ctr images import` — see `RUNBOOK.md`'s "Local container registry" for the one-time per-node containerd trust config and Mac-side Docker Desktop config this needs (neither is GitOps-managed, both are node/workstation-local). Confirmed live 2026-07-29: migration is complete — every custom/forked image in the repo (`mdns-repeater`, `isfdb-mirror`, `librarium-api`/`librarium-web`, `mosquitto`, `modpoll`, `home-assistant`, `telegraf`, `ring-mqtt`, `trivy`, `botkube`, the Flux controllers, `k8s-toolbox`) is now pulled from `127.0.0.1:30500` with `imagePullPolicy: IfNotPresent`; no manifest in the repo still uses `imagePullPolicy: Never` |
 | `monitoring` | loki | `monitoring/loki.yaml` | Flux HelmRelease (6.x.x); log aggregation, 31-day retention, NFS storage |
 | `monitoring` | promtail | `monitoring/promtail.yaml` | Flux HelmRelease (6.x.x); ships pod logs to Loki |
 | `monitoring` | telegraf | `monitoring/telegraf.yaml` | Scrapes MQTT (mosquitto.default:1883), statsd, SNMP (NAS at 192.168.0.76) |
 | `tailscale` | operator | `tailscale/` | Flux HelmRelease (1.x.x); `ts-k8s-connector` exposes taskmgt frontend; also runs the Funnel proxy for webdav (`ts-webdav-funnel` StatefulSet, auto-created from `webdav/funnel-ingress.yaml`) |
 | `taskmgt` | api + frontend | `taskmgt/` | Task management app; see Flux image automation below |
+| `wallabag` | wallabag | `wallabag/` | Self-hosted read-it-later app, replacing Instapaper — phase 1 of the Readwise Reader self-hosted evaluation alongside `freshrss`. NFS-backed data + images PVCs; `later.k8s.ecafe.org` ingress plus a Tailscale ingress for PWA installability testing. **Known gap:** still running the default `wallabag`/`wallabag` admin account as of 2026-07-29 — needs replacing post-deploy (see commit 7e62573). |
 
 ### Key Ingress Hostnames
 - `k8s.ecafe.org` — website
@@ -91,6 +94,9 @@ too.
 - `librarium.k8s.ecafe.org` — Librarium (book tracker), internal DNS only; also reachable at `librarium.tail611131.ts.net` via Tailscale (`librarium-ts` ingress), for the iOS app away from home
 - `epigone.ecafe.org` — public hostname for Home Assistant (TLS via cert-manager, real Let's Encrypt cert), routed by `epigone/`'s IngressRoute
 - `grafana.k8s.ecafe.org` — Grafana
+- `rss.k8s.ecafe.org` — FreshRSS (also on Tailscale, for PWA installability off-LAN)
+- `pinboard.k8s.ecafe.org` — linkding bookmark manager (also on Tailscale as `pinboard.tail611131.ts.net`)
+- `later.k8s.ecafe.org` — wallabag read-it-later (also on Tailscale, for PWA installability off-LAN)
 - `tasks.k8s.ecafe.org` — taskmgt frontend (also on Tailscale as `taskmgt`)
 - `webdav.k8s.ecafe.org` — WebDAV server, internal/Tailscale access (used by desktop Zotero)
 - `webdav.tail611131.ts.net` — WebDAV server via Tailscale Funnel (`webdav/funnel-ingress.yaml`), trusted cert, works on-LAN and off (used by Zotero for Android); root URL, no path suffix. Required two one-time settings in the Tailscale admin console (not managed in this repo): "HTTPS Certificates" enabled (DNS tab) and the `funnel` node attribute granted to `tag:k8s` in the ACL policy
@@ -131,6 +137,11 @@ The age public key is embedded there. The **private key** lives only at
 - `prometheus/grafana-admin-secret.yaml` — Grafana admin username + password
 - `librarium/librarium-secret.yaml` — `JWT_SECRET`, `DATABASE_URL`, `POSTGRES_PASSWORD` for the librarium api + bundled Postgres
 - `isfdb/isfdb-secret.yaml` — MariaDB root password, plus `ISFDB_WIKI_USERNAME`/`ISFDB_WIKI_PASSWORD` for the weekly refresh job's ISFDB wiki login
+- `botkube/botkube-secret.yaml` — botkube's Helm `values.yaml` (contains the Discord webhook botkube alerts to)
+- `freshrss/freshrss-secret.yaml` — `FRESHRSS_INSTALL`/`FRESHRSS_USER` bootstrap admin credentials
+- `linkding/linkding-secret.yaml` — `LD_SUPERUSER_NAME`/`LD_SUPERUSER_PASSWORD`/`LD_SUPERUSER_EMAIL` bootstrap admin credentials
+- `linkding/linkding-api-secret.yaml` — creates `linkding-api-token`, linkding's own API token, consumed by the `linkding-task-sync` CronJob
+- `wallabag/wallabag-secret.yaml` — `SYMFONY__ENV__SECRET` app secret (wallabag admin credentials are still the shipped default as of 2026-07-29 — see `tm` task 8fc03e95)
 
 **Secrets NOT in git (provisioned imperatively or auto-managed):**
 - `epigone/epigone.ecafe.org-production` — TLS cert (managed by cert-manager, auto-renewed)
@@ -233,16 +244,19 @@ see `RUNBOOK.md`'s "CVE Patch Management" section for the full mechanics.
 ## Directory Structure Notes
 
 ```
+botkube/          — Flux HelmRelease + Discord webhook secret; Discord alerts + kubectl/helm/flux executors
 cert-manager/     — Flux HelmRelease + HelmRepository (jetstack) + ClusterIssuer
 coredns/          — CoreDNS custom config (*.k8s.ecafe.org wildcard)
 flux-system/      — Flux bootstrap output + SOPS patch + alert config
 dashboards/       — Custom Grafana dashboard ConfigMaps (Solar, Observatory, NAS Monitor, Weather Station)
 epigone/          — epigone.ecafe.org namespace: cert-manager Certificate + IngressRoute fronting Home Assistant
+freshrss/         — Self-hosted RSS reader (Readwise Reader evaluation, phase 1): deployment, data/extensions PVCs, internal + Tailscale ingress, bootstrap secret
 health-monitor/   — CronJob: Flux Kustomization/HelmRelease checks + Alertmanager→tm bridge (see Monitoring & Alerting)
 home-assistant/   — HA deployment, service, ingress, cleanup CronJob
 isfdb/            — Self-hosted ISFDB mirror: MariaDB StatefulSet, adapter Deployment (JSON API over the mirror), weekly refresh CronJob; adapter/ holds the custom image source (Dockerfile, adapter.py, refresh.py)
 k8s-toolbox/      — Dockerfile only, no manifests: shared image for lightweight CronJobs (kubectl + openssh-client/curl/jq/python3/py3-yaml), see Monitoring & Alerting
 librarium/        — Librarium book tracker: api + web Deployments, bundled Postgres StatefulSet, covers/media PVCs, internal + Tailscale ingress
+linkding/         — Self-hosted bookmark manager: deployment, data PVC, internal + Tailscale ingress, bootstrap + API-token secrets, linkding-task-sync CronJob (bookmark→tm bridge)
 mdns/             — mdns-repeater DaemonSets (master + worker), hostNetwork mDNS relay
 monitoring/       — InfluxDB, Telegraf, Loki, Promtail; all monitoring stack manifests
 prometheus/       — kube-prometheus-stack HelmRelease + HelmRepository + grafana-admin secret + custom PrometheusRule (alerting-rules.yaml)
@@ -258,6 +272,7 @@ tailscale/        — Flux HelmRelease + HelmRepository (tailscale) + Connector 
 taskmgt/          — taskmgt app manifests + Flux image automation
 traefik/          — HelmChartConfig customizing k3s's bundled Traefik (allowCrossNamespace)
 trivy/            — Weekly CVE scanner CronJob; patched-images.yaml tracks custom image forks + reconciliation
+wallabag/         — Self-hosted read-it-later app (Readwise Reader evaluation, phase 1): deployment, data/images PVCs, internal + Tailscale ingress, secret
 webdav/           — hacdias/webdav deployment, PV/PVC, service, internal ingress, Tailscale Funnel ingress, config secret (Zotero PDF sync)
 website/          — nginx/PHP StatefulSet, configmaps, ingress
 ```
