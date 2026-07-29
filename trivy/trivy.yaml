@@ -535,7 +535,7 @@ spec:
   storageClassName: nfs-client
   resources:
     requests:
-      storage: 2Gi
+      storage: 4Gi
 ---
 apiVersion: batch/v1
 kind: CronJob
