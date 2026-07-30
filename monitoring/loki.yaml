@@ -24,7 +24,9 @@ spec:
   chart:
     spec:
       chart: loki
-      version: "6.x.x"
+      # Pinned to the current minor line, not a wide "6.x.x" range - see
+      # cert-manager/helmrelease.yaml's comment for why (confirmed live 2026-07-30).
+      version: "6.55.x"
       sourceRef:
         kind: HelmRepository
         name: grafana

@@ -28,7 +28,14 @@ spec:
   chart:
     spec:
       chart: kube-prometheus-stack
-      version: "70.x.x"
+      # Pinned to the current minor line, not a wide "70.x.x" range - this chart
+      # has a real history of breaking changes between minor versions (CRD schema
+      # shifts for PrometheusRule/ServiceMonitor especially), and it's the
+      # monitoring backbone every alert/task-creation mechanism in this repo
+      # depends on. Confirmed live 2026-07-30, same class of risk as cert-manager
+      # (see that HelmRelease's comment) - patch releases still auto-apply within
+      # this line; a minor/major bump needs a deliberate, reviewed pass.
+      version: "70.10.x"
       sourceRef:
         kind: HelmRepository
         name: prometheus-community

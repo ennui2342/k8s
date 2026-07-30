@@ -15,7 +15,13 @@ spec:
   chart:
     spec:
       chart: cert-manager
-      version: "v1.x.x"
+      # Pinned to the current minor line, not a wide "v1.x.x" range - confirmed live
+      # 2026-07-30: an unpinned range let Flux auto-upgrade this HelmRelease
+      # (v1.21.0 -> v1.21.1) with zero review, same class of risk task 0fcc5a38
+      # already flagged for this exact chart. Patch releases still auto-apply
+      # within this line; a minor/major bump needs a deliberate, reviewed pass -
+      # see tm task for the tracked follow-up.
+      version: "v1.21.x"
       sourceRef:
         kind: HelmRepository
         name: jetstack
