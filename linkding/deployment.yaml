@@ -27,7 +27,8 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: linkding
-          image: sissbruecker/linkding:1.45.0
+          image: 127.0.0.1:30500/linkding:1.45.0-patched
+          imagePullPolicy: IfNotPresent
           ports:
             - name: linkding
               containerPort: 9090

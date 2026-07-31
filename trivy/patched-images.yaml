@@ -145,6 +145,16 @@
   critical: 0
   high: 0
 
+- workload: linkding/Deployment/linkding
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/linkding:1.45.0-patched
+  upstream_image: sissbruecker/linkding:1.45.0
+  build_recipe: trivy/patched-images/linkding/Dockerfile
+  reason: "curl/krb5/libcap/gnutls (and 6 more) CVEs in Debian 13.1 (trixie) base; no newer 1.45.0-line upstream tag exists. Resolves all 10 fixable CRITICAL and 488 of 502 fixable HIGH CVEs found at patch time via trixie-security dist-upgrade; remaining 14 fixable HIGH are Python app deps (Django/PyJWT/cryptography/soupsieve/urllib3) bundled in the image, not OS packages — out of scope for this OS-level patch strategy, same as every other frozen-rebuild entry here"
+  patched_date: "2026-07-31"
+  critical: 10
+  high: 488
+
 - workload: botkube/Deployment/botkube
   strategy: frozen-rebuild
   patched_image: ghcr.io/ennui2342/botkube:v1.14.0-patched
