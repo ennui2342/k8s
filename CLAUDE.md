@@ -210,7 +210,8 @@ a real per-directory walk — this is also why `prometheus/alerting-rules.yaml`'
 `PersistentVolumeFillingUp` is a single cluster-wide alert rather than per-PVC).
 
 **Principle: lightweight/periodic CronJobs should use `k8s-toolbox/` (or another pre-built,
-`imagePullPolicy: Never` image), never `apk add`/`apk update && apk upgrade` at runtime.**
+`imagePullPolicy: IfNotPresent` image pulled from the local registry), never `apk add`/`apk
+update && apk upgrade` at runtime.**
 Confirmed live 2026-07-27: a "flapping NodeHighIOWait" alert on k8s-2 (a Pi-class node whose entire
 root filesystem is one already-79%-full eMMC/SD card) turned out to have nothing to do with the NFS
 server — its physical disk stayed under 6% utilization throughout, including during a confirmed
@@ -222,9 +223,12 @@ together (as they did at the exact spike moment). `health-monitor`'s original "l
 pattern (apk update/upgrade every run, to dodge a static image going stale on CVEs) predates the
 reconcile-scanner mechanism above and made sense before it existed — it no longer does, since a
 static image now gets caught and flagged like any other image if it accumulates CVEs. Use
-`ghcr.io/ennui2342/k8s-toolbox:1.32.13` (source: `k8s-toolbox/Dockerfile` — `alpine/k8s` base for
-kubectl + `openssh-client curl jq python3 py3-yaml`) for any new lightweight CronJob needing these
-tools; extend that Dockerfile rather than reaching for `apk add` in a `command:` block.
+`127.0.0.1:30500/k8s-toolbox:1.32.13-20260802` (source: `k8s-toolbox/Dockerfile` — `alpine/k8s`
+base, `apk update && apk upgrade` for current OS packages, plus `openssh-client curl jq python3
+py3-yaml`) for any new lightweight CronJob needing these tools; extend that Dockerfile rather than
+reaching for `apk add` in a `command:` block. Rebuild + repush with a new date-suffixed tag (same
+`kubectl-version-YYYYMMDD` pattern) whenever the weekly CVE scan flags this image or the k3s
+version bumps.
 
 ## CVE Patch Management
 

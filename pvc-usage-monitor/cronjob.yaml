@@ -277,7 +277,7 @@ spec:
           restartPolicy: OnFailure
           containers:
           - name: monitor
-            image: 127.0.0.1:30500/k8s-toolbox:1.32.13
+            image: 127.0.0.1:30500/k8s-toolbox:1.32.13-20260802
             imagePullPolicy: IfNotPresent
             env:
             - name: DISCORD_WEBHOOK

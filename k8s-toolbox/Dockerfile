@@ -20,4 +20,11 @@
 # handling needed.
 FROM alpine/k8s:1.32.13
 
-RUN apk add --no-cache openssh-client curl jq python3 py3-yaml
+# `apk update && apk upgrade` pulls current packages from alpine's rolling edge
+# repos (this base image is NOT pinned to a fixed snapshot — see /etc/apk/repositories
+# inside it, both point at .../edge/...) so OS-level CVEs (curl, c-ares, etc.) get
+# picked up on every rebuild without waiting for a new alpine/k8s upstream tag.
+# Re-run this Dockerfile's build (new version tag) whenever the weekly CVE scan
+# flags this image, same as any other rebuild-on-CVE cycle in this repo.
+RUN apk update && apk upgrade --no-cache && \
+    apk add --no-cache openssh-client curl jq python3 py3-yaml
