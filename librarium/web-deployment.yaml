@@ -40,7 +40,7 @@ spec:
           # Locally-built fork image (PR #44 not yet merged upstream) — see
           # RUNBOOK.md "Librarium local fork images" for the build/push steps
           # and revert-to-upstream instructions once that PR lands.
-          image: 127.0.0.1:30500/librarium-web:1.20260727.2341
+          image: 127.0.0.1:30500/librarium-web:1.20260803.1746
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
