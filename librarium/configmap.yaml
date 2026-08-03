@@ -12,7 +12,7 @@ data:
   AUDIOBOOK_STORAGE_PATH: "/data/media/audiobooks"
   EBOOK_PATH_TEMPLATE: "{title}"
   AUDIOBOOK_PATH_TEMPLATE: "{title}"
-  JWT_ACCESS_TTL: "15m"
+  JWT_ACCESS_TTL: "1h"
   JWT_REFRESH_TTL: "168h"
   # Single-user instance: admin account already created via the web UI.
   REGISTRATION_ENABLED: "false"
