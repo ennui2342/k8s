@@ -284,40 +284,22 @@ data:
     if not images:
         print('No fixable HIGH/CRITICAL CVEs found in scanned images')
     else:
-        print(f'Vulnerabilities found in {len(images)} image(s), sending notifications...')
-
-    # Discord summary — informational, lists everything found including
-    # already-forked images (suppressed from tm task creation below).
-    if images:
-        lines = ['**Weekly CVE Scan** — fixable HIGH/CRITICAL vulnerabilities found', '```']
-        for image, info in images.items():
-            parts = []
-            if info['critical']:
-                parts.append(f"{info['critical']} CRITICAL")
-            if info['high']:
-                parts.append(f"{info['high']} HIGH")
-            suffix = ' [tracked fork]' if any(image.startswith(p) for p in patched_by_image) else ''
-            lines.append(f"{image}: {', '.join(parts)}{suffix}")
-        lines.append('```')
-        message = '\n'.join(lines)[:2000]
-
-        r = subprocess.run(
-            ['curl', '-sf', '-X', 'POST', webhook,
-             '-H', 'Content-Type: application/json',
-             '-d', json.dumps({'username': 'k8s homelab', 'content': message})],
-            capture_output=True
-        )
-        if r.returncode != 0:
-            print('Discord notification failed', file=sys.stderr)
-        else:
-            print('Discord notification sent')
+        print(f'Vulnerabilities found in {len(images)} image(s), processing...')
 
     existing_tasks = get_tasks()
     cve_scanner_tasks = [t for t in existing_tasks if '<cli.cve-scanner' in t.get('text', '')]
     print(f'Existing open/wait cve-scanner tasks: {len(cve_scanner_tasks)}')
 
     # --- File/update/skip one task per affected image (dedupe on creation) ---
+    # new_findings/updated_findings/closed_findings feed the Discord summary
+    # below — only what actually changed this run, not the full outstanding
+    # list (skip/suppress cases are deliberately excluded: they're already
+    # visible in tm, repeating them every week is exactly the noise a human
+    # tunes out, see feedback_boyscout_or_ticket / alert-needs-a-task
+    # principle in CLAUDE.md's Monitoring & Alerting section).
     seen_images = set()
+    new_findings = []
+    updated_findings = []
     for image, info in images.items():
         # Already-tracked fork: suppress per-CVE nagging, reconciliation handles it.
         if any(image.startswith(p) for p in patched_by_image):
@@ -350,7 +332,8 @@ data:
 
         existing = find_task(prefix, cve_scanner_tasks)
         if existing is None:
-            create_task(full_text)
+            if create_task(full_text):
+                new_findings.append(f"{image}: {sev_str}")
             continue
 
         if existing.get('status') == 'wait':
@@ -364,9 +347,11 @@ data:
             continue
 
         print(f'Updating {image}: CVE set changed on existing task {existing["id"]}')
-        update_task(existing['id'], full_text)
+        if update_task(existing['id'], full_text):
+            updated_findings.append(f"{image}: {sev_str}")
 
     # --- Auto-close open tasks for images no longer flagged ---
+    closed_findings = []
     for t in cve_scanner_tasks:
         if t.get('status') != 'open':
             continue
@@ -380,7 +365,41 @@ data:
             continue
         print(f'Auto-closing {t["id"]}: {image} no longer flagged')
         note = f"\n* Resolved: no longer flagged as of this scan"
-        update_task(t['id'], set_status(t['text'] + note, 'closed'))
+        if update_task(t['id'], set_status(t['text'] + note, 'closed')):
+            closed_findings.append(image)
+
+    # --- Discord summary: what changed this run, not everything outstanding ---
+    # Confirmed live 2026-08-03: the old version listed every currently-vulnerable
+    # image every week regardless of whether anything was new, making the message
+    # indistinguishable from "nothing to see here" noise even on a genuinely quiet
+    # run (13 of 13 tracked images unchanged/already-triaged that week). Skips and
+    # tracked-fork suppressions are deliberately left out — they're unchanged
+    # state already visible in tm, not something this run found.
+    if new_findings or updated_findings or closed_findings:
+        lines = ['**Weekly CVE Scan** — changes this run']
+        if new_findings:
+            lines.append(f'\n🆕 New ({len(new_findings)}):')
+            lines += [f'• {f}' for f in new_findings]
+        if updated_findings:
+            lines.append(f'\n♻️ CVE set changed ({len(updated_findings)}):')
+            lines += [f'• {f}' for f in updated_findings]
+        if closed_findings:
+            lines.append(f'\n✅ Resolved, no longer flagged ({len(closed_findings)}):')
+            lines += [f'• {f}' for f in closed_findings]
+        message = '\n'.join(lines)[:2000]
+
+        r = subprocess.run(
+            ['curl', '-sf', '-X', 'POST', webhook,
+             '-H', 'Content-Type: application/json',
+             '-d', json.dumps({'username': 'k8s homelab', 'content': message})],
+            capture_output=True
+        )
+        if r.returncode != 0:
+            print('Discord notification failed', file=sys.stderr)
+        else:
+            print('Discord notification sent')
+    else:
+        print('No changes this run — skipping Discord notification')
 
     # --- Reconciliation: has upstream caught up with any tracked fork? ---
     reconcile_tasks = [t for t in existing_tasks if '<cli.reconcile-scanner' in t.get('text', '')]
