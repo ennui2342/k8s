@@ -45,16 +45,6 @@
   critical: 2
   high: 8
 
-- workload: flux-system/Deployment/image-reflector-controller
-  strategy: frozen-rebuild
-  patched_image: ghcr.io/ennui2342/image-reflector-controller:v1.1.1-patched
-  upstream_image: ghcr.io/fluxcd/image-reflector-controller:v1.1.1
-  build_recipe: trivy/patched-images/image-reflector-controller/Dockerfile
-  reason: "openssl/musl/zlib CVEs in Alpine base"
-  patched_date: "2026-05-20"
-  critical: 1
-  high: 6
-
 - workload: flux-system/Deployment/image-automation-controller
   strategy: frozen-rebuild
   patched_image: ghcr.io/ennui2342/image-automation-controller:v1.1.2-patched
