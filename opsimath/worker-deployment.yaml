@@ -69,9 +69,21 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 256Mi
+              # 256Mi undershot even idle usage (measured 310Mi live,
+              # 2026-08-06) - bumped to give real headroom above steady-state,
+              # not just chase the OOM below.
+              memory: 384Mi
             limits:
-              memory: 512Mi
+              # Confirmed live 2026-08-06: OOM-killed a Solid Queue worker
+              # subprocess at 512Mi during bulk ISFDB enrichment (~1,700 cover
+              # images downloaded + Active-Storage-analyzed) - tm task a797e567.
+              # 1.5Gi, not just the ticket's suggested 1Gi floor: real headroom
+              # exists on every node (3-4GB free, kubectl top nodes), this is
+              # a fundamentally heavier batch-processing workload than web's
+              # already-larger 768Mi, and a tighter number risks hitting the
+              # same wall later in the same ~1,078-edition remaining batch if
+              # usage grows gradually rather than staying flat per-edition.
+              memory: 1536Mi
       volumes:
         - name: storage
           persistentVolumeClaim:
