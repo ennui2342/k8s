@@ -366,6 +366,44 @@ attempt of a session (observed during initial testing; unclear whether it's Clou
 something about connection reuse) but succeeds on retry — `backoffLimit: 2` on the CronJob handles
 this automatically, no action needed unless it fails 3 times in a row.
 
+### opsimath
+
+`opsimath/web-deployment.yaml` and `opsimath/worker-deployment.yaml` reference a **locally built
+image pushed to the local registry** (`127.0.0.1:30500/opsimath:<version>`, `imagePullPolicy:
+IfNotPresent`) — same pattern as Librarium/ISFDB. Source is the standalone public repo
+`github.com/ennui2342/opsimath` (Rails 8.1 / Ruby 4.0 / Postgres 18), not anything embedded in
+this repo. On a cluster rebuild, before the web/worker pods can start successfully, clone (or
+reuse an existing `~/projects/opsimath` checkout), build, and push:
+
+```sh
+cd ~/projects/opsimath   # or: git clone https://github.com/ennui2342/opsimath.git && cd opsimath
+TAG="1.$(date +%Y%m%d).$(date +%H%M)"
+docker build -t 192.168.0.8:30500/opsimath:$TAG .
+docker push 192.168.0.8:30500/opsimath:$TAG
+```
+
+Then update `opsimath/web-deployment.yaml` and `opsimath/worker-deployment.yaml`'s `image:` to
+`127.0.0.1:30500/opsimath:$TAG` (both the main container and the worker's `wait-for-schema`
+initContainer), commit, push, let Flux reconcile.
+
+**`RAILS_MASTER_KEY` must come from `~/projects/opsimath/config/master.key`** (gitignored in that
+repo, never committed anywhere) — it decrypts `config/credentials.yml.enc`, which holds
+`secret_key_base` plus real Goodreads/Discord bot secrets. On a fresh cluster rebuild, re-derive
+`opsimath/opsimath-secret.yaml`'s `RAILS_MASTER_KEY` from that same local file (read it directly
+into the SOPS-encrypt step, never echo it to a terminal or intermediate file) — `APP_DATABASE_PASSWORD`
+can just be freshly generated, it only needs to match what's set on the bundled Postgres instance.
+
+**Postgres 18 gotcha, confirmed live 2026-08-05 (same one opsimath's own `docker-compose.yml`
+already documents):** if the `opsimath-db` pod's *first-ever* boot gets interrupted mid-`initdb`
+(pod killed/rescheduled before initialization finishes), Postgres sees a non-empty but incomplete
+data directory on restart and skips re-running init — silently leaving `pg_hba.conf` without the
+`host all all all scram-sha-256` line pod-to-pod connections need, so every other pod's connection
+fails with `no pg_hba.conf entry for host ..., no encryption`, permanently, until the data
+directory is wiped. If this happens: `kubectl delete pod opsimath-db-0 -n opsimath && kubectl
+delete pvc data-opsimath-db-0 -n opsimath` (safe pre-data; the StatefulSet recreates both) and let
+it initialize fresh, uninterrupted this time — check `kubectl exec -n opsimath opsimath-db-0 --
+cat /var/lib/postgresql/18/docker/pg_hba.conf` afterward for that line before assuming it's fixed.
+
 ### WebDAV (Zotero) — Tailscale Funnel
 
 `webdav/funnel-ingress.yaml` exposes webdav at a stable `*.ts.net` hostname via the

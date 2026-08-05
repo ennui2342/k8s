@@ -85,6 +85,7 @@ too.
 | `monitoring` | loki | `monitoring/loki.yaml` | Flux HelmRelease (6.x.x); log aggregation, 31-day retention, NFS storage |
 | `monitoring` | promtail | `monitoring/promtail.yaml` | Flux HelmRelease (6.x.x); ships pod logs to Loki |
 | `monitoring` | telegraf | `monitoring/telegraf.yaml` | Scrapes MQTT (mosquitto.default:1883), statsd, SNMP (NAS at 192.168.0.76) |
+| `opsimath` | opsimath | `opsimath/` | Rails 8.1 / Ruby 4.0 app (tm ticket `748e2eac`) — web (Puma via Thruster) + a Solid Queue worker (no Redis/Sidekiq) + a dedicated Postgres 18 instance, all in-namespace. Syncs a Goodreads "to-read"-style feed and posts Discord notifications; reaches `isfdb-adapter` over in-cluster Service DNS (`isfdb-adapter.isfdb.svc.cluster.local:8080`) — deliberately not the public Traefik hostname, which resolves inconsistently depending on whether Tailscale's DNS resolver is in a given client's path. `opsimath.k8s.ecafe.org` ingress plus a Tailscale ingress for the user's own remote access. Active Storage (cover images) PVC is `ReadWriteMany`, not this repo's usual `ReadWriteOnce` — web and worker are separate Deployments both needing concurrent write access, since Goodreads sync (which attaches covers) runs on the worker. **App source lives at `~/projects/opsimath/`, not in this repo** (public repo `ennui2342/opsimath`, same pattern as isfdb-adapter/librarium) — this repo only has the deployment manifests. See `RUNBOOK.md`'s "opsimath" section for the build/push/redeploy steps. |
 | `tailscale` | operator | `tailscale/` | Flux HelmRelease (1.x.x); `ts-k8s-connector` exposes taskmgt frontend; also runs the Funnel proxy for webdav (`ts-webdav-funnel` StatefulSet, auto-created from `webdav/funnel-ingress.yaml`) |
 | `taskmgt` | api + frontend | `taskmgt/` | Task management app; see Flux image automation below |
 | `wallabag` | wallabag | `wallabag/` | Self-hosted read-it-later app, replacing Instapaper — phase 1 of the Readwise Reader self-hosted evaluation alongside `freshrss`. NFS-backed data + images PVCs; `later.k8s.ecafe.org` ingress plus a Tailscale ingress for PWA installability testing. Runs a locally-patched image (`127.0.0.1:30500/wallabag:2.6.14-patched`, see `trivy/patched-images.yaml`) — no newer upstream `2.6.14`-line tag exists to pick up Alpine 3.19.8's musl/php81 CVE fixes. **Known gap:** still running the default `wallabag`/`wallabag` admin account as of 2026-07-29 — needs replacing post-deploy (see commit 7e62573). |
@@ -99,6 +100,7 @@ too.
 - `rss.k8s.ecafe.org` — FreshRSS (also on Tailscale, for PWA installability off-LAN)
 - `pinboard.k8s.ecafe.org` — linkding bookmark manager (also on Tailscale as `pinboard.tail611131.ts.net`)
 - `later.k8s.ecafe.org` — wallabag read-it-later (also on Tailscale, for PWA installability off-LAN)
+- `opsimath.k8s.ecafe.org` — opsimath (also on Tailscale as `opsimath.tail611131.ts.net`), for the user's own remote access
 - `tasks.k8s.ecafe.org` — taskmgt frontend (also on Tailscale as `taskmgt`)
 - `webdav.k8s.ecafe.org` — WebDAV server, internal/Tailscale access (used by desktop Zotero)
 - `webdav.tail611131.ts.net` — WebDAV server via Tailscale Funnel (`webdav/funnel-ingress.yaml`), trusted cert, works on-LAN and off (used by Zotero for Android); root URL, no path suffix. Required two one-time settings in the Tailscale admin console (not managed in this repo): "HTTPS Certificates" enabled (DNS tab) and the `funnel` node attribute granted to `tag:k8s` in the ACL policy
@@ -144,6 +146,7 @@ The age public key is embedded there. The **private key** lives only at
 - `linkding/linkding-secret.yaml` — `LD_SUPERUSER_NAME`/`LD_SUPERUSER_PASSWORD`/`LD_SUPERUSER_EMAIL` bootstrap admin credentials
 - `linkding/linkding-api-secret.yaml` — creates `linkding-api-token`, linkding's own API token, consumed by the `linkding-task-sync` CronJob
 - `wallabag/wallabag-secret.yaml` — `SYMFONY__ENV__SECRET` app secret (wallabag admin credentials are still the shipped default as of 2026-07-29 — see `tm` task 8fc03e95)
+- `opsimath/opsimath-secret.yaml` — `RAILS_MASTER_KEY` (decrypts `config/credentials.yml.enc`, which holds `secret_key_base` plus real Goodreads and Discord bot secrets — never baked into the image or committed anywhere, per the source repo's own `config/master.key`, itself gitignored there too) and `APP_DATABASE_PASSWORD` for the bundled Postgres
 
 **Secrets NOT in git (provisioned imperatively or auto-managed):**
 - `epigone/epigone.ecafe.org-production` — TLS cert (managed by cert-manager, auto-renewed)
@@ -269,6 +272,7 @@ prometheus/       — kube-prometheus-stack HelmRelease + HelmRepository + grafa
 mosquitto/        — Mosquitto deployment, configmap, service
 nas-monitor/      — CronJob: SSH to NAS, parse /proc/mdstat, Discord alert
 nfs/              — NFS provisioner Helm template
+opsimath/         — Rails app: web + Solid Queue worker Deployments, bundled Postgres 18 StatefulSet, RWX Active Storage PVC, internal + Tailscale ingress
 pvc-usage-monitor/ — CronJob: real per-PVC usage vs. requested size via NAS-side `du` over SSH (see Monitoring & Alerting)
 registry/         — local container registry (registry:2), target for future custom image builds — see RUNBOOK.md
 ring-mqtt/        — ring-mqtt deployment, PVC, service
