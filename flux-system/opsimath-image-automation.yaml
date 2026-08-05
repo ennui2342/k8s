@@ -1,0 +1,54 @@
+---
+# Watch ghcr.io/ennui2342/opsimath for new tags
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  name: opsimath
+  namespace: flux-system
+spec:
+  image: ghcr.io/ennui2342/opsimath
+  interval: 5m
+---
+# Select latest semver tag matching 1.YYYYMMDD.RUNNUMBER pattern
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  name: opsimath
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: opsimath
+  policy:
+    semver:
+      range: ">=1.0.0"
+---
+# Commit updated image tags back to this repo
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageUpdateAutomation
+metadata:
+  name: opsimath
+  namespace: flux-system
+spec:
+  interval: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  git:
+    checkout:
+      ref:
+        branch: main
+    commit:
+      author:
+        email: fluxcdbot@users.noreply.github.com
+        name: Flux
+      messageTemplate: |
+        chore: update opsimath image tag
+
+        {{range .Changed.Changes -}}
+        - {{.OldValue}} -> {{.NewValue}}
+        {{end -}}
+    push:
+      branch: main
+  update:
+    path: ./opsimath
+    strategy: Setters

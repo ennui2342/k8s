@@ -4,6 +4,7 @@ resources:
 - gotk-components.yaml
 - gotk-sync.yaml
 - taskmgt-image-automation.yaml
+- opsimath-image-automation.yaml
 - discord-alert.yaml
 - discord-webhook-secret.yaml
 patches:

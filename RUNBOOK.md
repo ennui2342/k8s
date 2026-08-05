@@ -368,12 +368,20 @@ this automatically, no action needed unless it fails 3 times in a row.
 
 ### opsimath
 
-`opsimath/web-deployment.yaml` and `opsimath/worker-deployment.yaml` reference a **locally built
-image pushed to the local registry** (`127.0.0.1:30500/opsimath:<version>`, `imagePullPolicy:
-IfNotPresent`) — same pattern as Librarium/ISFDB. Source is the standalone public repo
-`github.com/ennui2342/opsimath` (Rails 8.1 / Ruby 4.0 / Postgres 18), not anything embedded in
-this repo. On a cluster rebuild, before the web/worker pods can start successfully, clone (or
-reuse an existing `~/projects/opsimath` checkout), build, and push:
+Fully automated as of 2026-08-06, same pattern as `taskmgt/` — **not** the manually-built
+local-registry pattern used by Librarium/ISFDB. Source is the standalone public repo
+`github.com/ennui2342/opsimath` (Rails 8.1 / Ruby 4.0 / Postgres 18); its own
+`.github/workflows/build.yml` builds and pushes a real monotonic version tag
+(`1.YYYYMMDD.RUNNUMBER`) to `ghcr.io/ennui2342/opsimath` on every push to `master`. Flux's own
+image automation (`flux-system/opsimath-image-automation.yaml`: `ImageRepository` scans every 5m,
+`ImagePolicy` picks the newest semver tag, `ImageUpdateAutomation` commits the updated tag back to
+`opsimath/web-deployment.yaml`/`worker-deployment.yaml` via the `$imagepolicy` Setter markers next
+to each `image:` line) picks it up and redeploys automatically — no manual build/push/redeploy
+step for routine updates, `taskmgt/`'s own RUNBOOK entry doesn't exist for the same reason.
+
+**Only needed on a from-scratch cluster rebuild, before Flux's image automation has ever run once**
+(nothing to scan/update yet): manually build and push a first image so the Deployments have
+something to pull —
 
 ```sh
 cd ~/projects/opsimath   # or: git clone https://github.com/ennui2342/opsimath.git && cd opsimath
@@ -382,9 +390,12 @@ docker build -t 192.168.0.8:30500/opsimath:$TAG .
 docker push 192.168.0.8:30500/opsimath:$TAG
 ```
 
-Then update `opsimath/web-deployment.yaml` and `opsimath/worker-deployment.yaml`'s `image:` to
-`127.0.0.1:30500/opsimath:$TAG` (both the main container and the worker's `wait-for-schema`
-initContainer), commit, push, let Flux reconcile.
+Then update `opsimath/web-deployment.yaml` and `opsimath/worker-deployment.yaml`'s `image:` (both
+Deployments' main container plus the worker's `wait-for-schema` initContainer — three lines total,
+keep the `$imagepolicy` Setter comment intact on each) to `127.0.0.1:30500/opsimath:$TAG`, commit,
+push, let Flux reconcile. Once CI has pushed a real tag to GHCR and the image automation has run at
+least once, this manual path shouldn't be needed again — the Setter markers mean Flux will happily
+overwrite whatever tag is there, local-registry or GHCR, with the newest GHCR one on its next scan.
 
 **`RAILS_MASTER_KEY` must come from `~/projects/opsimath/config/master.key`** (gitignored in that
 repo, never committed anywhere) — it decrypts `config/credentials.yml.enc`, which holds

@@ -33,7 +33,11 @@ spec:
         # db:schema:load/migrate, not Solid Queue-specific) as a simple,
         # universal "schema exists" signal.
         - name: wait-for-schema
-          image: 127.0.0.1:30500/opsimath:1.20260805.2022
+          # Same image/tag as the main container below - kept in lockstep via
+          # the same Setter marker so this initContainer (just running
+          # psql/pg_isready from the app image) never drifts from what
+          # actually ships.
+          image: ghcr.io/ennui2342/opsimath:1.20260805.5 # {"$imagepolicy": "flux-system:opsimath"}
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
@@ -52,7 +56,11 @@ spec:
               done
       containers:
         - name: opsimath-worker
-          image: 127.0.0.1:30500/opsimath:1.20260805.2022
+          # Built and pushed by opsimath's own CI (.github/workflows/build.yml)
+          # on every push to master; Flux image automation (see
+          # flux-system/opsimath-image-automation.yaml) updates this tag
+          # automatically - the Setter marker below is what it looks for.
+          image: ghcr.io/ennui2342/opsimath:1.20260805.5 # {"$imagepolicy": "flux-system:opsimath"}
           imagePullPolicy: IfNotPresent
           command: ["./bin/rails", "solid_queue:start"]
           envFrom:
