@@ -5,4 +5,5 @@ resources:
   - isfdb-secret.yaml
   - mariadb-statefulset.yaml
   - adapter-deployment.yaml
+  - ingress.yaml
   - refresh-cronjob.yaml
