@@ -23,7 +23,7 @@ spec:
                     operator: DoesNotExist
       containers:
       - name: homeassistant
-        image: 127.0.0.1:30500/home-assistant:2026.5.3-patched
+        image: 127.0.0.1:30500/home-assistant:2026.7.4-patched
         imagePullPolicy: IfNotPresent
         ports:
           - containerPort: 8123

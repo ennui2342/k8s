@@ -77,13 +77,13 @@
 
 - workload: home-assistant/Deployment/homeassistant
   strategy: frozen-rebuild
-  patched_image: ghcr.io/ennui2342/home-assistant:2026.5.3-patched
-  upstream_image: homeassistant/home-assistant:2026.5.3
+  patched_image: 127.0.0.1:30500/home-assistant:2026.7.4-patched
+  upstream_image: homeassistant/home-assistant:2026.7.4
   build_recipe: trivy/patched-images/home-assistant/Dockerfile
-  reason: "openssl/bind/lcms2 CVEs in Alpine base"
-  patched_date: "2026-05-25"
+  reason: "Rebased 2026-08-05 from 2026.5.3 onto 2026.7.4 (was 2 CRITICAL + 20 HIGH; upstream's own Alpine 3.24.1 base layer improved to 0 CRITICAL + 35 HIGH at 2026.7.4 but wasn't fully clean). apk upgrade closes the remaining Alpine-base gap (verified via local trivy 0.70.0 scan: Alpine layer 0 CRITICAL + 0 HIGH after this patch). Changelog 2026.5->2026.7 reviewed (official release-notes 'Backward-incompatible changes' sections for 2026.6 and 2026.7): none apply — no affected integrations in use, no legacy `platform: template` YAML anywhere in configuration.yaml/automations.yaml/scripts.yaml (grepped live in-pod), zone automations use coordinate-based `trigger/condition: zone` unaffected by the 2026.7 zone person-count rework. Residual 2 CRITICAL + 76 HIGH are Python/Go/Rust language deps baked into the image (python-pkg/gobinary/rustbinary trivy targets), not Alpine OS packages — out of scope for this apk-upgrade patch strategy, same residual class as the flux-controller forks. patched_image migrated from the old ghcr.io/ennui2342/*-patched pattern to the local registry + IfNotPresent as part of this rebuild (the Deployment manifest was already on the registry pattern; this entry's metadata was stale)."
+  patched_date: "2026-08-05"
   critical: 2
-  high: 20
+  high: 76
 
 - workload: monitoring/Deployment/telegraf
   strategy: frozen-rebuild
