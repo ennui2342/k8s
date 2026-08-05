@@ -8323,7 +8323,7 @@ spec:
             resourceFieldRef:
               containerName: manager
               resource: limits.memory
-        image: 127.0.0.1:30500/kustomize-controller:v1.8.4-patched
+        image: 127.0.0.1:30500/kustomize-controller:v1.9.4-patched
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:

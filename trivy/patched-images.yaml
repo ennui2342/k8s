@@ -57,13 +57,13 @@
 
 - workload: flux-system/Deployment/kustomize-controller
   strategy: frozen-rebuild
-  patched_image: ghcr.io/ennui2342/kustomize-controller:v1.8.4-patched
-  upstream_image: ghcr.io/fluxcd/kustomize-controller:v1.8.4
+  patched_image: 127.0.0.1:30500/kustomize-controller:v1.9.4-patched
+  upstream_image: ghcr.io/fluxcd/kustomize-controller:v1.9.4
   build_recipe: trivy/patched-images/kustomize-controller/Dockerfile
-  reason: "gnutls/nghttp2 CVEs in Alpine base"
-  patched_date: "2026-05-21"
-  critical: 1
-  high: 5
+  reason: "Rebased 2026-08-05 from v1.8.4 onto v1.9.4 (gnutls/nghttp2 CVEs fixed upstream; Alpine base now scans clean at 0 CRITICAL + 0 HIGH after apk upgrade, verified via local trivy 0.70.0 scan). Changelog v1.8.4->v1.9.4 reviewed: only behavior change is v1.9.0's StrictPostBuildSubstitutions feature gate going default-on, which only affects Kustomizations using spec.postBuild.substitute — this repo has none, confirmed via repo-wide grep. Residual: golang.org/x/text CVE-2026-56852 + a grpc HIGH (GHSA-hrxh-6v49-42gf), both Go module deps baked into the binary, not Alpine OS packages — out of scope for this apk-upgrade patch strategy, same residual class as the image-automation-controller fork. patched_image migrated from the old ghcr.io/ennui2342/*-patched + imagePullPolicy: Never pattern to the local registry + IfNotPresent as part of this rebuild."
+  patched_date: "2026-08-05"
+  critical: 0
+  high: 2
 
 - workload: default/DaemonSet/mdns-repeater
   strategy: frozen-rebuild
