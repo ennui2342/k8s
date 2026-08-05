@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: opsimath-db
+  namespace: opsimath
+spec:
+  clusterIP: None
+  selector:
+    app: opsimath-db
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: opsimath-db
+  namespace: opsimath
+spec:
+  serviceName: opsimath-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opsimath-db
+  template:
+    metadata:
+      labels:
+        app: opsimath-db
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      containers:
+        - name: postgres
+          image: postgres:18
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            # config/database.yml's production block hardcodes username: app
+            # (not configurable via DATABASE_USERNAME) - the role name here
+            # must match exactly.
+            - name: POSTGRES_USER
+              value: app
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: opsimath-secrets
+                  key: APP_DATABASE_PASSWORD
+            # No POSTGRES_DB set deliberately - config/database.yml's
+            # production block defines 4 separate databases on this one
+            # role (app_production, _cache, _queue, _cable), all created by
+            # bin/rails db:prepare (web's entrypoint runs this on every
+            # start) rather than by this StatefulSet. The POSTGRES_USER
+            # role has CREATEDB rights by default in this image, which is
+            # all db:prepare needs.
+          volumeMounts:
+            # Postgres 18's official image changed convention: it wants a
+            # single mount at /var/lib/postgresql (manages its own
+            # version-specific subdirectory), not .../postgresql/data -
+            # confirmed in opsimath's own docker-compose.yml comment
+            # (a real failed boot before that fix). Matching it here.
+            - name: data
+              mountPath: /var/lib/postgresql
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "app"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "app"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: nfs-client
+        resources:
+          requests:
+            storage: 10Gi

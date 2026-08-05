@@ -1,0 +1,22 @@
+# Non-sensitive configuration for opsimath. Edit and re-apply, then:
+#   kubectl rollout restart deploy/opsimath-web -n opsimath
+#   kubectl rollout restart deploy/opsimath-worker -n opsimath
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opsimath-config
+  namespace: opsimath
+data:
+  RAILS_ENV: "production"
+  DATABASE_HOST: "opsimath-db"
+  DATABASE_PORT: "5432"
+  # CRITICAL (per ticket 748e2eac): must be the in-cluster Service DNS
+  # address, not the public isfdb-adapter.k8s.ecafe.org Traefik hostname -
+  # that hostname resolves inconsistently depending on whether Tailscale's
+  # DNS resolver is in the path on a given client, confirmed during
+  # opsimath's own dev work. Doesn't apply pod-to-pod inside the cluster,
+  # but use the real address regardless. Port 8080 (the Service's
+  # cluster-internal port), not 80 (the Traefik Ingress port) - the
+  # opsimath docker-compose.yml comment flags this exact port mix-up as a
+  # real bug caught by testing connectivity.
+  ISFDB_ADAPTER_URL: "http://isfdb-adapter.isfdb.svc.cluster.local:8080"

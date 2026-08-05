@@ -31,3 +31,4 @@ resources:
   - isfdb/
   - pvc-usage-monitor/
   - registry/
+  - opsimath/

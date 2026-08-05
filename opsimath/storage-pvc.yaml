@@ -1,0 +1,25 @@
+# Active Storage local-disk storage (config/storage.yml's "local" service) -
+# book cover images. Without this PVC, covers are silently lost on every
+# pod restart/redeploy (ephemeral container filesystem).
+#
+# ReadWriteMany, not ReadWriteOnce like this repo's other single-replica-app
+# PVCs (librarium, wallabag): web and worker are two separate Deployments
+# that both need concurrent write access to the same ./storage directory -
+# Goodreads sync (which attaches cover images) runs on the worker via Solid
+# Queue, not the web process. RWO would only reliably work if both pods
+# always land on the same node, which the soft worker-preference affinity
+# doesn't guarantee. nfs-subdir-external-provisioner has no node-locking
+# mechanism (it's just an NFS subdirectory mount), so RWX works natively -
+# first RWX PVC in this repo, but not a new capability, just the first
+# manifest that actually needs it.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: opsimath-storage
+  namespace: opsimath
+spec:
+  accessModes: ["ReadWriteMany"]
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 10Gi

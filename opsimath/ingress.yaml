@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: opsimath
+  namespace: opsimath
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: opsimath.k8s.ecafe.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: opsimath-web
+                port:
+                  number: 80

@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opsimath-worker
+  namespace: opsimath
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # shares the RWX storage PVC with web, but keep rollout behavior consistent
+  selector:
+    matchLabels:
+      app: opsimath-worker
+  template:
+    metadata:
+      labels:
+        app: opsimath-worker
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      initContainers:
+        # Waits for web's entrypoint (db:prepare, on every "rails server"
+        # start) to have created the schema, rather than calling db:prepare
+        # itself here too - the source docker-compose.yml documents a
+        # confirmed live race (PG::UniqueViolation on CREATE DATABASE) when
+        # two processes call db:prepare concurrently against a fresh
+        # database. Checking for schema_migrations (created by any
+        # db:schema:load/migrate, not Solid Queue-specific) as a simple,
+        # universal "schema exists" signal.
+        - name: wait-for-schema
+          image: 127.0.0.1:30500/opsimath:1.20260805.2022
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: opsimath-config
+            - secretRef:
+                name: opsimath-secrets
+          command:
+            - bash
+            - -c
+            - |
+              until pg_isready -h "$DATABASE_HOST" -p "$DATABASE_PORT" -U app \
+                && PGPASSWORD="$APP_DATABASE_PASSWORD" psql -h "$DATABASE_HOST" -U app -d app_production \
+                     -c 'SELECT 1 FROM schema_migrations LIMIT 1' > /dev/null 2>&1; do
+                echo 'Waiting for db schema (opsimath-web runs db:prepare on startup)...'
+                sleep 3
+              done
+      containers:
+        - name: opsimath-worker
+          image: 127.0.0.1:30500/opsimath:1.20260805.2022
+          imagePullPolicy: IfNotPresent
+          command: ["./bin/rails", "solid_queue:start"]
+          envFrom:
+            - configMapRef:
+                name: opsimath-config
+            - secretRef:
+                name: opsimath-secrets
+          volumeMounts:
+            # Goodreads sync (GoodreadsSyncJob, runs via Solid Queue) attaches
+            # cover images - the worker needs write access to the same
+            # storage directory as web, not just read access.
+            - name: storage
+              mountPath: /rails/storage
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: opsimath-storage
