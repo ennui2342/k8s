@@ -87,13 +87,13 @@
 
 - workload: monitoring/Deployment/telegraf
   strategy: frozen-rebuild
-  patched_image: ghcr.io/ennui2342/telegraf:1.38.3-patched
-  upstream_image: telegraf:1.38.3
+  patched_image: 127.0.0.1:30500/telegraf:1.39.2-patched
+  upstream_image: telegraf:1.39.2
   build_recipe: trivy/patched-images/telegraf/Dockerfile
-  reason: "gnutls/libcap/nghttp2 CVEs in Debian bookworm base"
-  patched_date: "2026-06-08"
-  critical: 2
-  high: 5
+  reason: "Rebased 2026-08-06 from telegraf:1.38.3 onto telegraf:1.39.2 (gnutls/libcap/nghttp2 CVEs in the Debian bookworm base now fixed upstream; Debian 12.15 layer scans clean at 0 CRITICAL + 0 HIGH fixable after apt upgrade, verified via local trivy 0.70.0 scan with --ignore-unfixed — improvement over 1.38.3's 5 CRITICAL + 44 HIGH). Changelog 1.38.3->1.39.0->1.39.1->1.39.2 reviewed (official GitHub release notes): no breaking changes apply to this config's [agent]/outputs.influxdb(x2)/inputs.statsd/inputs.mqtt_consumer/processors.regex/inputs.snmp setup. Residual: 1 CRITICAL (github.com/rclone/rclone CVE-2026-49980, fixed 1.74.3) + 1 HIGH (google.golang.org/grpc GHSA-hrxh-6v49-42gf, fixed 1.82.1), both Go module deps baked into the telegraf binary, not Debian OS packages — out of scope for this apt-upgrade patch strategy, same residual class as the flux-controller and home-assistant forks. patched_image migrated from the old ghcr.io/ennui2342/*-patched pattern to the local registry as part of this rebuild (the Deployment manifest was already on the registry pattern; this entry's metadata was stale)."
+  patched_date: "2026-08-06"
+  critical: 1
+  high: 1
 
 - workload: home-assistant/Deployment/ring-mqtt
   strategy: frozen-rebuild
