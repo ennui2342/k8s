@@ -573,7 +573,7 @@ spec:
           restartPolicy: OnFailure
           initContainers:
           - name: scan
-            image: 127.0.0.1:30500/aquasec-trivy:0.70.0-patched
+            image: 127.0.0.1:30500/aquasec-trivy:0.72.0-patched
             imagePullPolicy: IfNotPresent
             command:
             - /bin/sh
@@ -608,7 +608,7 @@ spec:
             - name: reconcile-scripts
               mountPath: /scripts
           - name: reconcile
-            image: 127.0.0.1:30500/aquasec-trivy:0.70.0-patched
+            image: 127.0.0.1:30500/aquasec-trivy:0.72.0-patched
             imagePullPolicy: IfNotPresent
             command:
             - /bin/sh

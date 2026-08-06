@@ -107,13 +107,13 @@
 
 - workload: monitoring/CronJob/cve-scanner
   strategy: frozen-rebuild
-  patched_image: ghcr.io/ennui2342/aquasec-trivy:0.70.0-patched
-  upstream_image: aquasec/trivy:0.70.0
+  patched_image: 127.0.0.1:30500/aquasec-trivy:0.72.0-patched
+  upstream_image: aquasec/trivy:0.72.0
   build_recipe: trivy/patched-images/aquasec-trivy/Dockerfile
-  reason: "openssl/musl/nghttp2/zlib CVEs in Alpine base"
-  patched_date: "2026-05-30"
-  critical: 1
-  high: 7
+  reason: "Rebased 2026-08-06 from aquasec/trivy:0.70.0 onto aquasec/trivy:0.72.0 (openssl/musl/nghttp2/zlib CVEs in Alpine base; plain 0.72.0 upstream still scanned 0 CRITICAL + 16 HIGH per <cli.reconcile-scanner's finding, not fully clean). Changelog 0.70.0->0.71.0->0.71.1->0.71.2->0.72.0 reviewed (official CHANGELOG.md): only breaking change is 0.72.0's 'migrate docker config to dockers_v2' (#10783), which is CI-only — it changes how the aquasec/trivy Docker Hub image is *published* (drops intermediate arch-suffixed tags like :X-amd64 in favor of buildx multi-arch manifests), not the CLI itself; this Dockerfile pins the plain aquasec/trivy:0.72.0 tag, not an arch-suffixed one, confirmed via repo grep. No CLI flag deprecations/removals in range. After apk upgrade, rebuilt image scans at 0 CRITICAL + 5 HIGH (verified via local `trivy image` self-scan with --ignore-unfixed) — better than the 16 HIGH on plain 0.72.0. Residual 5 HIGH (golang.org/x/text CVE-2026-56852, google.golang.org/grpc GHSA-hrxh-6v49-42gf, oras.land/oras-go/v2 CVE-2026-50151 + CVE-2026-50163, stdlib CVE-2026-39822) are all Go module deps baked into the trivy binary, not Alpine OS packages — out of scope for this apk-upgrade patch strategy, same residual class as the flux-controller/telegraf forks. patched_image migrated from the old ghcr.io/ennui2342/*-patched pattern to the local registry as part of this rebuild (the CronJob manifest was already on the registry pattern; this entry's metadata was stale)."
+  patched_date: "2026-08-06"
+  critical: 0
+  high: 5
 
 - workload: monitoring/CronJob/health-monitor
   strategy: live-upgrade

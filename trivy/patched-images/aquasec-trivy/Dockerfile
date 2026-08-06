@@ -1,8 +1,10 @@
-# Best-effort reconstruction of the 2026-05-30 patch (commit 1b6892d).
-# Resolves 1 CRITICAL + 7 HIGH CVEs: openssl 3.5.5-r0->3.5.6-r0, musl
-# 1.2.5-r21->r23, nghttp2 1.68.0-r0->1.69.0-r0, zlib 1.3.1-r2->1.3.2-r0.
+# Rebased 2026-08-06 from aquasec/trivy:0.70.0 onto aquasec/trivy:0.72.0
+# (upstream app release, not just an Alpine base bump — see
+# trivy/patched-images.yaml's entry for this workload for the changelog
+# review and residual CVE count). Alpine base still needs an apk upgrade on
+# top of the new app version to reach 0 CRITICAL + 0 HIGH fixable.
 # This is the image the trivy CronJob itself uses to scan the cluster — take
 # care not to leave the fleet without a working scanner mid-rebuild.
-FROM aquasec/trivy:0.70.0
+FROM aquasec/trivy:0.72.0
 USER root
 RUN apk update && apk upgrade --no-cache
