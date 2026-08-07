@@ -165,6 +165,16 @@
   critical: 0
   high: 0
 
+- workload: freshrss/Deployment/freshrss
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/freshrss:1.29.1-patched
+  upstream_image: freshrss/freshrss:1.29.1
+  build_recipe: trivy/patched-images/freshrss/Dockerfile
+  reason: "apache2/php8.4/libcurl4t64/libexpat1 (and 15 more) CVEs in Debian 13.5 (trixie) base; no newer 1.29.1-line upstream tag exists (Docker Hub last rebuilt 2026-05-20, digest unchanged since, and 1.29.1 is still the latest FreshRSS release upstream). Resolves all fixable CVEs found at patch time via trixie-security dist-upgrade — verified via local trivy 0.70.0 scan: 0 CRITICAL + 0 HIGH after patch (Debian layer upgraded to 13.6). FreshRSS app version unchanged, pure OS-package patch-level bump, no breaking changes."
+  patched_date: "2026-08-07"
+  critical: 2
+  high: 17
+
 - workload: wallabag/Deployment/wallabag
   strategy: frozen-rebuild
   patched_image: 127.0.0.1:30500/wallabag:2.6.14-patched

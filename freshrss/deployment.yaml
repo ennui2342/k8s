@@ -27,7 +27,8 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: freshrss
-          image: freshrss/freshrss:1.29.1
+          image: 127.0.0.1:30500/freshrss:1.29.1-patched
+          imagePullPolicy: IfNotPresent
           ports:
             - name: freshrss
               containerPort: 80
