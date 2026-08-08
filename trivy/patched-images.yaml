@@ -10,10 +10,13 @@
 #   the manifest back to `upstream_image` and deleting the Dockerfile + this
 #   entry.
 # strategy: live-upgrade — the manifest runs a plain upstream image but
-#   upgrades OS packages live at every pod/container start (see
-#   health-monitor/health-monitor.yaml). No separate patched_image or
-#   Dockerfile. Reverting means removing the live-upgrade command and going
-#   back to the image's normal entrypoint, once upstream no longer needs it.
+#   upgrades OS packages live at every pod/container start. No separate
+#   patched_image or Dockerfile. Reverting means removing the live-upgrade
+#   command and going back to the image's normal entrypoint, once upstream no
+#   longer needs it. No current workload uses this strategy — health-monitor
+#   was the last one, migrated to the shared k8s-toolbox frozen-tag image
+#   (127.0.0.1:30500/k8s-toolbox, see CLAUDE.md's "Monitoring & Alerting")
+#   2026-07-27, which is scanned/rebuilt directly and isn't tracked here.
 # strategy: deferred-migration — the base OS is EOL (no CVE fix will ever
 #   ship); the real fix is an application-level version migration, not a CVE
 #   patch. `patched_image` is set to the plain image ref currently deployed
@@ -114,16 +117,6 @@
   patched_date: "2026-08-06"
   critical: 0
   high: 5
-
-- workload: monitoring/CronJob/health-monitor
-  strategy: live-upgrade
-  patched_image: null
-  upstream_image: alpine/k8s:1.32.13
-  build_recipe: null
-  reason: "final build of the 1.32.x line (Alpine edge, not rebuilt since 2026-03-23); no newer 1.32.x tag exists and 1.33.x still ships stale packages. Packages upgraded live via apk at every pod start instead of a frozen tag."
-  patched_date: "2026-05-04"
-  critical: 0
-  high: 0
 
 - workload: default/StatefulSet/web
   strategy: deferred-migration
