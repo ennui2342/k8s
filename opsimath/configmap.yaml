@@ -20,3 +20,16 @@ data:
   # opsimath docker-compose.yml comment flags this exact port mix-up as a
   # real bug caught by testing connectivity.
   ISFDB_ADAPTER_URL: "http://isfdb-adapter.isfdb.svc.cluster.local:8080"
+  # cover-compare sidecar (tm task b54a5adc) - in-cluster Service DNS, same
+  # reasoning as ISFDB_ADAPTER_URL above. Only opsimath-worker actually calls
+  # this (Enrichment::CoverCompareClient, background jobs only); harmless
+  # for web to also receive it, kept in the same shared ConfigMap rather than
+  # splitting one out for a var web just never reads. The sidecar Deployment
+  # itself doesn't exist yet - its image (ghcr.io/ennui2342/opsimath-cover-compare)
+  # hasn't been published, since the source is still uncommitted as of this
+  # commit. Wiring the var in now anyway is harmless: this repo has no
+  # checksum/config restart mechanism for opsimath's Deployments, so this
+  # change alone won't restart running pods - the next real rollout (when
+  # opsimath's own image updates to a build that actually calls this client)
+  # picks it up for free, no separate restart needed.
+  COVER_COMPARE_URL: "http://opsimath-cover-compare.opsimath.svc.cluster.local:8000"

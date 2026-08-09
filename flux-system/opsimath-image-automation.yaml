@@ -22,7 +22,39 @@ spec:
     semver:
       range: ">=1.0.0"
 ---
-# Commit updated image tags back to this repo
+# Watch ghcr.io/ennui2342/opsimath-cover-compare for new tags (tm task b54a5adc).
+# No separate ImageUpdateAutomation for this one - see the comment on the
+# existing one below for why: a second automation watching the same
+# ./opsimath path would race it for commits to the same files.
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  name: opsimath-cover-compare
+  namespace: flux-system
+spec:
+  image: ghcr.io/ennui2342/opsimath-cover-compare
+  interval: 5m
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  name: opsimath-cover-compare
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: opsimath-cover-compare
+  policy:
+    semver:
+      range: ">=1.0.0"
+---
+# Commit updated image tags back to this repo. Deliberately singular for the
+# whole ./opsimath path, not one per component: an ImageUpdateAutomation
+# scans its whole update.path for ANY "$imagepolicy" Setter marker,
+# regardless of which ImagePolicy it names - a second automation pointed at
+# the same path (one per component, matching one-ImageRepository/
+# ImagePolicy-per-component) would have two controllers independently
+# committing to the same files on their own intervals, racing each other.
+# Covers opsimath (web/worker) and opsimath-cover-compare both.
 apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageUpdateAutomation
 metadata:
@@ -42,7 +74,7 @@ spec:
         email: fluxcdbot@users.noreply.github.com
         name: Flux
       messageTemplate: |
-        chore: update opsimath image tag
+        chore: update opsimath image tag(s)
 
         {{range .Changed.Changes -}}
         - {{.OldValue}} -> {{.NewValue}}
