@@ -8,5 +8,6 @@ resources:
   - storage-pvc.yaml
   - web-deployment.yaml
   - worker-deployment.yaml
+  - cover-compare-deployment.yaml
   - ingress.yaml
   - tailscale-ingress.yaml

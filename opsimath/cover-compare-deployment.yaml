@@ -1,0 +1,74 @@
+# cover-compare sidecar (tm task b54a5adc) - stateless Python/FastAPI
+# image-similarity service (ORB+RANSAC), no DB, no secrets, no persistent
+# storage. Called only by opsimath-worker (Enrichment::CoverCompareClient,
+# background jobs) via COVER_COMPARE_URL - never web, never anything
+# outside the cluster, hence ClusterIP only, no Ingress.
+apiVersion: v1
+kind: Service
+metadata:
+  name: opsimath-cover-compare
+  namespace: opsimath
+spec:
+  type: ClusterIP
+  selector:
+    app: opsimath-cover-compare
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opsimath-cover-compare
+  namespace: opsimath
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opsimath-cover-compare
+  template:
+    metadata:
+      labels:
+        app: opsimath-cover-compare
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      containers:
+        - name: opsimath-cover-compare
+          # Built and pushed by opsimath's own CI (.github/workflows/build.yml,
+          # build-cover-compare job) on every push to master; Flux image
+          # automation (flux-system/opsimath-image-automation.yaml - reuses
+          # the existing "opsimath" ImageUpdateAutomation, see that file's
+          # comment for why not a second one) updates this tag automatically.
+          image: ghcr.io/ennui2342/opsimath-cover-compare:1.20260809.18 # {"$imagepolicy": "flux-system:opsimath-cover-compare"}
+          imagePullPolicy: IfNotPresent
+          # Already runs as non-root uid 1000 inside the image itself
+          # (Dockerfile), no securityContext override needed.
+          ports:
+            - containerPort: 8000
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
