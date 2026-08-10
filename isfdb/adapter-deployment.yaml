@@ -37,7 +37,7 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: isfdb-adapter
-          image: 127.0.0.1:30500/isfdb-mirror:1.20260803.1744
+          image: 127.0.0.1:30500/isfdb-mirror:1.20260810.2232
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
