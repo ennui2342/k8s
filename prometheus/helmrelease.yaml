@@ -45,7 +45,18 @@ spec:
     # --- Grafana ---
     grafana:
       image:
-        tag: "11.6.16"  # CVE fix: alpine 3.24.1 openssl/musl/zlib (1 CRITICAL + 6 HIGH); no newer 11.6.14-security tag exists, 11.6.16 supersedes it on the 11.6.x branch
+        # 11.6.16 is the newest tag on the 11.6.x line (grafana has moved on
+        # to 12.x/13.x, a major-version jump out of scope for a routine CVE
+        # pass). Locally patched instead: Alpine 3.24.1 base's c-ares/curl
+        # had fixes already published in the same Alpine 3.24 repos, so a
+        # same-base-version apk upgrade resolves all 9 HIGH CVEs
+        # (c-ares 1.34.6->1.34.8-r0, curl/libcurl 8.20.0->8.21.0-r0) without
+        # a grafana version change. See trivy/patched-images.yaml and
+        # trivy/patched-images/grafana/Dockerfile.
+        registry: "127.0.0.1:30500"
+        repository: "grafana"
+        tag: "11.6.16-patched"
+        pullPolicy: IfNotPresent
 
       downloadDashboardsImage:
         tag: "8.20.0"  # CVE fix: Alpine openssl (2 CRITICAL + 11 HIGH)
