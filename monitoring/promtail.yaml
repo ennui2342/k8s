@@ -23,6 +23,20 @@ spec:
         name: grafana
         namespace: monitoring
   values:
+    # Promtail is fully EOL upstream (deprecated in favor of Grafana Alloy,
+    # commercial support ended 2026-02-28); grafana/promtail:3.6.11
+    # (published 2026-05-13) is the last image Grafana will ever publish for
+    # it, and the grafana/helm-charts `promtail` chart hasn't had a release
+    # since 6.17.1 (still appVersion 3.5.1) - so this stays on chart 6.17.x
+    # but overrides the image to a locally-rebuilt tag that closes the
+    # residual openssl CVE plain 3.6.11 still ships. See
+    # trivy/patched-images.yaml and trivy/patched-images/promtail/Dockerfile.
+    image:
+      registry: "127.0.0.1:30500"
+      repository: "promtail"
+      tag: "3.6.11-patched"
+      pullPolicy: IfNotPresent
+
     config:
       clients:
         - url: http://loki:3100/loki/api/v1/push

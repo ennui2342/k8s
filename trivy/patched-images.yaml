@@ -197,3 +197,13 @@
   patched_date: "2026-08-13"
   critical: 0
   high: 5
+
+- workload: monitoring/DaemonSet/promtail
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/promtail:3.6.11-patched
+  upstream_image: grafana/promtail:3.6.11
+  build_recipe: trivy/patched-images/promtail/Dockerfile
+  reason: "2 HIGH CVEs (CVE-2025-68973 gpgv, CVE-2026-45447 openssl/libssl3t64) in the ubuntu 24.04 base of grafana/promtail:3.5.1. Promtail is fully EOL upstream (deprecated in favor of Grafana Alloy, commercial support ended 2026-02-28) — grafana/promtail:3.6.11 (published 2026-05-13) is the last image Grafana will ever publish for it, so there is no future upstream tag to wait for or revert to; the grafana/helm-charts `promtail` chart also hasn't had a release since 6.17.1 (still appVersion 3.5.1), so the HelmRelease stays pinned to chart 6.17.x with values.image.{registry,repository,tag} overridden to this fork instead of bumping the chart. Rebased onto plain 3.6.11 rather than staying on the 3.5.x line: 3.6.11 already resolves the gpgv CVE (Ubuntu's noble-security sync landed after promtail's 3.5.x rebuilds needed it) but still ships openssl/libssl3t64 3.0.13-0ubuntu3.9, short of the fixed 3.0.13-0ubuntu3.11 — an apt upgrade on top closes it. Verified via local trivy 0.70.0 scan (--ignore-unfixed): plain 3.5.1 was 40 HIGH/CRITICAL fixable, plain 3.6.11 27, patched image's ubuntu/os-pkgs layer is 0 CRITICAL + 0 HIGH after apt upgrade (residual 27 HIGH are golang.org/x/*, stdlib, prometheus, docker, grpc Go module deps baked into the promtail binary, not Ubuntu OS packages — out of scope for this apt-upgrade strategy, same residual class as the flux-controller/telegraf/home-assistant forks). Loki v3.5/v3.6 release notes reviewed for the 3.5.1->3.6.11 binary version bump: no promtail-config breaking changes listed (only Loki-server-side items — Loki UI plugin move, BoltDB deprecation, OTel tracing switch) — promtail itself has had no functional development since its Loki-3.0-era deprecation, every release in this range is maintenance/security/dependency-only, and this deployment's config is chart defaults plus a single clients[0].url."
+  patched_date: "2026-08-13"
+  critical: 0
+  high: 2
