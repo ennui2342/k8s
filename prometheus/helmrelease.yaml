@@ -59,7 +59,19 @@ spec:
         pullPolicy: IfNotPresent
 
       downloadDashboardsImage:
-        tag: "8.20.0"  # CVE fix: Alpine openssl (2 CRITICAL + 11 HIGH)
+        # curlimages/curl:8.20.0 (Alpine 3.24.1) carried 5 HIGH CVEs
+        # (c-ares CVE-2026-33630, openssl CVE-2026-45447, libssh2
+        # CVE-2026-55199/CVE-2026-55200/CVE-2026-7598). Plain upstream
+        # 8.21.0 fixes openssl/libssh2 but still ships c-ares 1.34.6-r0,
+        # not the fixed 1.34.8-r0 (verified live) — same gap the grafana
+        # image hit one day earlier on the same Alpine 3.24.1 base.
+        # Locally patched: same-base-version apk upgrade closes it. See
+        # trivy/patched-images.yaml and
+        # trivy/patched-images/curlimages-curl/Dockerfile.
+        registry: "127.0.0.1:30500"
+        repository: "curlimages-curl"
+        tag: "8.21.0-patched"
+        pullPolicy: IfNotPresent
 
       admin:
         existingSecret: grafana-admin
