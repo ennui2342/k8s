@@ -84,10 +84,12 @@ spec:
     write:
       replicas: 0
 
-    # Override k8s-sidecar to patched version (fixes CVE-2025-15467, CVE-2026-31789 + 8 HIGH CVEs via Alpine 3.23)
+    # Override k8s-sidecar to patched version (fixes CVE-2025-15467, CVE-2026-31789 + 8 HIGH CVEs via Alpine 3.23;
+    # bumped 2026-08-14 to 2.8.2 for CVE-2026-45447 - openssl heap UAF in PKCS7_verify(), fixed via
+    # Alpine package upgrade to libcrypto3/libssl3 3.5.7-r0, confirmed via `apk info` in the built image)
     sidecar:
       image:
-        tag: "2.7.3"
+        tag: "2.8.2"
 
     # Disable extras not needed for single-binary homelab
     gateway:
