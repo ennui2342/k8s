@@ -228,6 +228,24 @@ mirror config — not the `192.168.0.8` address used for the push, that's Mac-on
 `imagePullPolicy: IfNotPresent`. No SSH, no per-node `ctr images import`, kubelet just
 pulls it the normal way on whichever node schedules the pod.
 
+**If `docker push` fails with a TLS/EOF error** (curl to `http://192.168.0.8:30500/v2/`
+works fine, but the push tries `https://` and fails) — `~/.docker/daemon.json` having the
+`insecure-registries` entry isn't enough on its own; Docker Desktop only actually applies
+it after **Settings → Docker Engine → Apply & Restart** (or a full quit/relaunch), which
+restarts the whole daemon and silently kills every Mac-side container that doesn't have a
+`restart: unless-stopped`/`always` policy (confirmed live 2026-08-14: would have taken down
+unrelated long-running dev containers with no restart policy). Rather than restart Docker
+Desktop just to push one image, push via a disposable `crane` container instead — it takes
+an explicit `--insecure` flag per-invocation, no daemon config needed:
+```sh
+docker save 192.168.0.8:30500/<name>:<tag> -o /tmp/image.tar
+docker run --rm -v /tmp/image.tar:/image.tar --entrypoint sh \
+  gcr.io/go-containerregistry/crane:debug \
+  -c "crane push /image.tar 192.168.0.8:30500/<name>:<tag> --insecure"
+```
+Check `docker ps` for anything without a restart policy before ever restarting Docker
+Desktop for an unrelated reason, same caution as the containerd-trust step above.
+
 Registry storage has no automatic garbage collection — `registry:2` never deletes old
 tags/layers on its own. Not a problem yet at this repo's current image count/churn, but
 worth knowing before the 20Gi PVC fills up someday (`registry garbage-collect`, run inside
