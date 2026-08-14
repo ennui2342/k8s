@@ -128,6 +128,16 @@
   critical: 0
   high: 0
 
+- workload: "default/StatefulSet/web (nginx container)"
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/nginx:1.31.3-trixie-patched
+  upstream_image: nginx:1.31.3-trixie
+  build_recipe: trivy/patched-images/nginx/Dockerfile
+  reason: "9 HIGH libaom/libheif CVEs (CVE-2026-56208, CVE-2026-56209, CVE-2026-56210, CVE-2026-56211, CVE-2025-68431, CVE-2026-32740, CVE-2026-32741, CVE-2026-32882, CVE-2026-47178) in the Debian 13.6 (trixie) base of nginx:1.31.3-trixie — this is already the newest tag on the 1.31.x line (Docker Hub last rebuilt 2026-08-05, digest unchanged since), and the fixed package versions (libaom3 3.12.1-1+deb13u1, libheif1/libheif-plugin-dav1d/libheif-plugin-libde265 1.19.8-1+deb13u1) were only published to the trixie-security apt repo after that rebuild, so no newer upstream tag exists yet to pick them up. A same-base apt dist-upgrade resolves all 9 — verified directly via dpkg version comparison inside the built image (libaom3 and all three libheif packages now report the exact +deb13u1 fixed version strings from the originating CVE task). nginx itself is unchanged, pure OS-package patch-level bump; libaom/libheif are unused transitive base-image packages, not nginx runtime dependencies in this deployment's config, so no behavior change. patched_image pushed straight to the local registry (never used the old ghcr.io/*-patched + imagePullPolicy: Never pattern)."
+  patched_date: "2026-08-14"
+  critical: 0
+  high: 9
+
 - workload: linkding/Deployment/linkding
   strategy: frozen-rebuild
   patched_image: 127.0.0.1:30500/linkding:1.46.0-patched
