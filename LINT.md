@@ -51,7 +51,16 @@ containers on a resource-constrained Pi cluster is a judgement call, not a copy-
 `librarium/api-deployment.yaml`, `librarium/web-deployment.yaml`, and
 `isfdb/adapter-deployment.yaml`/`isfdb/mariadb-statefulset.yaml`: set a `cpu` **request** only (no
 `cpu` limit, to avoid throttling) plus a `memory` **request and limit**, sized from real usage
-(`kubectl top pod --containers`), not guessed.
+(`kubectl top pod --containers`), not guessed. Re-audited 2026-08-15: one more container found
+missing resources entirely, `opsimath/worker-deployment.yaml`'s `wait-for-schema` initContainer
+(opsimath postdates the original 2026-07-29 sweep) — folded into `c6e594d0` rather than a new
+ticket. **Check-method caveat found the same day:** `flux-system/gotk-patches.yaml` looks like a
+violation on a naive per-file scan but isn't — it's a strategic-merge `Deployment` patch (only
+overrides the SOPS env var/volume mount), not a full pod spec, and the container it patches
+(`kustomize-controller`/`manager`) already has `resources` set in the base
+`flux-system/gotk-components.yaml`. Any future per-container scan (this rule, or the probes rule
+below) must diff against the *merged* spec for patch files like this one, not flag the patch file
+in isolation.
 
 **No orphaned PVCs** (Bound, but no owning workload *and* no manifest reference anywhere in this
 repo). Audited repo-wide 2026-07-29: every Bound PVC was cross-checked against every manifest in
@@ -101,7 +110,16 @@ rule has actually been checked mechanically): full compliance across every
 Deployment/StatefulSet/DaemonSet in the repo. `mdns/worker-daemonset.yaml` uses a hard `required`
 control-plane exclusion rather than the literal soft-preference block, which is stricter than the
 rule asks for and was treated as compliant, not a violation. No fix or ticket needed — recorded
-here so the next audit doesn't have to re-derive the check from prose.
+here so the next audit doesn't have to re-derive the check from prose. Re-checked 2026-08-15:
+`flux-system/gotk-components.yaml`/`gotk-patches.yaml` (the Flux bootstrap controllers themselves
+— `helm-controller`, `image-automation-controller`, `image-reflector-controller`,
+`kustomize-controller`, `notification-controller`, `source-controller`) have no affinity or
+toleration and were checked but are **not** a violation: CLAUDE.md's Scheduling Constraints rule
+is explicitly scoped to "**user workloads**", and these are Flux's own auto-generated bootstrap
+manifests (`CLAUDE.md`: "do not edit manually"), not something this repo authors. They also
+physically cannot land on the control plane regardless — the control-plane taint alone blocks any
+pod lacking an explicit toleration, which none of these set. Recorded here so a future audit
+doesn't re-flag `flux-system/` as an affinity gap.
 
 **Every `Ingress` must set `spec.ingressClassName`, never the deprecated
 `kubernetes.io/ingress.class` annotation.** Found and fixed repo-wide 2026-07-29 (Phase 2 research
@@ -122,7 +140,29 @@ security-posture decision, not a mechanical fix: ticketed as `tm` task `403129f3
 rather than adopted directly, since this is a trusted single-tenant homelab and blast-radius
 tradeoffs need a human call, not a default-on assumption.
 
+**Every container in a Deployment/StatefulSet/DaemonSet should set a `readinessProbe` and/or
+`livenessProbe`.** Audited repo-wide 2026-08-15 (Phase 2 research pass, new rule this run): 17 of
+36 live containers had neither probe set at all — `freshrss/freshrss`,
+`home-assistant/ha-deployment.yaml`'s `homeassistant`, `linkding/linkding`, both `mdns-repeater`
+containers, `monitoring/node-exporter.yaml`'s `node-exporter`, `monitoring/telegraf.yaml`'s
+`telegraf`, `mosquitto/mosquitto`, `nfs/template.yaml`'s `nfs-subdir-external-provisioner`,
+`opsimath/worker-deployment.yaml`'s `opsimath-worker`, `ring-mqtt/ring-mqtt`,
+`solar/modpoll.yaml`'s `modpoll`, `syncthing/syncthing`, `wallabag/wallabag`, `webdav/webdav`,
+and both `website/nginx.yaml` containers (`nginx`, `php`). Without either probe, k8s has no signal
+that a hung-but-running container should be restarted (no liveness) or pulled out of Service
+rotation (no readiness) — confirmed as a real gap on roughly half the fleet's workloads, not
+hypothetical. Not fixed directly this run: probe design is per-workload (HTTP app vs. MQTT broker
+vs. Modbus poller vs. UDP relay share no common shape), the same judgement-call class as the
+resources rule above — ticketed as `tm` task `cb71bb32` (batched, `#devops`). The established
+pattern already used by `isfdb-adapter`, `librarium-api`/`librarium-web`,
+`opsimath-web`/`opsimath-cover-compare`, `taskmgt` `api`/`frontend`, `registry`, `influxdb`, and
+the `flux-system` controllers themselves: `httpGet` against the app's own health endpoint for HTTP
+services; `librarium-db/postgres`, `isfdb-db/mariadb`, `opsimath-db/postgres` use `exec`
+(`pg_isready`/equivalent) for DB StatefulSets. Same check-method caveat as the resources rule:
+`flux-system/gotk-patches.yaml`'s `kustomize-controller` looks like a violation on a naive scan
+but isn't — its probes are already set in the base `gotk-components.yaml`.
+
 ## Starter items — not yet verified repo-wide
 
-Empty as of 2026-07-29. The next durable finding (from a future audit's research pass, or from
+Empty as of 2026-08-15. The next durable finding (from a future audit's research pass, or from
 any session) seeds this list again.
