@@ -160,13 +160,13 @@
 
 - workload: freshrss/Deployment/freshrss
   strategy: frozen-rebuild
-  patched_image: 127.0.0.1:30500/freshrss:1.29.1-patched
-  upstream_image: freshrss/freshrss:1.29.1
+  patched_image: 127.0.0.1:30500/freshrss:8400-patched
+  upstream_image: freshrss/freshrss:8400
   build_recipe: trivy/patched-images/freshrss/Dockerfile
-  reason: "apache2/php8.4/libcurl4t64/libexpat1 (and 15 more) CVEs in Debian 13.5 (trixie) base; no newer 1.29.1-line upstream tag exists (Docker Hub last rebuilt 2026-05-20, digest unchanged since, and 1.29.1 is still the latest FreshRSS release upstream). Resolves all fixable CVEs found at patch time via trixie-security dist-upgrade — verified via local trivy 0.70.0 scan: 0 CRITICAL + 0 HIGH after patch (Debian layer upgraded to 13.6). FreshRSS app version unchanged, pure OS-package patch-level bump, no breaking changes."
-  patched_date: "2026-08-07"
-  critical: 2
-  high: 17
+  reason: "Rebased 2026-08-18 from freshrss/freshrss:1.29.1 onto freshrss/freshrss:8400 (an edge dev build, FRESHRSS_VERSION 1.29.2-dev, built from FreshRSS/FreshRSS PR #8400 — no 1.29.2 stable release exists yet). Plain 1.29.1 was 28 CRITICAL + 50 HIGH at reconcile-scan time; plain 8400 improved to 28 CRITICAL + 32 HIGH (residual after --ignore-unfixed: 2 CRITICAL php8.4 ext-pgsql SQLi + bccomp() OOB write RCE (CVE-2026-17543, CVE-2026-17544) + 1 HIGH util-linux/libblkid CVE-2026-53615) but wasn't fully clean. Changelog 1.29.1->8400 (CHANGELOG.md's 1.29.2-dev section) reviewed for breaking changes: PR #8400 itself disallows FreshRSS's own feed-fetch code (FreshRSS_http_Util/SimplePieFetch) from reaching internal/local networks by default (INTERNAL_HOST_ALLOWLIST env var to override) — confirmed not applicable here: every subscribed feed URL (queried live from db.sqlite) is a public external host, and the only installed extension (WallabagButton) calls curl_init/curl_exec directly against the internal wallabag_instance_url, bypassing FreshRSS's fetch wrapper entirely, so the new default-deny doesn't touch it either way. No config edit needed. apt dist-upgrade against the 8400 base resolves the residual CVEs — verified via local trivy 0.74.0 scan (--ignore-unfixed): 0 CRITICAL + 0 HIGH after patch (php8.4 8.4.21-1~deb13u1 -> 8.4.24-1~deb13u1, util-linux 2.41-5 -> 2.41.5-0+deb13u1)."
+  patched_date: "2026-08-18"
+  critical: 0
+  high: 0
 
 - workload: wallabag/Deployment/wallabag
   strategy: frozen-rebuild
