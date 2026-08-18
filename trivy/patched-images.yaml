@@ -108,16 +108,6 @@
   critical: 1
   high: 7
 
-- workload: monitoring/CronJob/cve-scanner
-  strategy: frozen-rebuild
-  patched_image: 127.0.0.1:30500/aquasec-trivy:0.73.0-patched
-  upstream_image: aquasec/trivy:0.73.0
-  build_recipe: trivy/patched-images/aquasec-trivy/Dockerfile
-  reason: "Rebased 2026-08-09 from aquasec/trivy:0.72.0 onto aquasec/trivy:0.73.0 (<cli.reconcile-scanner found plain 0.73.0 upstream at 0 CRITICAL + 1 HIGH at filing time, better than 0.72.0's 0 CRITICAL + 13 HIGH but not fully clean). Changelog 0.72.0->0.73.0 reviewed (official CHANGELOG.md, https://github.com/aquasecurity/trivy/compare/v0.72.0...v0.73.0): no BREAKING CHANGES section at all for 0.73.0 (unlike 0.72.0's docker-config publishing migration) — only feature/bugfix commits (VEX OCI discovery, Java/dotnet/nodejs/conda parser fixes). No CLI flag deprecations/removals in range; every flag this CronJob passes (trivy image/kubernetes --severity/--ignore-unfixed/--format/--output/--quiet/--timeout/--parallel) is untouched. After apk upgrade, rebuilt image self-scans at 0 CRITICAL + 2 HIGH (verified via local `trivy image` scan with --ignore-unfixed against today's vulnerability DB, 2026-08-09) — the Alpine 3.24.1 os-pkgs layer itself is already 0 CRITICAL + 0 HIGH on *both* the patched build and plain upstream 0.73.0 (re-scanned both for comparison), so 0.73.0 shipped a clean Alpine base upstream and the apk-upgrade step is now a no-op for this tag; kept anyway since it's free and self-healing if that regresses on a future point release. Residual 2 HIGH (github.com/go-git/go-git/v5 CVE-2026-71556, oras.land/oras-go/v2 CVE-2026-50163) are Go module deps baked into the trivy binary, not Alpine OS packages — out of scope for this apk-upgrade patch strategy, same residual class as the flux-controller/telegraf forks. Note: these counts differ from the CVE-2026-56852/GHSA-hrxh-6v49-42gf/CVE-2026-50151/CVE-2026-39822 set recorded in the prior (0.72.0) entry — expected DB drift over the 3 days between scans, not a regression; oras-go's CVE-2026-50163 persists across both."
-  patched_date: "2026-08-09"
-  critical: 0
-  high: 2
-
 - workload: default/StatefulSet/web
   strategy: deferred-migration
   patched_image: "php:7.0-fpm"
