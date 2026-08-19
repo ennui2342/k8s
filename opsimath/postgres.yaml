@@ -76,13 +76,22 @@ spec:
             - name: data
               mountPath: /var/lib/postgresql
           readinessProbe:
+            # -d app_production avoids pg_isready's default of connecting to a
+            # database named after -U (i.e. "app", which doesn't exist here -
+            # see the POSTGRES_DB comment above) - that produced a real
+            # connection attempt logged as FATAL: database "app" does not
+            # exist every 5s/10s forever (noticed live 2026-08-19 while
+            # smoke-testing the CVE-2026-53615 patch above; pg_isready still
+            # reported "accepting connections" and readiness/liveness were
+            # never actually affected, but the log spam was needless and
+            # this is the exact file already being touched for that patch).
             exec:
-              command: ["pg_isready", "-U", "app"]
+              command: ["pg_isready", "-U", "app", "-d", "app_production"]
             initialDelaySeconds: 5
             periodSeconds: 5
           livenessProbe:
             exec:
-              command: ["pg_isready", "-U", "app"]
+              command: ["pg_isready", "-U", "app", "-d", "app_production"]
             initialDelaySeconds: 30
             periodSeconds: 10
           resources:
