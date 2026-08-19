@@ -198,6 +198,16 @@
   critical: 0
   high: 5
 
+- workload: opsimath/StatefulSet/opsimath-db
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/postgres:18.6-trixie-patched
+  upstream_image: postgres:18.6-trixie
+  build_recipe: trivy/patched-images/postgres/Dockerfile
+  reason: "1 HIGH fixable CVE-2026-53615 (libblkid integer overflow in libblkid/src/partitions/dos.c) in the Debian 13.6 (trixie) base of postgres:18 (which had resolved to Docker Hub's 18.4-1.pgdg13+1 build as last pulled). postgres:18.6-trixie (newest 18.x tag, rebuilt 2026-08-15) already has trixie-security in its apt sources but was baked before util-linux's security update was published there — apt-cache policy showed Candidate 2.41.5-0+deb13u1 resolvable but not installed. A same-base apt upgrade closes it (verified live: libblkid1 2.41-5 -> 2.41.5-0+deb13u1). Postgres 18.4->18.6 (18.5 never shipped, pulled pre-release for a regression) release notes reviewed: none of the listed manual-action items apply — no logical replication slots/output plugins, no pgcrypto extension, no GIN indexes, no btree_gist/ltree extensions in opsimath's DB (confirmed live via pg_extension/pg_index/pg_replication_slots). Pure OS-package + postgres point-release bump, no schema/config changes, no dump/restore needed."
+  patched_date: "2026-08-19"
+  critical: 0
+  high: 0
+
 - workload: monitoring/DaemonSet/promtail
   strategy: frozen-rebuild
   patched_image: 127.0.0.1:30500/promtail:3.6.11-patched
