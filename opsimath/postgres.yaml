@@ -89,11 +89,21 @@ spec:
               command: ["pg_isready", "-U", "app", "-d", "app_production"]
             initialDelaySeconds: 5
             periodSeconds: 5
+            # Default timeoutSeconds (1s, unset before 2026-08-19) was too
+            # tight - confirmed live via recurring "command timed out:
+            # pg_isready ... timed out after 1s" kubelet events on k8s-2
+            # (tm aed646fc), tripping restarts on transient slowness alone,
+            # independent of the separate node/containerd setns issue also
+            # observed on that node. 5s gives real headroom under NFS-backed
+            # I/O load without meaningfully delaying detection of a truly
+            # wedged Postgres.
+            timeoutSeconds: 5
           livenessProbe:
             exec:
               command: ["pg_isready", "-U", "app", "-d", "app_production"]
             initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 5
           resources:
             requests:
               cpu: 100m
