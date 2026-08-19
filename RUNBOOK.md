@@ -677,6 +677,112 @@ cd /path/to/k8s && sops --encrypt --in-place myapp/mysecret-secret.yaml
 
 ---
 
+## Master Datastore Backup & Restore
+
+**Not GitOps-managed** — same category as containerd trust config and Docker Desktop registry
+trust above: node-local host setup outside k8s's own object model, must be redone by hand on a
+fresh cluster (see "Adding this on a fresh master" below).
+
+This cluster runs the k3s default SQLite/kine datastore (not embedded etcd) on the master, with
+no control-plane HA — a single master is a real single point of failure. Deliberately **not**
+solved with a 3-node etcd-quorum HA control plane (considered and rejected 2026-08-19: needs an
+odd number >= 3 dedicated server nodes to actually help — 2 is worse than 1, not better — and
+dedicating 2 Raspberry Pis to sit mostly idle for quorum insurance was judged a bad trade for a
+homelab, especially since a real control-plane outage that day — a failed k3s upgrade crash-loop —
+had zero workload impact: pods kept serving the whole time, only `kubectl`/Flux access paused).
+Instead: cheap daily snapshots to the NAS plus a documented restore procedure onto spare
+hardware, trading instant failover for a bounded (minutes, not seconds) recovery window.
+
+### What gets backed up
+
+`/usr/local/bin/k3s-backup.sh` on the master (source of truth: `master-backup/k3s-backup.sh` in
+this repo — copy it there, it's not deployed via GitOps, same pattern as `k8s-toolbox/Dockerfile`),
+cron'd daily at 03:30 (ubuntu's own crontab, not
+root's — relies on the passwordless sudo already configured for that user), logs to
+`/home/ubuntu/k3s-backup.log`:
+
+1. **`state.db`** — a consistent, WAL-safe online snapshot via `sqlite3 .backup` (the official
+   SQLite backup API, not a raw file copy — safe to run against the live, actively-written
+   database without stopping k3s or risking a torn snapshot mid-checkpoint).
+2. **`tls/`, `cred/`, `token`** — the cluster's CA certs, all component TLS material, kubeconfigs,
+   and join token. These change rarely (only on cert rotation), so a plain copy is fine — no
+   live-consistency concern the way the active database has. This is what lets a restored master
+   keep its *exact* cluster identity, so existing workers can reconnect without re-joining.
+
+Packaged as `k3s-master-backup-<timestamp>.tar.gz` and written to
+`/mnt/k8s/k3s-master-backups/` — the same NAS (`nas.local:/mnt/md0/k8s`) that backs every PVC in
+this cluster, already mounted on the master at `/mnt/k8s`. 14-day retention, pruned automatically
+each run. Each archive is ~17MB.
+
+**Contains real cluster credentials in plaintext** (private keys, admin kubeconfigs, the join
+token) — same trust boundary as everything else on this NAS share (LAN-only, never exposed
+beyond it), not separately encrypted. Don't casually cat/display archive contents.
+
+On failure, posts to the `monitoring` Discord webhook (fetched via `kubectl get secret
+discord-webhook` — the script runs on the bare host, not as a pod, so it can't resolve
+`tasks.k8s.ecafe.org` the way in-cluster CronJobs do; Discord's public HTTPS endpoint works fine
+from anywhere with internet access, so that's the only alert channel here, not also a `tm` task
+the way health-monitor/pvc-usage-monitor do it). On success, it's silent — check
+`/home/ubuntu/k3s-backup.log` or list `/mnt/k8s/k3s-master-backups/` directly to confirm it's
+still running if you want to verify without waiting for a failure.
+
+### Restoring onto replacement hardware
+
+For when the master's SD card dies and you're swapping in the spare Pi kept in storage for
+exactly this:
+
+```sh
+# 1. Fresh Ubuntu install on the spare Pi/SD card, same hostname (k8s / k8s.local) and static
+#    IP (192.168.0.8) as the original master — workers and every *.k8s.ecafe.org DNS entry
+#    assume this identity, not just "some node is the master".
+
+# 2. Install k3s SERVER but do not let it auto-init a new empty cluster - stop it immediately
+#    after the binary/service files are laid down, before it creates a fresh empty datastore:
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=<current version, check tm tasks 325e53da etc. for what's live> sh -
+sudo systemctl stop k3s
+
+# 3. Pick the most recent archive from /mnt/k8s/k3s-master-backups/ (mount the NAS export first
+#    if this is genuinely fresh hardware: see Phase 2 above) and restore it over the freshly
+#    created (but not yet real) datastore:
+sudo rm -rf /var/lib/rancher/k3s/server/db /var/lib/rancher/k3s/server/tls /var/lib/rancher/k3s/server/cred /var/lib/rancher/k3s/server/token
+sudo mkdir -p /var/lib/rancher/k3s/server/db
+sudo tar -xzf /mnt/k8s/k3s-master-backups/k3s-master-backup-<latest>.tar.gz -C /tmp/restore
+sudo mv /tmp/restore/state.db /var/lib/rancher/k3s/server/db/state.db
+sudo mv /tmp/restore/tls /var/lib/rancher/k3s/server/tls
+sudo mv /tmp/restore/cred /var/lib/rancher/k3s/server/cred
+sudo mv /tmp/restore/token /var/lib/rancher/k3s/server/token
+sudo chown -R root:root /var/lib/rancher/k3s/server
+
+# 4. Start k3s and verify:
+sudo systemctl start k3s
+sudo journalctl -u k3s -f   # watch for a clean start, not a crash-loop
+kubectl get nodes           # workers should reconnect on their own - same CA/token as before,
+                             # no re-join needed
+kubectl get pods -A         # spot-check nothing's missing
+flux get kustomizations     # confirm GitOps reconciliation resumes cleanly
+```
+
+**Data loss window:** anything that changed between the last successful daily snapshot and the
+failure is gone — for this cluster, that's mostly Flux-reconciled state (which self-heals from
+git on the next reconcile anyway) and any manually-applied changes since the last backup, not
+application data (that lives in PVCs on the NAS, backed up independently and unaffected by this
+procedure entirely).
+
+**This has not been rehearsed against real failed hardware** — the mechanics above are correct
+per k3s's own documented datastore layout and were verified by restoring a backup archive's
+`state.db` locally (`sqlite3 ... PRAGMA integrity_check` — passed), but a full end-to-end restore
+onto genuinely fresh hardware hasn't been drilled. Worth doing once, deliberately, when the spare
+Pi arrives — better to find gaps in a planned test than during a real outage.
+
+### Adding this on a fresh master (cluster rebuild)
+
+After Phase 3's Flux bootstrap, `scp master-backup/k3s-backup.sh` from this repo to
+`/usr/local/bin/k3s-backup.sh` on the new master, `chmod +x`, and re-add the cron line — nothing
+here survives a from-scratch rebuild automatically, it's pure host-local state like the
+containerd trust config above.
+
+---
+
 ## CVE Patch Management
 
 The `monitoring/cve-scanner` CronJob (Monday 07:00, `trivy/trivy.yaml`) scans the live cluster

@@ -6,7 +6,7 @@ All active app manifests live here. Flux reconciles the cluster against this rep
 ## Cluster Topology
 
 - **k3s** v1.32
-- **Master** (`k8s`, `ubuntu@k8s.local`): control plane only — tainted `node-role.kubernetes.io/control-plane:NoSchedule`. Directly accessible from dev Mac via SSH and kubeconfig.
+- **Master** (`k8s`, `ubuntu@k8s.local`): control plane only — tainted `node-role.kubernetes.io/control-plane:NoSchedule`. Directly accessible from dev Mac via SSH and kubeconfig. Single node, no HA (deliberate — see RUNBOOK.md's "Master Datastore Backup & Restore"); daily SQLite/kine datastore + TLS/cred backup to the NAS instead, node-local cron, not GitOps-managed.
 - **Workers**: `k8s-1` (`ubuntu@k8s-1`), `k8s-2` (`ubuntu@k8s-2`) — reachable from master only (SSH keys on master)
 - **Ingress**: Traefik v3 (bundled with k3s)
 - **Storage**: NFS StorageClass `nfs-client` backed by `192.168.0.76:/mnt/md0/k8s` (all PVs are NFS — no local disk dependency)
