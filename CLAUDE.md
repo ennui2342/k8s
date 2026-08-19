@@ -195,7 +195,7 @@ and separately, once fixed, a correctly-firing `KubeJobFailed` alert had already
 unactioned for 24+ hours because nothing turned "alert fires" into "someone/something is on the
 hook to look at it." Every alerting mechanism in this cluster should end in a `tm` task (usually
 via the `<cli.cluster-health` or `<cli.cve-scanner`/`<cli.reconcile-scanner` source tags, which
-route through the nightly-agents pipeline — see CVE Patch Management below), with Discord as a
+route through the agent-orchestrator pipeline — see CVE Patch Management below), with Discord as a
 secondary, immediate-visibility notification alongside it, not a replacement for it. This applies
 symmetrically to closing: a task that auto-closes should also post to Discord, not just go quiet.
 
@@ -239,10 +239,14 @@ version bumps.
 Weekly Trivy scan (`monitoring/cve-scanner` CronJob, Monday 07:00, `trivy/trivy.yaml`) files one
 `tm` task per vulnerable image (`+cli.claude-code.k8s <cli.cve-scanner`), deduping on creation and
 auto-closing tasks for images no longer flagged. A Mac-side aswarm pipeline
-(`/Volumes/SSD/pipelines/nightly-agents.yaml`, 1am/6am) works the queue: an orchestrator selects
-the highest-priority task and routes it to an upgrade or health specialist subagent. The upgrade
-specialist's prompt lives at `~/projects/agents/k8s/nightly-upgrade-prompt.md` (its own separate,
-tracked git repo — not part of this one).
+(`/Volumes/SSD/pipelines/agent-orchestrator.yaml`, renamed 2026-08-19 from `nightly-agents`, then
+`k8s-orchestrator` — general-purpose task routing, not k8s-specific, though its only live wiring
+today is this repo — runs every 30min, though CVE/health work still only dispatches during the
+1am/6am window) works the
+queue: an orchestrator selects the highest-priority eligible task and routes it by tag to an
+upgrade, health, or deploy specialist subagent. The upgrade specialist's prompt lives at
+`~/projects/agents/k8s/upgrade-prompt.md` (its own separate, tracked git repo — not part
+of this one).
 
 Images with no upstream fix get rebuilt locally and forked (`ghcr.io/ennui2342/*-patched`,
 `imagePullPolicy: Never`, imported directly into node containerd — no registry push). Every fork

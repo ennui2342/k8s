@@ -685,11 +685,17 @@ weekly with Trivy and files a `tm` task per vulnerable image, tagged `+cli.claud
 changes, auto-closed if the image is no longer flagged) and skips filing tasks entirely for
 images already tracked in `trivy/patched-images.yaml` (see below).
 
-A separate aswarm pipeline, `nightly-agents` (`/Volumes/SSD/pipelines/nightly-agents.yaml`, runs
-1am/6am on the Mac), works this queue one task at a time: the orchestrator prompt
-(`~/projects/agents/k8s/nightly-orchestrator-prompt.md`) selects the highest-priority task and
-routes it to the upgrade specialist (`~/projects/agents/k8s/nightly-upgrade-prompt.md` — a
-separate, tracked git repo, not part of this one; there was previously also an untracked mirror
+A separate aswarm pipeline, `agent-orchestrator` (`/Volumes/SSD/pipelines/agent-orchestrator.yaml`,
+renamed 2026-08-19 from `nightly-agents`, then again same day from `k8s-orchestrator` once it was
+clear the pipeline itself is general-purpose task routing, not k8s-specific — its only live wiring
+today just happens to be this repo — runs every 30min on the Mac now, not just 1am/6am, though
+CVE/health work still only actually dispatches during the 1am/6am window; see that file's
+description and `agent-orchestrator-prompt.md` Step 1.5 for the per-specialist eligibility
+mechanics), works this queue one task at a time: the orchestrator prompt
+(`~/projects/agents/k8s/agent-orchestrator-prompt.md` — renamed 2026-08-19 from
+`nightly-orchestrator-prompt.md`, then `orchestrator-prompt.md`) selects the highest-priority
+eligible task and routes it to the upgrade specialist (`~/projects/agents/k8s/upgrade-prompt.md` —
+a separate, tracked git repo, not part of this one; there was previously also an untracked mirror
 under `~/projects/k8s/.claude/` that the orchestrator read from — removed, single source of truth
 now). The specialist prefers a plain
 upstream tag bump; only builds a custom image when no upstream fix exists.

@@ -86,7 +86,7 @@ data:
             return []
 
     def create_task(title, notes, priority):
-        text = f"{title} {priority} #devops +cli.claude-code.k8s <cli.cluster-health\n{notes}"
+        text = f"{title} {priority} #~health +cli.claude-code.k8s <cli.cluster-health\n{notes}"
         r = subprocess.run(
             ['curl', '-sf', '-X', 'POST', f'{TM_API}/tasks',
              '-H', 'Content-Type: application/json', '-d', json.dumps({'text': text})],

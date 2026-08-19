@@ -318,7 +318,7 @@ data:
         sev_str = ' + '.join(sev_parts)
 
         prefix = f"Update {image} — "
-        title = f"{prefix}{sev_str} fixable CVEs {priority} #devops +cli.claude-code.k8s <cli.cve-scanner"
+        title = f"{prefix}{sev_str} fixable CVEs {priority} #~upgrade +cli.claude-code.k8s <cli.cve-scanner"
 
         cve_list = list(info['cves'].values())
         cve_ids = list(info['cves'].keys())
@@ -445,7 +445,7 @@ data:
                 continue  # already filed, awaiting the specialist
 
             text = (
-                f"{prefix}maintainers shipped equivalent fix !2 #devops "
+                f"{prefix}maintainers shipped equivalent fix !2 #~upgrade "
                 f"+cli.claude-code.k8s <cli.reconcile-scanner\n"
                 f"* Upstream {upstream} now scans at {crit} CRITICAL + {high} HIGH "
                 f"(was {entry.get('critical', 0)} CRITICAL + {entry.get('high', 0)} HIGH when forked "
@@ -500,7 +500,7 @@ data:
                 continue  # already filed, awaiting the specialist
 
             text = (
-                f"{prefix}resolves the CVE this fork was patching !2 #devops "
+                f"{prefix}resolves the CVE this fork was patching !2 #~upgrade "
                 f"+cli.claude-code.k8s <cli.reconcile-scanner\n"
                 f"* {repo}:{newest_tag} scans at {n_crit} CRITICAL + {n_high} HIGH — "
                 f"resolves what {upstream} (still {crit} CRITICAL + {high} HIGH) hasn't\n"
@@ -527,7 +527,7 @@ data:
                 continue  # already filed, awaiting the specialist
 
             text = (
-                f"{prefix}improves but doesn't fully resolve, needs re-patching !2 #devops "
+                f"{prefix}improves but doesn't fully resolve, needs re-patching !2 #~upgrade "
                 f"+cli.claude-code.k8s <cli.reconcile-scanner\n"
                 f"* {repo}:{newest_tag} scans at {n_crit} CRITICAL + {n_high} HIGH — "
                 f"better than {upstream} (still {crit} CRITICAL + {high} HIGH) but not clean\n"
