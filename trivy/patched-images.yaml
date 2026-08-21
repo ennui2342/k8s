@@ -48,16 +48,6 @@
   critical: 2
   high: 8
 
-- workload: flux-system/Deployment/image-automation-controller
-  strategy: frozen-rebuild
-  patched_image: 127.0.0.1:30500/image-automation-controller:v1.2.3-patched
-  upstream_image: ghcr.io/fluxcd/image-automation-controller:v1.2.3
-  build_recipe: trivy/patched-images/image-automation-controller/Dockerfile
-  reason: "Rebased 2026-08-04 from v1.1.2 onto v1.2.3 (openssl CVE-2026-45447 now fixed upstream). v1.2.0's image.toolkit.fluxcd.io/v1beta2 CRD removal doesn't apply here — this repo only references .../v1, and this cluster's CRD storedVersions are already v1-only. Residual: golang.org/x/text CVE-2026-56852 + a grpc HIGH (GHSA-hrxh-6v49-42gf), both Go module deps baked into the binary, not Alpine OS packages — out of scope for this apk-upgrade patch strategy, identical residual to plain upstream v1.2.3"
-  patched_date: "2026-08-04"
-  critical: 0
-  high: 2
-
 - workload: flux-system/Deployment/kustomize-controller
   strategy: frozen-rebuild
   patched_image: 127.0.0.1:30500/kustomize-controller:v1.9.4-patched
