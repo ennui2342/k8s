@@ -17,6 +17,81 @@ Ensure `~/.kube/config` points at the cluster once k3s is up.
 
 ---
 
+## Physical & Network Topology
+
+The cluster is a physical tower of Raspberry Pi 4Bs sitting on a small
+unmanaged switch (Netgear GS305, 5 ports) at the base — not rack-mounted,
+just stacked. This section exists because the network design isn't
+discoverable from the manifests alone, and got a genuine architecture
+review during the 2026-08-19/22 hard-reboot incident (see "Master
+Datastore Backup & Restore" below for the reboot itself) and the OS-EOL
+hardware-refresh project it's part of (see git history around
+2026-08-22 for the full reasoning).
+
+### Original design (used from cluster inception until 2026-08-22)
+
+- Master (`k8s`) was dual-homed: `wlan0` on the main LAN (`192.168.0.8`,
+  DHCP), `eth0` as the gateway for a private switch (`192.168.8.1/24`)
+  that only the worker Pis (`k8s-1` = `192.168.8.11`, `k8s-2` =
+  `192.168.8.12`) plugged into. Master ran `ip_forward=1` plus a
+  `MASQUERADE` rule on `wlan0`, i.e. it was a full NAT gateway/router for
+  the worker subnet, not just a passive bridge.
+- **Why:** master's LAN uplink was Wi-Fi specifically so the *entire*
+  tower (master + hub + both workers) could be physically relocated
+  anywhere with Wi-Fi coverage and no wired LAN drop needed at the new
+  spot — demonstrated directly on 2026-08-22 when it was moved from
+  under the stairs to beside the desk mid-incident.
+- **The cost, identified 2026-08-22:** this made master a single point of
+  failure for *networking*, not just the control plane — if master (or
+  just its Wi-Fi link) went down, the workers didn't just become
+  unreachable from the Mac, they lost their gateway entirely (no
+  internet/main-LAN egress for cert-manager renewals, Discord webhooks,
+  etc.). It also meant **every** node's NFS traffic to the NAS
+  (`192.168.0.76`) — not only master's — was funneled through master's
+  single Wi-Fi link (`worker → master eth0 → master wlan0 → NAS`), a
+  real double-hop-over-Wi-Fi bottleneck that was very likely a
+  contributing factor to the severe NFS slowness observed during the
+  2026-08-21/22 post-reboot recovery (a plain `ls` on an NFS mount took
+  ~4s at one point), on top of the SD-card and NAS-side contention
+  identified at the time.
+
+### New design (migration started 2026-08-22, see git history for status)
+
+Flat network: every node (master, `k8s-1`, `k8s-2`, `k8s-3`) connects
+directly to the same switch as a peer on `192.168.0.0/24`, no
+master-mediated routing. The switch's uplink (port 1 of the GS305) goes
+straight to the home router, not through master. Master's own path to
+the NAS also moves from Wi-Fi to wired Ethernet, for the same latency/
+reliability reason.
+
+- **Gains:** master is no longer a SPOF for worker networking; every
+  node gets a low-latency wired path to the NAS instead of funneling
+  through one Wi-Fi link; direct SSH from the Mac to every node (no more
+  hopping through master to reach `k8s-1`/`k8s-2`).
+- **Cost:** the tower loses the "move it anywhere with Wi-Fi" property —
+  it now needs a fixed location with a wired LAN drop, same as any other
+  wired device. Accepted deliberately: the wired-NAS-link change alone
+  already required a fixed wired location, so the portability benefit of
+  the old design was moot regardless of whether the worker network was
+  also flattened.
+- **Port budget:** the GS305 has 5 ports. Port 1 is the router uplink,
+  leaving exactly 4 for the 4 permanent nodes (master + `k8s-1` +
+  `k8s-2` + `k8s-3`) — zero spare at steady state. This matters
+  specifically for the master-replacement step of a rolling rebuild: the
+  safe approach (build/validate the new master Pi alongside the old one
+  before cutting over — see "Restoring onto replacement hardware" below)
+  needs a 5th connection that doesn't exist once all three other nodes
+  are already permanently plugged in. Work around it by either
+  temporarily unplugging a worker for the few minutes of validation, or
+  validating the new master via a direct Mac connection before the final
+  unplug-old/plug-new swap into its permanent port.
+- Once this migration is complete, update the "Cluster Topology" section
+  of `CLAUDE.md` — it still documents the old subnet split and the
+  "workers reachable from master only" SSH-hop requirement, both of
+  which stop being true.
+
+---
+
 ## Phase 1 — k3s Installation
 
 ### Master node
