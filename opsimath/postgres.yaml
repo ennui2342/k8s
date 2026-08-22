@@ -97,13 +97,31 @@ spec:
             # observed on that node. 5s gives real headroom under NFS-backed
             # I/O load without meaningfully delaying detection of a truly
             # wedged Postgres.
-            timeoutSeconds: 5
+            #
+            # Bumped again to 15s/failureThreshold 6 on 2026-08-22: after a
+            # full cluster hard-reboot, k8s-1's load stayed pinned at ~19-20
+            # for 2+ hours in a self-reinforcing restart loop - kubelet's own
+            # exec probes were failing with "OCI runtime exec failed ...
+            # error executing setns process: exit status 1" (a node-level
+            # containerd/runc symptom of an overloaded node, not a Postgres
+            # problem - the DB's own logs showed healthy uninterrupted
+            # checkpoints the whole time). Every probe-triggered restart
+            # forced fresh Postgres startup + kube-prometheus-stack's
+            # Prometheus (same node, same symptom, same night) to redo WAL
+            # replay/compaction, which itself is expensive enough on this
+            # node's NFS-backed storage to keep the node overloaded - each
+            # "unhealthy" kill was making the actual cause worse. 5s still
+            # weathered the earlier CVE-fix-era slowness fine; this specific
+            # incident needed more.
+            timeoutSeconds: 15
+            failureThreshold: 6
           livenessProbe:
             exec:
               command: ["pg_isready", "-U", "app", "-d", "app_production"]
             initialDelaySeconds: 30
             periodSeconds: 10
-            timeoutSeconds: 5
+            timeoutSeconds: 15
+            failureThreshold: 6
           resources:
             requests:
               cpu: 100m
