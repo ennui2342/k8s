@@ -277,20 +277,37 @@ pending, from earlier the same night, with nothing ever going to
 reboot them). Deploy `node-provisioning/52unattended-upgrades-local.conf`
 from this repo — a separate `/etc/apt/apt.conf.d/` drop-in rather than
 editing Ubuntu's own shipped `50unattended-upgrades`, so it survives
-that package updating itself:
+that package updating itself.
+
+**The reboot time is STAGGERED per node, not one shared value — this
+matters, don't skip it.** Every node runs the identical OS image, so a
+kernel update needing a reboot lands on all four within the same day
+or two almost always; a single shared time would mean master and every
+worker rebooting at the exact same instant with zero cross-node
+awareness (the mechanism has no concept of "wait for the other node"),
+which is a smaller-scale echo of the exact "whole cluster dark at
+once" problem this fleet spent 2026-08-19 through -22 dealing with —
+caught live during review, not something to reintroduce by accident.
+Master goes first so it's stable before any worker needs to rejoin it:
 ```sh
-scp node-provisioning/52unattended-upgrades-local.conf ubuntu@<node>:/tmp/
+# master: 04:15, k8s-1: 04:30, k8s-2: 04:45, k8s-3: 05:00 (15min apart,
+# comfortably more than the ~1-3min a Pi actually takes to reboot and
+# reconnect, confirmed live during the rebuild)
+sed "s/Automatic-Reboot-Time \"04:15\"/Automatic-Reboot-Time \"<this node's time>\"/" \
+  node-provisioning/52unattended-upgrades-local.conf > /tmp/local.conf
+scp /tmp/local.conf ubuntu@<node>:/tmp/52unattended-upgrades-local.conf
 ssh ubuntu@<node> "sudo mv /tmp/52unattended-upgrades-local.conf /etc/apt/apt.conf.d/ && sudo chown root:root /etc/apt/apt.conf.d/52unattended-upgrades-local.conf"
 ```
-Verify with `apt-config dump | grep Automatic-Reboot` — that's apt's
-own merged view, the same thing `unattended-upgrades` actually reads.
+Verify with `apt-config dump | grep Automatic-Reboot-Time` per node —
+that's apt's own merged view, the same thing `unattended-upgrades`
+actually reads, and confirms the value is actually distinct per node,
+not accidentally the same file copied everywhere.
 
-**Reboot window: 04:15 daily, every node including master** (see the
-file's own comments for the full reasoning). Any new node-local cron
-entry or CronJob should avoid 04:00–04:30 to leave headroom around
-this — see CLAUDE.md's CVE Patch Management section for the other
-nightly windows (01:00/06:00 agent-orchestrator dispatch, 03:30 master
-backup) this was chosen to sit clear of.
+**Full reserved window: 04:15 (master) – 05:00 (k8s-3), done by ~05:05
+in practice.** Any new node-local cron entry or CronJob should avoid
+04:00–05:15 to leave headroom — see CLAUDE.md's CVE Patch Management
+section for the other nightly windows (01:00/06:00 agent-orchestrator
+dispatch, 03:30 master backup) this was chosen to sit clear of.
 
 At this point the node is ready for Phase 1's "Worker nodes" section
 (or, for a master replacement, the "Restoring onto replacement

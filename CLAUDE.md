@@ -262,9 +262,15 @@ default on the base image, not something this repo configures — except the act
 to activate a patch that needs one (kernel updates, mainly), which is: see
 `node-provisioning/52unattended-upgrades-local.conf`, deployed by hand to every node (not
 GitOps-managed, host-local like the containerd registry trust config and master's backup cron).
-**Reserves 04:00–04:15 daily on every node, including master, for an automatic reboot** if one's
-pending — avoid scheduling any new node-local cron entry or CronJob in that window. Chosen to
-sit clear of the two windows below and master's own 03:30 backup cron.
+**Reserves 04:15–05:15 daily, staggered per node (master 04:15, `k8s-1` 04:30, `k8s-2` 04:45,
+`k8s-3` 05:00, ~5min each in practice), for an automatic reboot** if one's pending — avoid
+scheduling any new node-local cron entry or CronJob in that window. Staggered deliberately, not
+a single shared time: every node runs the identical OS image, so an update needing a reboot
+tends to land on all four within the same day or two, and a shared time would mean the whole
+cluster going down simultaneously with no cross-node awareness — a smaller-scale echo of the
+exact problem this fleet's 2026-08-19/22 rebuild was about. Master first so it's stable before
+any worker needs to rejoin it. Chosen to sit clear of the two windows below and master's own
+03:30 backup cron.
 
 Images with no upstream fix get rebuilt locally and forked (`ghcr.io/ennui2342/*-patched`,
 `imagePullPolicy: Never`, imported directly into node containerd — no registry push). Every fork
