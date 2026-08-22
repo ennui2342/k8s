@@ -257,6 +257,15 @@ dates) using the same file-a-task/dedupe/auto-close shape as the CVE scanner, bu
 hardware-touching work, not something to hand to an unattended agent the way an image rebuild
 is.
 
+Routine host-OS security patches themselves are handled by `unattended-upgrades`, present by
+default on the base image, not something this repo configures — except the actual **reboot**
+to activate a patch that needs one (kernel updates, mainly), which is: see
+`node-provisioning/52unattended-upgrades-local.conf`, deployed by hand to every node (not
+GitOps-managed, host-local like the containerd registry trust config and master's backup cron).
+**Reserves 04:00–04:15 daily on every node, including master, for an automatic reboot** if one's
+pending — avoid scheduling any new node-local cron entry or CronJob in that window. Chosen to
+sit clear of the two windows below and master's own 03:30 backup cron.
+
 Images with no upstream fix get rebuilt locally and forked (`ghcr.io/ennui2342/*-patched`,
 `imagePullPolicy: Never`, imported directly into node containerd — no registry push). Every fork
 is tracked in `trivy/patched-images.yaml` alongside a reproducible Dockerfile under

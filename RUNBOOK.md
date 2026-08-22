@@ -255,15 +255,42 @@ avahi-daemon` on every new/reimaged node, master included.
 boot.** A fresh 26.04 image has months of accumulated patches; the
 first automatic security-update pass pulled ~90 packages on every node
 built tonight, including `linux-image-raspi` (the kernel) and
-`openssh-server` — meaning it can trigger an actual reboot once done,
-and briefly interrupt SSH mid-upgrade. Any `apt-get install` run before
-this finishes fails with `Could not get lock /var/lib/dpkg/lock-frontend`.
-Check `sudo journalctl -u unattended-upgrades... | tail` for `All
-upgrades installed` before assuming something's actually stuck — it
-commonly runs a second, quick follow-up pass right after the first
-large one, so seeing the lock held again immediately afterward isn't a
-new problem. On a Pi's SD card this whole process took 15-20 minutes
-per node.
+`openssh-server` — and can briefly interrupt SSH mid-upgrade. Any
+`apt-get install` run before this finishes fails with `Could not get
+lock /var/lib/dpkg/lock-frontend`. Check `sudo journalctl -u
+unattended-upgrades... | tail` for `All upgrades installed` before
+assuming something's actually stuck — it commonly runs a second, quick
+follow-up pass right after the first large one, so seeing the lock
+held again immediately afterward isn't a new problem. On a Pi's SD
+card this whole process took 15-20 minutes per node. It will *not*
+trigger an actual reboot on its own at this point — see 0f below,
+which is what makes that happen deliberately rather than never.
+
+### 0f. Automatic reboot for security updates
+
+Confirmed live 2026-08-23: `unattended-upgrades` installing a kernel
+update does **not** reboot to activate it by default —
+`Unattended-Upgrade::Automatic-Reboot` ships `false`. A fresh node sits
+with patches installed-but-inactive indefinitely unless this is turned
+on explicitly (found live: master and `k8s-1` both had a reboot
+pending, from earlier the same night, with nothing ever going to
+reboot them). Deploy `node-provisioning/52unattended-upgrades-local.conf`
+from this repo — a separate `/etc/apt/apt.conf.d/` drop-in rather than
+editing Ubuntu's own shipped `50unattended-upgrades`, so it survives
+that package updating itself:
+```sh
+scp node-provisioning/52unattended-upgrades-local.conf ubuntu@<node>:/tmp/
+ssh ubuntu@<node> "sudo mv /tmp/52unattended-upgrades-local.conf /etc/apt/apt.conf.d/ && sudo chown root:root /etc/apt/apt.conf.d/52unattended-upgrades-local.conf"
+```
+Verify with `apt-config dump | grep Automatic-Reboot` — that's apt's
+own merged view, the same thing `unattended-upgrades` actually reads.
+
+**Reboot window: 04:15 daily, every node including master** (see the
+file's own comments for the full reasoning). Any new node-local cron
+entry or CronJob should avoid 04:00–04:30 to leave headroom around
+this — see CLAUDE.md's CVE Patch Management section for the other
+nightly windows (01:00/06:00 agent-orchestrator dispatch, 03:30 master
+backup) this was chosen to sit clear of.
 
 At this point the node is ready for Phase 1's "Worker nodes" section
 (or, for a master replacement, the "Restoring onto replacement
