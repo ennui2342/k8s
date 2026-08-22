@@ -31,3 +31,4 @@ resources:
   - pvc-usage-monitor/
   - registry/
   - opsimath/
+  - os-eol-scanner/

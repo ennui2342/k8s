@@ -81,6 +81,7 @@ too.
 | `monitoring` | influxdb | `monitoring/influxdb.yaml` | InfluxDB 1.8.0, 8Gi NFS PV |
 | `monitoring` | kube-prometheus-stack | `prometheus/` | Flux HelmRelease (70.x.x); Prometheus + Alertmanager + Grafana + node-exporter + kube-state-metrics. Alertmanager → Discord routing exists (`prometheus/helmrelease.yaml`) but was silently broken from when it was first configured until 2026-07-27 (this Alertmanager version doesn't support `discord_configs`' `webhook_url_file`, so every operator reconcile failed — fixed via `HelmRelease.spec.valuesFrom` injecting the secret value directly instead) |
 | `monitoring` | nas-monitor | `nas-monitor/` | CronJob, 15min: SSH to the NAS, parse `/proc/mdstat`, Discord alert on RAID degradation; SSH key also reused by `pvc-usage-monitor` |
+| `monitoring` | os-eol-scanner | `os-eol-scanner/` | CronJob, weekly (Mon 07:30): reads each node's `status.nodeInfo.osImage` via the k8s API (no SSH needed) and flags Ubuntu LTS EOL approaching/passed — closes the gap the CVE scanner can't (trivy only scans container images, never the host OS) that let the whole fleet sit on an EOL, unpatched Ubuntu 20.04 for over a year unnoticed (tm task `b914610a`, resolved 2026-08-22 with a full node rebuild). No ESM assumed, since this fleet has never had it attached. Deliberately files tasks **untagged** (no `#~upgrade`/`#~deploy`/`#~health`) — an OS reimage is hardware-touching work like `b914610a` was, not something to auto-route to a specialist; `++ennui2342` for backlog visibility instead |
 | `monitoring` | pvc-usage-monitor | `pvc-usage-monitor/` | CronJob, 2h: real per-PVC usage vs. each PVC's own requested size, via `du` over SSH to the NAS (reuses `nas-monitor`'s key) — `kubelet_volume_stats_*` can't do this on this StorageClass, see that directory's script comment. Fires a `<cli.cluster-health` task at 90% of request; `nfs-subdir-external-provisioner` enforces no real quota, so this is a self-imposed budget check, not a hard limit |
 | `registry` | registry | `registry/` | `registry:2`, NFS-backed PVC, NodePort 30500, plain HTTP + anonymous (LAN-only, never exposed beyond it). Target for locally-built images, replacing `docker save`/`scp`/`ctr images import` — see `RUNBOOK.md`'s "Local container registry" for the one-time per-node containerd trust config and Mac-side Docker Desktop config this needs (neither is GitOps-managed, both are node/workstation-local). Confirmed live 2026-07-29 (updated 2026-08-01 — `linkding` and `wallabag` forks added since): migration is complete — every custom/forked image in the repo (`mdns-repeater`, `isfdb-mirror`, `mosquitto`, `modpoll`, `home-assistant`, `telegraf`, `ring-mqtt`, `trivy`, `botkube`, `linkding`, `wallabag`, the Flux controllers, `k8s-toolbox`) is now pulled from `127.0.0.1:30500` with `imagePullPolicy: IfNotPresent`; no manifest in the repo still uses `imagePullPolicy: Never` |
 | `monitoring` | loki | `monitoring/loki.yaml` | Flux HelmRelease (6.x.x); log aggregation, 31-day retention, NFS storage |
@@ -247,6 +248,15 @@ upgrade, health, or deploy specialist subagent. The upgrade specialist's prompt 
 `~/projects/agents/k8s/upgrade-prompt.md` (its own separate, tracked git repo — not part
 of this one).
 
+Trivy's scan is container-image-only — it never sees the host OS itself, which is why the
+whole fleet sat on an EOL, unpatched Ubuntu 20.04 for over a year with nothing catching it
+(tm task `b914610a`, resolved 2026-08-22 via a full node rebuild). `monitoring/os-eol-scanner`
+closes that specific gap (weekly, checks each node's Ubuntu version against known LTS EOL
+dates) using the same file-a-task/dedupe/auto-close shape as the CVE scanner, but files tasks
+**untagged** rather than routing them to the upgrade specialist — an OS reimage is real
+hardware-touching work, not something to hand to an unattended agent the way an image rebuild
+is.
+
 Images with no upstream fix get rebuilt locally and forked (`ghcr.io/ennui2342/*-patched`,
 `imagePullPolicy: Never`, imported directly into node containerd — no registry push). Every fork
 is tracked in `trivy/patched-images.yaml` alongside a reproducible Dockerfile under
@@ -276,6 +286,7 @@ mosquitto/        — Mosquitto deployment, configmap, service
 nas-monitor/      — CronJob: SSH to NAS, parse /proc/mdstat, Discord alert
 nfs/              — NFS provisioner Helm template
 opsimath/         — Rails app: web + Solid Queue worker Deployments, bundled Postgres 18 StatefulSet, RWX Active Storage PVC, internal + Tailscale ingress
+os-eol-scanner/   — CronJob: weekly Ubuntu LTS EOL check across all nodes, files/auto-closes tm tasks (untagged, human-only — see CVE Patch Management below)
 pvc-usage-monitor/ — CronJob: real per-PVC usage vs. requested size via NAS-side `du` over SSH (see Monitoring & Alerting)
 registry/         — local container registry (registry:2), target for future custom image builds — see RUNBOOK.md
 ring-mqtt/        — ring-mqtt deployment, PVC, service

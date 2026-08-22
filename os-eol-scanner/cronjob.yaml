@@ -1,0 +1,289 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: os-eol-scanner
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: os-eol-scanner-reader
+rules:
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: os-eol-scanner-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: os-eol-scanner-reader
+subjects:
+- kind: ServiceAccount
+  name: os-eol-scanner
+  namespace: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: os-eol-scanner-script
+  namespace: monitoring
+data:
+  scan.py: |
+    # Catches the exact failure mode that drove the 2026-08-19/22 OS
+    # rebuild (tm task b914610a): all 3 nodes sat on Ubuntu 20.04, past
+    # its standard-support EOL, with no ESM attached, for well over a
+    # year with nothing watching for it — the CVE scanner only sees
+    # *container image* CVEs (trivy), never the host OS, and
+    # unattended-upgrades silently stops finding anything to install
+    # once a release goes EOL rather than raising any kind of alarm.
+    # This closes that gap the same way the CVE scanner closes the
+    # image-CVE gap: periodic detection + a filed task, never automatic
+    # action — an OS reimage is real hardware-touching, physical-access
+    # work exactly like b914610a was, not something to hand to an
+    # unattended agent. Deliberately left untagged (no #~upgrade/
+    # #~deploy/#~health) so the orchestrator's fallback routes it to
+    # human review, same as b914610a originally was.
+    #
+    # Needs no SSH/node access at all — kubelet already self-reports
+    # status.nodeInfo.osImage via the API, which is all this needs.
+    import json, subprocess, os, sys, re
+    from datetime import date
+
+    TM_API = 'http://api.taskmgt.svc.cluster.local:8081'
+    DISCORD_WEBHOOK = os.environ.get('DISCORD_WEBHOOK', '')
+    SOURCE_TAG = '<cli.os-eol-scanner'
+    WARN_DAYS = 180  # start flagging this far ahead of EOL, not just after it
+
+    STATUS_TOKEN_RE = re.compile(r'\s*§\S+')
+
+    def strip_status(text):
+        lines = text.split('\n', 1)
+        first = STATUS_TOKEN_RE.sub('', lines[0])
+        return first if len(lines) == 1 else first + '\n' + lines[1]
+
+    def set_status(text, status):
+        return strip_status(text).split('\n', 1)[0] + f' §{status}' + (
+            '\n' + text.split('\n', 1)[1] if '\n' in text else ''
+        )
+
+    def get_existing_tasks():
+        r = subprocess.run(['curl', '-sf', f'{TM_API}/tasks'], capture_output=True, text=True)
+        if r.returncode != 0:
+            print('Warning: could not fetch existing tasks from taskmgt', file=sys.stderr)
+            return []
+        try:
+            data = json.loads(r.stdout)
+            tasks = data if isinstance(data, list) else data.get('tasks', [])
+            return [t for t in tasks if SOURCE_TAG in t.get('text', '')]
+        except Exception as e:
+            print(f'Warning: could not parse task list: {e}', file=sys.stderr)
+            return []
+
+    def create_task(title, notes, priority):
+        # Deliberately no #~upgrade/#~deploy/#~health tag - an OS reimage
+        # is hardware-touching work, not something to auto-route to a
+        # specialist. ++ennui2342 for backlog visibility, matching how
+        # every other genuinely-human-only task in this repo is tagged.
+        text = f"{title} {priority} +cli.claude-code.k8s {SOURCE_TAG} ++ennui2342\n{notes}"
+        r = subprocess.run(
+            ['curl', '-sf', '-X', 'POST', f'{TM_API}/tasks',
+             '-H', 'Content-Type: application/json', '-d', json.dumps({'text': text})],
+            capture_output=True, text=True
+        )
+        if r.returncode == 0:
+            try:
+                resp = json.loads(r.stdout)
+                print(f'Created task {resp.get("id", "?")} : {title}')
+            except Exception:
+                print(f'Created task: {title}')
+            return True
+        print(f'Failed to create task: {title}', file=sys.stderr)
+        return False
+
+    def update_task(task_id, text):
+        r = subprocess.run(
+            ['curl', '-sf', '-X', 'PATCH', f'{TM_API}/tasks/{task_id}',
+             '-H', 'Content-Type: application/json', '-d', json.dumps({'text': text})],
+            capture_output=True, text=True
+        )
+        if r.returncode != 0:
+            print(f'tm task update failed for {task_id}', file=sys.stderr)
+            return False
+        return True
+
+    def marker(codename_version):
+        return f'OSEOLCheck: {codename_version}'
+
+    # Ubuntu LTS standard-support EOL: 5 years from an April release.
+    # ESM (paid/free-tier) extends this further but isn't assumed here -
+    # confirmed live 2026-08-19 that this fleet has never had it attached
+    # (`pro status` showed no subscription), and a scanner that assumes
+    # ESM coverage it doesn't actually have is worse than one that
+    # doesn't - it would recreate exactly the blind spot this exists to
+    # close. Extend this table as new LTS releases ship.
+    LTS_EOL = {
+        (20, 4): date(2025, 4, 1),
+        (22, 4): date(2027, 4, 1),
+        (24, 4): date(2029, 4, 1),
+        (26, 4): date(2031, 4, 1),
+        (28, 4): date(2033, 4, 1),
+    }
+
+    r = subprocess.run(['kubectl', 'get', 'nodes', '-o', 'json'], capture_output=True, text=True)
+    if r.returncode != 0:
+        print(f'kubectl get nodes failed: {r.stderr[:200]}', file=sys.stderr)
+        sys.exit(1)
+    nodes = json.loads(r.stdout).get('items', [])
+
+    today = date.today()
+    by_version = {}  # (year, month) -> {'os_string': str, 'nodes': [names]}
+    unknown = []
+
+    for n in nodes:
+        name = n['metadata']['name']
+        os_image = n.get('status', {}).get('nodeInfo', {}).get('osImage', '')
+        m = re.search(r'Ubuntu (\d+)\.(\d+)', os_image)
+        if not m:
+            unknown.append((name, os_image))
+            continue
+        key = (int(m.group(1)), int(m.group(2)))
+        by_version.setdefault(key, {'os_string': os_image, 'nodes': []})['nodes'].append(name)
+
+    if unknown:
+        print(f'Warning: could not parse OS version for: {unknown}', file=sys.stderr)
+
+    existing_tasks = get_existing_tasks()
+    seen_markers = set()
+    issues = []
+
+    for key, info in by_version.items():
+        eol = LTS_EOL.get(key)
+        os_string, node_names = info['os_string'], sorted(info['nodes'])
+        if eol is None:
+            print(f'Unknown EOL date for {os_string} (nodes: {node_names}) - add it to LTS_EOL')
+            continue
+
+        days_left = (eol - today).days
+        m = marker(f'{key[0]}.{key[1]:02d}')
+        seen_markers.add(m)
+
+        if days_left > WARN_DAYS:
+            print(f'{os_string}: {days_left} days to EOL ({eol.isoformat()}), fine ({node_names})')
+            continue
+
+        if any(m in t.get('text', '') for t in existing_tasks):
+            print(f'Already tracked: {os_string} ({node_names})')
+            continue
+
+        if days_left <= 0:
+            title = f'{os_string} is PAST end of standard support on {len(node_names)} node(s)'
+            priority = '!1'
+            urgency = (f'* Standard support ended {eol.isoformat()} ({-days_left} days ago). '
+                       f'No security patches are being applied at the OS level on these nodes '
+                       f'right now, independent of anything the container-image CVE scanner '
+                       f'tracks.')
+        else:
+            title = f'{os_string} approaches end of standard support on {len(node_names)} node(s)'
+            priority = '!2'
+            urgency = (f'* Standard support ends {eol.isoformat()} ({days_left} days from now). '
+                       f'Start planning the reimage now rather than after patches stop.')
+
+        issues.append({
+            'title': title,
+            'notes': (
+                f'{urgency}\n'
+                f'* Affected nodes: {", ".join(node_names)}\n'
+                f'* This is genuine hardware-touching work (SD card reimage), not something to '
+                f'automate - see RUNBOOK.md Phase 0 for the provisioning procedure and tm task '
+                f'b914610a for how the last one went, including real gaps hit along the way.\n'
+                f'* No ESM assumed (this fleet has never had it attached).\n'
+                f'* {m}'
+            ),
+            'priority': priority,
+        })
+
+    closed = []
+    for t in existing_tasks:
+        if t.get('status') != 'open':
+            continue
+        mm = re.search(r'OSEOLCheck:\s*(\S+)', t.get('text', ''))
+        if not mm or mm.group(1) in {s.split(': ', 1)[-1] for s in seen_markers}:
+            continue
+        print(f'Closing {t["id"]}: {mm.group(1)} no longer on any node / back under warning threshold')
+        if update_task(t['id'], set_status(t['text'] + '\n* Resolved: no longer applicable', 'closed')):
+            closed.append(t['text'].split('\n', 1)[0])
+
+    created = []
+    if issues:
+        print(f'Creating {len(issues)} new task(s)...')
+        for issue in issues:
+            if create_task(issue['title'], issue['notes'], issue['priority']):
+                created.append(issue)
+    else:
+        print('No OS versions within warning threshold of EOL')
+
+    if (created or closed) and DISCORD_WEBHOOK:
+        lines = ['**OS EOL Scanner**']
+        if created:
+            lines.append(f'{len(created)} issue(s):')
+            lines.append('```')
+            for issue in created:
+                lines.append(issue['title'])
+            lines.append('```')
+        if closed:
+            lines.append(f'{len(closed)} resolved:')
+            lines.append('```')
+            for title in closed:
+                lines.append(f'✅ {title}')
+            lines.append('```')
+        subprocess.run(
+            ['curl', '-sf', '-X', 'POST', DISCORD_WEBHOOK,
+             '-H', 'Content-Type: application/json',
+             '-d', json.dumps({'username': 'k8s homelab', 'content': '\n'.join(lines)[:2000]})],
+            capture_output=True
+        )
+
+    print(f'Done: {len(created)} task(s) created, {len(closed)} task(s) closed')
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: os-eol-scanner
+  namespace: monitoring
+spec:
+  schedule: "30 7 * * 1"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 604800
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          serviceAccountName: os-eol-scanner
+          restartPolicy: OnFailure
+          containers:
+          - name: scan
+            image: 127.0.0.1:30500/k8s-toolbox:1.32.13-20260802
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: DISCORD_WEBHOOK
+              valueFrom:
+                secretKeyRef:
+                  name: discord-webhook
+                  key: address
+            command:
+            - /bin/sh
+            - -c
+            - |
+              python3 /scripts/scan.py
+            volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+          volumes:
+          - name: scripts
+            configMap:
+              name: os-eol-scanner-script
