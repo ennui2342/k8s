@@ -27,7 +27,6 @@ resources:
   - freshrss/
   - wallabag/
   - traefik/
-  - librarium/
   - isfdb/
   - pvc-usage-monitor/
   - registry/
