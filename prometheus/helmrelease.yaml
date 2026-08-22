@@ -184,6 +184,29 @@ spec:
                 requests:
                   storage: 20Gi
 
+        # Widened probe timeouts/thresholds on the operator-generated
+        # "prometheus" container (strategic-merge patch - the Prometheus CRD's
+        # supported escape hatch for this, see `kubectl explain
+        # prometheus.spec.containers`; there's no dedicated probe-tuning field).
+        # Added 2026-08-22: after a full cluster hard-reboot, k8s-1's load
+        # stayed pinned at ~19-20 for 2+ hours in a self-reinforcing restart
+        # loop - kubelet's default 3s HTTP liveness/readiness probes kept
+        # timing out ("context deadline exceeded") purely from node overload,
+        # kubelet killed an otherwise-healthy Prometheus, and each restart's
+        # WAL replay/compaction (expensive on this node's NFS-backed storage)
+        # added more load, making the real cause worse. Same night, same
+        # symptom, same node hit opsimath-db's Postgres via exec probes - see
+        # opsimath/postgres.yaml's matching comment. 15s/threshold 10 gives
+        # real headroom without masking a genuinely wedged Prometheus.
+        containers:
+          - name: prometheus
+            livenessProbe:
+              timeoutSeconds: 15
+              failureThreshold: 10
+            readinessProbe:
+              timeoutSeconds: 15
+              failureThreshold: 10
+
     # --- Alertmanager ---
     alertmanager:
       alertmanagerSpec:
