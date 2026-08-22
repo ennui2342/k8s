@@ -221,6 +221,32 @@ under it; reconnect on the new IP in a fresh session (and expect a
 IP even though it's the same host and key — `known_hosts` keys off
 address, not identity).
 
+### 0e. avahi-daemon and the first-boot package flood
+
+Two more one-time things per fresh node, confirmed live rebuilding all
+four nodes 2026-08-22:
+
+**`.local` resolution needs `avahi-daemon` installed explicitly** —
+Ubuntu Server 26.04 doesn't ship it running by default, unlike the
+fleet's original 20.04 install (which is why `k8s.local` worked
+reliably all night on the old master but `k8s-N.local` never resolved
+hunting for fresh nodes earlier). `sudo apt-get install -y
+avahi-daemon` on every new/reimaged node, master included.
+
+**Expect a large `unattended-upgrades` run blocking `apt-get` on first
+boot.** A fresh 26.04 image has months of accumulated patches; the
+first automatic security-update pass pulled ~90 packages on every node
+built tonight, including `linux-image-raspi` (the kernel) and
+`openssh-server` — meaning it can trigger an actual reboot once done,
+and briefly interrupt SSH mid-upgrade. Any `apt-get install` run before
+this finishes fails with `Could not get lock /var/lib/dpkg/lock-frontend`.
+Check `sudo journalctl -u unattended-upgrades... | tail` for `All
+upgrades installed` before assuming something's actually stuck — it
+commonly runs a second, quick follow-up pass right after the first
+large one, so seeing the lock held again immediately afterward isn't a
+new problem. On a Pi's SD card this whole process took 15-20 minutes
+per node.
+
 At this point the node is ready for Phase 1's "Worker nodes" section
 (or, for a master replacement, the "Restoring onto replacement
 hardware" procedure below) — but that needs the rest of the cluster
@@ -948,29 +974,47 @@ exactly this:
 #    assume this identity, not just "some node is the master".
 
 # 2. Install k3s SERVER but do not let it auto-init a new empty cluster - stop it immediately
-#    after the binary/service files are laid down, before it creates a fresh empty datastore:
-curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=<current version, check tm tasks 325e53da etc. for what's live> sh -
+#    after the binary/service files are laid down, before it creates a fresh empty datastore.
+#    Pin the version to match what the backup's datastore was actually created with (check
+#    `kubectl get nodes` output from before the failure, or tm tasks 325e53da etc. for what
+#    was live) rather than installing latest - avoids an unnecessary datastore schema
+#    migration on top of an already high-stakes restore. The install script auto-starts k3s
+#    at the end regardless of the env var; stop it immediately after, don't wait:
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.32.13+k3s1 sh -
 sudo systemctl stop k3s
 
-# 3. Pick the most recent archive from /mnt/k8s/k3s-master-backups/ (mount the NAS export first
-#    if this is genuinely fresh hardware: see Phase 2 above) and restore it over the freshly
-#    created (but not yet real) datastore:
+# 3. Pick the most recent archive from /mnt/k8s/k3s-master-backups/. Mounting the NAS export
+#    on genuinely fresh hardware needs `nfs-common` first (not installed by default):
+sudo apt-get install -y nfs-common
+sudo mkdir -p /mnt/k8s && sudo mount -t nfs 192.168.0.76:/mnt/md0/k8s/k3s-master-backups /mnt/k8s
+
+#    Worth verifying the archive before trusting it with anything - extract to a scratch dir
+#    and integrity-check the db before touching the real one:
+mkdir -p /tmp/backup-check && tar -xzf /mnt/k8s/k3s-master-backup-<latest>.tar.gz -C /tmp/backup-check
+sudo apt-get install -y sqlite3   # also not present by default
+sqlite3 /tmp/backup-check/state.db 'PRAGMA integrity_check;'   # expect: ok
+rm -rf /tmp/backup-check
+
+#    Now restore it over the freshly created (but not yet real) datastore:
 sudo rm -rf /var/lib/rancher/k3s/server/db /var/lib/rancher/k3s/server/tls /var/lib/rancher/k3s/server/cred /var/lib/rancher/k3s/server/token
-sudo mkdir -p /var/lib/rancher/k3s/server/db
-sudo tar -xzf /mnt/k8s/k3s-master-backups/k3s-master-backup-<latest>.tar.gz -C /tmp/restore
+sudo mkdir -p /var/lib/rancher/k3s/server/db /tmp/restore
+sudo tar -xzf /mnt/k8s/k3s-master-backup-<latest>.tar.gz -C /tmp/restore
 sudo mv /tmp/restore/state.db /var/lib/rancher/k3s/server/db/state.db
 sudo mv /tmp/restore/tls /var/lib/rancher/k3s/server/tls
 sudo mv /tmp/restore/cred /var/lib/rancher/k3s/server/cred
 sudo mv /tmp/restore/token /var/lib/rancher/k3s/server/token
 sudo chown -R root:root /var/lib/rancher/k3s/server
+sudo umount /mnt/k8s
 
 # 4. Start k3s and verify:
 sudo systemctl start k3s
 sudo journalctl -u k3s -f   # watch for a clean start, not a crash-loop
-kubectl get nodes           # workers should reconnect on their own - same CA/token as before,
-                             # no re-join needed
+kubectl get nodes           # see the node-password caveat below before assuming a failed
+                             # rejoin here means something is actually broken
 kubectl get pods -A         # spot-check nothing's missing
-flux get kustomizations     # confirm GitOps reconciliation resumes cleanly
+flux get kustomizations     # confirm GitOps reconciliation resumes cleanly - stays on the
+                             # backup-era commit until you force a reconcile (see Phase 4);
+                             # this is expected, not a sign anything's wrong
 ```
 
 **Data loss window:** anything that changed between the last successful daily snapshot and the
@@ -979,11 +1023,35 @@ git on the next reconcile anyway) and any manually-applied changes since the las
 application data (that lives in PVCs on the NAS, backed up independently and unaffected by this
 procedure entirely).
 
-**This has not been rehearsed against real failed hardware** — the mechanics above are correct
-per k3s's own documented datastore layout and were verified by restoring a backup archive's
-`state.db` locally (`sqlite3 ... PRAGMA integrity_check` — passed), but a full end-to-end restore
-onto genuinely fresh hardware hasn't been drilled. Worth doing once, deliberately, when the spare
-Pi arrives — better to find gaps in a planned test than during a real outage.
+**If the workers are ALSO fresh hardware/OS, not just master, they will NOT "reconnect on their
+own" — expect a node-password rejection, and here's the fix.** Confirmed live rebuilding all
+four nodes 2026-08-22, full rebuild not just a master swap: k3s stores a per-node "password"
+(a random secret in `/etc/rancher/node/password` on each node, mirrored server-side as a
+`<node-name>.node-password.k3s` Secret in `kube-system`) the first time a given hostname joins.
+The restored datastore still has the **old** hardware's password stored for `k8s-1`/`k8s-2`/etc.
+— but a freshly-reimaged node generates a brand-new password file, since the old one lived only
+on the wiped SD card. The agent's own log makes this look scarier than it is: `journalctl -u
+k3s-agent` repeats "Node password rejected, duplicate hostname..." in a retry loop, and
+`kubectl get nodes` keeps showing the **stale old entry** (old IP, old OS image, unchanged AGE)
+rather than erroring outright. This is expected for a genuine hardware swap, not a real
+conflict - the fix is to clear the stale identity so the new hardware can register fresh:
+```sh
+kubectl delete secret -n kube-system k8s-1.node-password.k3s k8s-2.node-password.k3s   # per affected node
+kubectl delete node k8s-1 k8s-2                                                        # ditto
+```
+No agent restart needed on the worker side - it's already retrying every ~10s and picks this up
+on its own within one cycle. A node that's *not* being replaced (same physical hardware, same
+`/etc/rancher/node/password` file survives) never hits this at all - it only affects hostnames
+whose underlying node identity actually changed.
+
+**This has been rehearsed against real failed hardware** — full end-to-end run 2026-08-22
+(rebuilding all four nodes, not just master): datastore restore worked cleanly on the first
+attempt following steps 1-4 above, master came back with its true multi-year node age intact
+(confirming the restore was genuine, not a fresh empty init), and the only real snag was the
+node-password issue documented above, now fixed. The original caveat here undersold the risk in
+one way and oversold it in another - the mechanics themselves are solid, but the "workers
+reconnect on their own" assumption only holds when the workers themselves aren't also being
+replaced.
 
 ### Adding this on a fresh master (cluster rebuild)
 
