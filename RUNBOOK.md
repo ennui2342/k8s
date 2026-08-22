@@ -151,6 +151,14 @@ build, chasing what turned out to be the Ring doorbell) before doing
 anything else to it: `ssh ubuntu@<ip> "hostname; stat -fc %T
 /sys/fs/cgroup/"`.
 
+**Actually check that hostname, don't just assume it took.** Flashing
+several cards back-to-back in Imager makes it easy to reuse/forget to
+change the hostname field — happened live building `k8s-1`: it came up
+reporting itself as `k8s-2` (a genuine leftover from the previous card's
+settings, not a timing fluke like the transient "ubuntu" default seen
+on `k8s-2`'s own first boot). Fix with `sudo hostnamectl set-hostname
+k8s-N` plus updating the `127.0.1.1` line in `/etc/hosts` to match.
+
 ### 0c. Passwordless sudo
 
 Imager-provisioned images do **not** set up passwordless sudo — `sudo`
@@ -171,9 +179,23 @@ done non-interactively.
 ### 0d. Static IP
 
 IP scheme on the flat `192.168.0.0/24` network (see "Physical & Network
-Topology" above): master is `.8`; workers get `.8N` — `k8s-1`/`k8s-2`
-will move here from their old `192.168.8.x` addresses when they're
-reimaged, `k8s-3` is `.83`.
+Topology" above): master is `.8`; workers are `.8N` — `k8s-1` = `.81`,
+`k8s-2` = `.82`, `k8s-3` = `.83` (confirmed live 2026-08-22, all three
+reimaged/built).
+
+Convention settled on: **both** a DHCP reservation on the router (by
+MAC) **and** a static netplan config on the node itself, not one or the
+other — matches how master's own `.8` already worked (a long-lived DHCP
+reservation) while adding resilience a static config gives that a
+router swap/reset wouldn't silently break (the reservation is
+router-side state, the netplan file isn't). Set the reservation first
+so the node picks it up as a normal DHCP lease, *then* convert to
+static — simpler than fighting over an address that's still live via
+DHCP.
+
+Note: once a node moves off DHCP entirely, the router's DHCP client
+table may keep showing stale/duplicate-looking lease entries for it —
+cosmetic, safe to ignore (or manually clear if it's confusing later).
 
 Imager leaves the interface on DHCP; replace
 `/etc/netplan/50-cloud-init.yaml`:
