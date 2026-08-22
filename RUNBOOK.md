@@ -221,10 +221,24 @@ under it; reconnect on the new IP in a fresh session (and expect a
 IP even though it's the same host and key — `known_hosts` keys off
 address, not identity).
 
-### 0e. avahi-daemon and the first-boot package flood
+### 0e. avahi-daemon, nfs-common, and the first-boot package flood
 
-Two more one-time things per fresh node, confirmed live rebuilding all
-four nodes 2026-08-22:
+Three more one-time things per fresh node, confirmed live rebuilding
+all four nodes 2026-08-22:
+
+**`nfs-common` is required on every worker for ANY NFS-backed PVC to
+mount, and it is not installed by default.** This is the one that
+actually matters most - without it, kubelet fails every NFS mount with
+`mount: bad option; for several filesystems (e.g. nfs, cifs) you might
+need a /sbin/mount.<type> helper program`, which cascades into nearly
+the entire cluster sitting in `ContainerCreating` (or, for the
+`registry` pod specifically - see "Recovery storm troubleshooting"
+below - `ImagePullBackOff` everywhere else too, since almost nothing
+can pull images once the registry itself can't mount its own storage).
+`sudo apt-get install -y nfs-common` on every worker before it's
+expected to run any stateful workload. Master doesn't strictly need it
+(tainted `NoSchedule`, runs no PVC-backed pods) but installing it there
+too is harmless and one less thing to remember differently.
 
 **`.local` resolution needs `avahi-daemon` installed explicitly** —
 Ubuntu Server 26.04 doesn't ship it running by default, unlike the
@@ -361,11 +375,66 @@ flux get kustomizations --watch
 kubectl get pods -A
 ```
 
-All namespaces should come up within a few minutes. Check for failures:
+All namespaces should come up within a few minutes in the common case.
+For a **full multi-node rebuild specifically** (not just one node
+rejoining a stable cluster), expect this to take much longer and to
+look alarming before it clears - confirmed live 2026-08-22 rebuilding
+all four nodes at once, see "Recovery storm troubleshooting" below.
+
+Check for failures:
 
 ```sh
 flux logs --level=error
 ```
+
+### Recovery storm troubleshooting
+
+When many nodes join (or rejoin) at once with empty local image
+caches, nearly everything ends up depending on one thing: the single
+`registry` pod (one Deployment, one replica - see `registry/` in
+CLAUDE.md's service table). This is fine in steady state (containerd's
+local image cache means most pulls never hit the registry again once a
+node has them), but during a fresh multi-node bootstrap it becomes a
+real bottleneck, and the failure mode is confusing because it looks
+like dozens of independent problems rather than one:
+
+- **`kubectl get pods -A` shows a wall of `ImagePullBackOff` across
+  totally unrelated namespaces simultaneously.** Don't chase these
+  individually - check the `registry` pod itself first
+  (`kubectl get pods -n registry -o wide`). If it's not `1/1 Running`,
+  that's very likely the actual root cause for most of the list.
+- **If the registry pod itself is stuck `ContainerCreating`**, check
+  its own mount events (`kubectl describe pod -n registry ...`) - this
+  is where the `nfs-common` gap above was actually found live.
+- **If the registry pod is `Running` but pulls through it are still
+  slow/hanging**, check its own logs for response times:
+  `kubectl logs -n registry -l app=registry --tail=30` - a manifest
+  fetch (small JSON, should be near-instant) taking many seconds
+  (confirmed live: 15.6s) means its own NFS-backed storage is under
+  contention from the same NAS load every other node's PVC mounts are
+  generating simultaneously. Not a bug, just genuine load from the
+  whole cluster hitting NFS at once - it clears as the storm settles,
+  no fix to apply beyond patience.
+- **Once the actual blocker (registry, an NFS-common gap, etc.) is
+  fixed, don't wait out individual pods' exponential image-pull
+  backoff** - `kubectl delete pod` on the stuck ones forces an
+  immediate retry instead of waiting up to 5 minutes for the next
+  scheduled attempt. Safe for anything managed by a
+  Deployment/DaemonSet/StatefulSet/CronJob, which is everything here.
+- **A one-off "`dial tcp: lookup <host>: Try again`" for an external
+  (non-local-registry) pull is usually a transient DNS hiccup**, not a
+  real outage - confirmed live pulling `registry:2` itself from Docker
+  Hub. A direct `curl` to the same host succeeding while the pod stays
+  in backoff confirms it was transient; delete the pod to retry rather
+  than debug DNS further.
+- **`flux-system`'s own pods (`kustomize-controller` etc.) are subject
+  to all of the above too** - Flux won't catch up to the current git
+  commit (`kubectl get kustomization flux-system -n flux-system` will
+  keep showing an old `Applied revision`) until `kustomize-controller`
+  itself is actually `Running`, which depends on the same registry
+  chain. This is why "Flux hasn't reconciled yet" during a big rebuild
+  usually isn't a Flux problem at all - check the registry/pull chain
+  first.
 
 Flux manages the full stack including cert-manager (via `cert-manager/helmrelease.yaml`)
 and the Tailscale operator (via `tailscale/helmrelease.yaml`) — no manual Helm installs
