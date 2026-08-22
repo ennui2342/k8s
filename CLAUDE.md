@@ -5,9 +5,11 @@ All active app manifests live here. Flux reconciles the cluster against this rep
 
 ## Cluster Topology
 
-- **k3s** v1.32
-- **Master** (`k8s`, `ubuntu@k8s.local`): control plane only — tainted `node-role.kubernetes.io/control-plane:NoSchedule`. Directly accessible from dev Mac via SSH and kubeconfig. Single node, no HA (deliberate — see RUNBOOK.md's "Master Datastore Backup & Restore"); daily SQLite/kine datastore + TLS/cred backup to the NAS instead, node-local cron, not GitOps-managed.
-- **Workers**: `k8s-1` (`ubuntu@k8s-1`), `k8s-2` (`ubuntu@k8s-2`) — reachable from master only (SSH keys on master)
+- **k3s** v1.32.13+k3s1
+- **OS**: Ubuntu Server 26.04 LTS on all four nodes (rebuilt 2026-08-22, replacing the original Ubuntu 20.04 install that had gone EOL with no ESM attached — see RUNBOOK.md's "Phase 0" and git history around that date for the rebuild). cgroup v2 throughout, which matters: it's what previously blocked a k3s v1.36 upgrade attempt (hard-refused to start on the old cgroup v1 install) — that upgrade is unblocked now but hasn't been re-attempted since.
+- **Master** (`k8s`, `ubuntu@k8s.local`, `192.168.0.8`): control plane only — tainted `node-role.kubernetes.io/control-plane:NoSchedule`. Directly accessible from dev Mac via SSH and kubeconfig. Single node, no HA (deliberate — see RUNBOOK.md's "Master Datastore Backup & Restore"); daily SQLite/kine datastore + TLS/cred backup to the NAS instead, node-local cron, not GitOps-managed. The 2026-08-22 rebuild included the first real end-to-end rehearsal of restoring this backup onto genuinely replacement hardware (not just a local integrity check) — worked cleanly first attempt; see RUNBOOK.md for what that surfaced (a k3s node-password gotcha when workers are also fresh hardware under the same procedure).
+- **Workers**: `k8s-1` (`192.168.0.81`), `k8s-2` (`192.168.0.82`), `k8s-3` (`192.168.0.83`, added 2026-08-22) — all directly reachable from the dev Mac via SSH, same as master (flat network, see below; the old "workers reachable from master only" hop requirement no longer applies).
+- **Physical network** (see RUNBOOK.md's "Physical & Network Topology" for the full history): flat `192.168.0.0/24` — master and all three workers connect as peers to the same switch, which uplinks straight to the home router. Replaced an earlier design where master routed the workers' traffic over its own Wi-Fi link (kept for the tower's portability); that link was retired once the NAS connection itself needed a wired path for reliability, at which point the portability the Wi-Fi design bought was moot anyway.
 - **Ingress**: Traefik v3 (bundled with k3s)
 - **Storage**: NFS StorageClass `nfs-client` backed by `192.168.0.76:/mnt/md0/k8s` (all PVs are NFS — no local disk dependency)
 - **VPN**: Tailscale Kubernetes operator (namespace: `tailscale`)
@@ -295,5 +297,5 @@ website/          — nginx/PHP StatefulSet, configmaps, ingress
 3. Check `kubectl get gitrepository,kustomization,imagepolicy,imageupdateautomation -A` for Flux status.
 4. The cluster is the source of truth for what's *running*; this repo is the source of truth for what *should* run.
 5. Inactive/historical manifests exist locally but are gitignored — they may be stale.
-6. SSH to master: `ssh ubuntu@k8s.local`. Workers only reachable from there.
+6. SSH: `ssh ubuntu@k8s.local` (master) or directly to any worker (`192.168.0.81`/`.82`/`.83`) — flat network, no hop required.
 7. Use `kubectl` locally — do not SSH to k8s.local just to run kubectl.

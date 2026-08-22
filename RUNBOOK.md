@@ -55,14 +55,16 @@ hardware-refresh project it's part of (see git history around
   ~4s at one point), on top of the SD-card and NAS-side contention
   identified at the time.
 
-### New design (migration started 2026-08-22, see git history for status)
+### New design (migration completed 2026-08-22, alongside a full node rebuild)
 
 Flat network: every node (master, `k8s-1`, `k8s-2`, `k8s-3`) connects
 directly to the same switch as a peer on `192.168.0.0/24`, no
 master-mediated routing. The switch's uplink (port 1 of the GS305) goes
 straight to the home router, not through master. Master's own path to
 the NAS also moves from Wi-Fi to wired Ethernet, for the same latency/
-reliability reason.
+reliability reason. Final addresses (see Phase 0's "Static IP" section
+for the `.8N` convention): master `192.168.0.8`, `k8s-1` `.81`, `k8s-2`
+`.82`, `k8s-3` `.83`.
 
 - **Gains:** master is no longer a SPOF for worker networking; every
   node gets a low-latency wired path to the NAS instead of funneling
@@ -85,10 +87,12 @@ reliability reason.
   temporarily unplugging a worker for the few minutes of validation, or
   validating the new master via a direct Mac connection before the final
   unplug-old/plug-new swap into its permanent port.
-- Once this migration is complete, update the "Cluster Topology" section
-  of `CLAUDE.md` — it still documents the old subnet split and the
-  "workers reachable from master only" SSH-hop requirement, both of
-  which stop being true.
+- Confirmed live: all four nodes reconciled correctly post-migration,
+  including a full master datastore restore onto replacement hardware
+  under this new addressing (see "Restoring onto replacement hardware"
+  below) and Flux catching up to current git with no network-topology-
+  related issues. `CLAUDE.md`'s "Cluster Topology" section has been
+  updated to match (old subnet split and SSH-hop requirement removed).
 
 ---
 
@@ -282,15 +286,20 @@ sudo cat /etc/rancher/k3s/k3s.yaml
 Edit the copied kubeconfig: replace `127.0.0.1` with `k8s.local`, then
 save to `~/.kube/config` on the Mac.
 
-### Worker nodes (from master)
+### Worker nodes
 
 ```sh
 # Get the join token from the master
 sudo cat /var/lib/rancher/k3s/server/node-token
 
-# On each worker (k8s-1, k8s-2) via master SSH hop:
-curl -sfL https://get.k3s.io | K3S_URL=https://k8s.local:6443 K3S_TOKEN=<token> sh -
+# On each worker (k8s-1, k8s-2, k8s-3) — flat network, SSH directly, no master hop needed:
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=<match the master's version> K3S_URL=https://192.168.0.8:6443 K3S_TOKEN=<token> sh -
 ```
+
+If a worker is rejoining under a hostname that already exists in the (possibly restored)
+datastore — e.g. replacement hardware reusing the old node name — see the node-password
+gotcha under "Restoring onto replacement hardware" below; it applies here too, not just to
+master recovery.
 
 Verify:
 
@@ -481,7 +490,14 @@ Two steps here are **not** managed by Flux/GitOps and must be redone by hand on 
 cluster — they're node-local and workstation-local config, outside Kubernetes' object model
 entirely:
 
-**1. Containerd trust, on every node (master + both workers):**
+**1. Containerd trust, on every node (master + all three workers):**
+
+Every node is directly SSH-reachable now (flat network, see "Physical &
+Network Topology" above) — no more hopping through master to reach the
+workers. For a **new** node this is already handled by Phase 0's own
+provisioning steps (registries.yaml is written before k3s is even
+installed, so it's picked up on first start with no restart needed);
+this version is for re-applying it on an existing node:
 
 ```sh
 cat <<'EOF' > /tmp/registries.yaml
@@ -491,14 +507,14 @@ mirrors:
       - "http://127.0.0.1:30500"
 EOF
 
-# Master
-scp /tmp/registries.yaml ubuntu@k8s.local:/tmp/registries.yaml
-ssh ubuntu@k8s.local "sudo mkdir -p /etc/rancher/k3s && sudo cp /tmp/registries.yaml /etc/rancher/k3s/registries.yaml && sudo systemctl restart k3s"
-
-# Workers (via master hop) — /etc/rancher/k3s/ doesn't exist by default on a fresh worker, mkdir -p first
-ssh ubuntu@k8s.local "scp /tmp/registries.yaml k8s-1:/tmp/ && scp /tmp/registries.yaml k8s-2:/tmp/"
-ssh ubuntu@k8s.local "ssh k8s-1 'sudo mkdir -p /etc/rancher/k3s && sudo cp /tmp/registries.yaml /etc/rancher/k3s/registries.yaml && sudo systemctl restart k3s-agent'"
-ssh ubuntu@k8s.local "ssh k8s-2 'sudo mkdir -p /etc/rancher/k3s && sudo cp /tmp/registries.yaml /etc/rancher/k3s/registries.yaml && sudo systemctl restart k3s-agent'"
+for host in 192.168.0.8 192.168.0.81 192.168.0.82 192.168.0.83; do
+  scp /tmp/registries.yaml ubuntu@$host:/tmp/registries.yaml
+  ssh ubuntu@$host "sudo mkdir -p /etc/rancher/k3s && sudo cp /tmp/registries.yaml /etc/rancher/k3s/registries.yaml"
+done
+ssh ubuntu@192.168.0.8 "sudo systemctl restart k3s"
+for host in 192.168.0.81 192.168.0.82 192.168.0.83; do
+  ssh ubuntu@$host "sudo systemctl restart k3s-agent"
+done
 ```
 
 The endpoint is deliberately `127.0.0.1:30500`, not a specific node's IP — a NodePort
@@ -1128,6 +1144,19 @@ After Phase 3's Flux bootstrap, `scp master-backup/k3s-backup.sh` from this repo
 `/usr/local/bin/k3s-backup.sh` on the new master, `chmod +x`, and re-add the cron line — nothing
 here survives a from-scratch rebuild automatically, it's pure host-local state like the
 containerd trust config above.
+
+**Also easy to miss (confirmed live 2026-08-22, master rebuild): `/mnt/k8s` needs a persistent
+`/etc/fstab` entry, not just a manual `mount`.** The script assumes `/mnt/k8s` is already mounted
+(`BACKUP_ROOT="/mnt/k8s/k3s-master-backups"`) and doesn't mount it itself. A manual `mount`
+works until the next reboot, then silently stops - the cron job wouldn't fail loudly, it just
+wouldn't have anywhere real to write. Add:
+```
+192.168.0.76:/mnt/md0/k8s /mnt/k8s nfs defaults,_netdev 0 0
+```
+to `/etc/fstab`, then `sudo mount -a` to verify it actually mounts before moving on. Worth running
+the script once manually right after setup, both to confirm it works end-to-end and to get a
+fresh, current backup in place immediately rather than leaving whatever pre-rebuild archive is
+newest as the only restore point.
 
 ---
 
