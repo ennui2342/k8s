@@ -92,6 +92,120 @@ reliability reason.
 
 ---
 
+## Phase 0 — Provisioning a New Node (OS + first boot)
+
+Covers getting a fresh Pi from bare SD card to "SSH-reachable with
+passwordless sudo and a stable IP" — everything Phase 1 below silently
+assumes already exists. Worked out live during the `k8s-3` build,
+2026-08-22.
+
+### 0a. Flash the SD card
+
+Raspberry Pi Imager, current OS list choice: **Ubuntu Server 26.04 LTS**
+(64-bit) — Server, not Desktop (headless, no GUI needed); 26.04 because
+Ubuntu's April releases are always LTS (20.04, 22.04, 24.04, 26.04) and
+using the newest available one maximizes runway before hitting the exact
+EOL problem that started this whole rebuild (see git history/commit
+messages around 2026-08-19 through 2026-08-22 for that story). Confirmed
+live: ships with cgroup v2 by default (`stat -fc %T /sys/fs/cgroup/` →
+`cgroup2fs`), which matters — newer k3s/kubelet hard-refuses to start on
+cgroup v1, and the fleet's original 20.04 install was cgroup v1.
+
+In recent Imager versions there's no separate gear-icon "Advanced
+options" step — for Server images it goes straight from storage
+selection into the customisation screen. Set:
+- **Hostname**: `k8s-N` (matches existing convention — `k8s`, `k8s-1`,
+  `k8s-2`, `k8s-3`, ...)
+- **Username**: `ubuntu`, with a password (Imager requires one even
+  though SSH will use key auth)
+- **Enable SSH**: on, "Allow public-key authentication only", using the
+  same public key already authorized on the existing nodes
+
+### 0b. First boot
+
+Boot it connected to the switch. If it doesn't show up on the network
+within a few minutes and the green ACT LED shows continuous, evenly-
+spaced blinking that never settles or stops — that's ambiguous (it
+doesn't match the Pi 4 bootloader's actual error codes, which are
+counted flash-groups with pauses between them, not continuous) — **try
+a power cycle before assuming a bad flash**. This is exactly what
+happened building `k8s-3`: the first boot attempt never came up on the
+network at all; a power cycle immediately after fixed it with no
+re-flash needed. If it still doesn't come up after a power cycle, HDMI
+to any monitor (even a TV) gives a direct read on what's actually
+happening — much faster than guessing from LEDs or repeated network
+scans.
+
+To find it once booted: try `ping <hostname>.local` first (mDNS/Avahi —
+not guaranteed present on Ubuntu Server images, so absence doesn't mean
+it's not up), and failing that, a full subnet ping sweep compared
+against already-known devices:
+```sh
+for i in $(seq 1 254); do
+  (ping -c1 -W 500 192.168.0.$i >/dev/null 2>&1 && echo "192.168.0.$i alive") &
+done; wait
+```
+Verify any new address is actually the Pi (not a coincidentally-timed
+lease from an unrelated device — this cost real time during the `k8s-3`
+build, chasing what turned out to be the Ring doorbell) before doing
+anything else to it: `ssh ubuntu@<ip> "hostname; stat -fc %T
+/sys/fs/cgroup/"`.
+
+### 0c. Passwordless sudo
+
+Imager-provisioned images do **not** set up passwordless sudo — `sudo`
+over a non-interactive SSH session fails with "sudo: interactive
+authentication is required" (confirmed live, not just a missing-TTY
+issue: `sudo -n` fails outright). This needs one interactive,
+password-entering pass per new node — from your own terminal (not
+something to route through an agent, since it needs the account
+password you set in Imager, not the SSH key):
+```sh
+ssh ubuntu@<ip>
+echo "ubuntu ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/ubuntu-nopasswd
+```
+Matches how the existing three nodes are already configured. Everything
+after this point (static IP, k3s install, ongoing operations) can be
+done non-interactively.
+
+### 0d. Static IP
+
+IP scheme on the flat `192.168.0.0/24` network (see "Physical & Network
+Topology" above): master is `.8`; workers get `.8N` — `k8s-1`/`k8s-2`
+will move here from their old `192.168.8.x` addresses when they're
+reimaged, `k8s-3` is `.83`.
+
+Imager leaves the interface on DHCP; replace
+`/etc/netplan/50-cloud-init.yaml`:
+```yaml
+network:
+  version: 2
+  ethernets:
+    eth0:
+      dhcp4: false
+      addresses:
+        - 192.168.0.8N/24
+      routes:
+        - to: default
+          via: 192.168.0.1
+      nameservers:
+        addresses:
+          - 192.168.0.1
+```
+then `sudo netplan apply`. **The SSH session you ran that from will hang
+or die** — expected, since the interface's address just changed out from
+under it; reconnect on the new IP in a fresh session (and expect a
+"host key verification failed" / trust-on-first-use prompt for that new
+IP even though it's the same host and key — `known_hosts` keys off
+address, not identity).
+
+At this point the node is ready for Phase 1's "Worker nodes" section
+(or, for a master replacement, the "Restoring onto replacement
+hardware" procedure below) — but that needs the rest of the cluster
+reachable first if joining an existing one.
+
+---
+
 ## Phase 1 — k3s Installation
 
 ### Master node
