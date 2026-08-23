@@ -14,6 +14,7 @@ All active app manifests live here. Flux reconciles the cluster against this rep
 - **Storage**: NFS StorageClass `nfs-client` backed by `192.168.0.76:/mnt/md0/k8s` (all PVs are NFS — no local disk dependency)
 - **VPN**: Tailscale Kubernetes operator (namespace: `tailscale`)
 - **TLS**: cert-manager with Let's Encrypt (ClusterIssuer: `letsencrypt-prod`). Note: `*.k8s.ecafe.org` is internal DNS only — do not attempt TLS for those hostnames.
+- **DNS for `*.k8s.ecafe.org` on Tailscale clients**: the Tailscale admin console has a Split DNS entry routing the `k8s.ecafe.org` domain (and all subdomains) straight to this cluster's CoreDNS (`10.43.0.10`, the `kube-dns` ClusterIP) rather than public DNS — Tailscale clients can reach that ClusterIP directly over the tailnet-routed service CIDR, avoiding the same home-router NAT-hairpin problem `webdav`'s Funnel ingress works around (see that entry above). CoreDNS answers with Traefik's own ClusterIP (`coredns/coredns-custom.yaml`, a `template` plugin override) rather than forwarding, so Tailscale clients hit Traefik directly without ever leaving the cluster network. Confirmed live 2026-08-23: the override's regex originally required a label before `k8s` (matching `grafana.k8s.ecafe.org` etc.) but not the bare apex `k8s.ecafe.org` itself, making the website completely unreachable for any Tailscale-connected client (while working fine on-LAN or off-Tailscale, and while the site/pod/ingress were all completely healthy the whole time) — fixed by widening the regex to make the leading label optional. Worth checking this override first for any future "site X.k8s.ecafe.org / k8s.ecafe.org isn't loading, but only for me" report before assuming an app-level problem.
 - **GitOps**: Flux v2 pointing at `github.com/ennui2342/k8s` (branch: `main`)
 
 ## Scheduling Constraints
@@ -284,7 +285,7 @@ see `RUNBOOK.md`'s "CVE Patch Management" section for the full mechanics.
 ```
 botkube/          — Flux HelmRelease + Discord webhook secret; Discord alerts + kubectl/helm/flux executors
 cert-manager/     — Flux HelmRelease + HelmRepository (jetstack) + ClusterIssuer
-coredns/          — CoreDNS custom config (*.k8s.ecafe.org wildcard)
+coredns/          — CoreDNS override resolving k8s.ecafe.org (apex + subdomains) straight to Traefik's ClusterIP, for Tailscale Split DNS clients — see Cluster Topology's DNS note above
 flux-system/      — Flux bootstrap output + SOPS patch + alert config
 dashboards/       — Custom Grafana dashboard ConfigMaps (Solar, Observatory, NAS Monitor, Weather Station)
 epigone/          — epigone.ecafe.org namespace: cert-manager Certificate + IngressRoute fronting Home Assistant
