@@ -5,8 +5,21 @@ metadata:
   namespace: kube-system
 data:
   k8s-ecafe.override: |
+    # Matches both the bare apex (k8s.ecafe.org) and any subdomain
+    # (grafana.k8s.ecafe.org, rss.k8s.ecafe.org, ...) - the original regex
+    # required a label before "k8s", which silently excluded the apex
+    # domain itself. That's harmless for pods (which never query the bare
+    # apex), but breaks Tailscale clients: Tailscale's Split DNS for
+    # k8s.ecafe.org is configured to route straight to this cluster's
+    # CoreDNS (10.43.0.10, the kube-dns ClusterIP) so Tailscale devices
+    # reach Traefik directly over the tailnet-routed service CIDR instead
+    # of hairpinning through the home router - same NAT-hairpin problem
+    # webdav's Funnel ingress works around, see CLAUDE.md. Confirmed live
+    # 2026-08-23: k8s.ecafe.org (the website, no subdomain) was completely
+    # unreachable for any Tailscale-connected client because of this gap,
+    # even though the site itself was healthy the whole time.
     template IN A k8s.ecafe.org {
-      match ^[^.]+\.k8s\.ecafe\.org\.$
+      match ^([^.]+\.)?k8s\.ecafe\.org\.$
       answer "{{ .Name }} 60 IN A 10.43.225.80"
       fallthrough
     }
