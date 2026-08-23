@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nas-diskio-monitor-script
+  namespace: monitoring
+data:
+  diskio.py: |
+    # Added 2026-08-23 while investigating repeated NodeHighIOWait alerts
+    # (tm task 50cad5c2): NAS CPU/network/RAID were all confirmed healthy
+    # during the alert windows via existing SNMP polling, but nothing
+    # collected the NAS's own disk I/O - and telegraf's snmpd-based
+    # UCD-DISKIO-MIB table (monitoring/telegraf.yaml) turned out to be a
+    # dead end, since this NAS's embedded net-snmp build (5.4.4) simply
+    # doesn't compile in the diskio module at all (confirmed via
+    # `snmpd -H` listing every directive it understands - diskio isn't
+    # among them). This SSHes directly to the NAS instead, using a
+    # dedicated low-privilege account (k8s-monitor, not the admin login)
+    # created specifically for this, and writes straight to InfluxDB's
+    # HTTP line-protocol endpoint - bypassing telegraf entirely for this
+    # one metric, since there's no SNMP path available for it.
+    #
+    # Values written are the raw cumulative counters from /proc/diskstats
+    # (kernel docs: https://www.kernel.org/doc/Documentation/iostats.txt),
+    # same "let the query layer take the derivative" design as every other
+    # nas_* measurement here - not pre-computed rates.
+    import subprocess, sys, time, urllib.request
+
+    NAS_HOST = 'k8s-monitor@192.168.0.76'
+    NAS_PORT = '9222'
+    INFLUX_URL = 'http://influxdb.monitoring.svc:8086/write?db=telegraf&rp=nas_30d'
+    # Physical disks (sdb/sdc, mirrored RAID1) and the md0 RAID device
+    # itself - the /mnt/md0 mountpoint's ultimate backing devices.
+    DEVICES = {'sdb', 'sdc', 'md0'}
+
+    r = subprocess.run(
+        ['ssh', '-p', NAS_PORT, '-i', '/ssh/id_ed25519',
+         '-o', 'StrictHostKeyChecking=no', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10',
+         NAS_HOST, 'cat /proc/diskstats'],
+        capture_output=True, text=True
+    )
+    if r.returncode != 0 or not r.stdout.strip():
+        print(f'Warning: could not reach NAS or got no diskstats output: {r.stderr[:300]}', file=sys.stderr)
+        sys.exit(0)
+
+    now_ns = int(time.time() * 1e9)
+    lines = []
+    for line in r.stdout.strip().split('\n'):
+        parts = line.split()
+        if len(parts) < 14:
+            continue
+        device = parts[2]
+        if device not in DEVICES:
+            continue
+        reads_completed = int(parts[3])
+        sectors_read = int(parts[5])
+        ms_reading = int(parts[6])
+        writes_completed = int(parts[7])
+        sectors_written = int(parts[9])
+        ms_writing = int(parts[10])
+        ms_doing_io = int(parts[12])
+        weighted_ms_io = int(parts[13])
+
+        fields = (
+            f'reads_completed={reads_completed}i,'
+            f'read_bytes={sectors_read * 512}i,'
+            f'ms_reading={ms_reading}i,'
+            f'writes_completed={writes_completed}i,'
+            f'write_bytes={sectors_written * 512}i,'
+            f'ms_writing={ms_writing}i,'
+            f'ms_doing_io={ms_doing_io}i,'
+            f'weighted_ms_io={weighted_ms_io}i'
+        )
+        lines.append(f'nas_diskio,agent_host=192.168.0.76,device={device} {fields} {now_ns}')
+
+    if not lines:
+        print('Warning: no matching devices found in /proc/diskstats', file=sys.stderr)
+        sys.exit(0)
+
+    payload = '\n'.join(lines).encode()
+    req = urllib.request.Request(INFLUX_URL, data=payload, method='POST')
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            print(f'Wrote {len(lines)} disk device point(s), influx status {resp.status}')
+    except Exception as e:
+        print(f'Failed to write to InfluxDB: {e}', file=sys.stderr)
+        sys.exit(1)
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nas-diskio-monitor
+  namespace: monitoring
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 604800
+      activeDeadlineSeconds: 60
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: diskio
+            image: 127.0.0.1:30500/k8s-toolbox:1.32.13-20260802
+            imagePullPolicy: IfNotPresent
+            command:
+            - /bin/sh
+            - -c
+            - |
+              python3 /scripts/diskio.py
+            volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: ssh-key
+              mountPath: /ssh
+              readOnly: true
+          volumes:
+          - name: scripts
+            configMap:
+              name: nas-diskio-monitor-script
+          - name: ssh-key
+            secret:
+              secretName: nas-diskio-ssh-key
+              defaultMode: 0600

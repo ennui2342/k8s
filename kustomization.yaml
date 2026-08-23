@@ -32,3 +32,4 @@ resources:
   - registry/
   - opsimath/
   - os-eol-scanner/
+  - nas-diskio-monitor/
