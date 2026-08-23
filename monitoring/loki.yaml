@@ -71,6 +71,24 @@ spec:
                 matchExpressions:
                   - key: node-role.kubernetes.io/control-plane
                     operator: DoesNotExist
+            # k8s-1 and k8s-2 kept their original, smaller/slower SD cards
+            # through the 2026-08-22 in-place reimage (only the master and
+            # k8s-3 got new higher-endurance cards) and k8s-1 ended up
+            # hosting the densest cluster of PVC-backed write-heavy pods
+            # (registry, influxdb, wallabag, home-assistant, ...) - the
+            # combination produced sustained NodeHighIOWait/
+            # NodeCriticalIOWait overnight 2026-08-22/23. Loki's continuous
+            # chunk/WAL/compactor writes are one of the heaviest contributors
+            # on that node, so nudge it (soft preference, not a hard
+            # requirement) toward k8s-3, which has the same card type as
+            # master and the lightest PVC-pod count in the fleet.
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - k8s-3
       persistence:
         enabled: true
         storageClass: nfs-client

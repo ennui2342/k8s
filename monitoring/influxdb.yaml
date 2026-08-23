@@ -72,6 +72,17 @@ spec:
                 matchExpressions:
                   - key: node-role.kubernetes.io/control-plane
                     operator: DoesNotExist
+            # Same k8s-1 IOWait rebalancing as monitoring/loki.yaml - see
+            # its comment for the full 2026-08-22/23 finding. InfluxDB's
+            # continuous telegraf-driven writes were the other major
+            # contributor alongside Loki.
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - k8s-3
       containers:
       - name: influxdb
         image: influxdb:1.8.0
