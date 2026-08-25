@@ -141,6 +141,7 @@ data:
 
 
     issues = []
+    closed = []
     existing_tasks = get_existing_health_tasks()
     print(f'Existing cluster-health tasks: {len(existing_tasks)}')
 
@@ -206,13 +207,53 @@ data:
         capture_output=True, text=True
     )
     active_alerts = []
+    alertmanager_reachable = True
     if r.returncode != 0:
         print('Warning: could not fetch alerts from Alertmanager', file=sys.stderr)
+        alertmanager_reachable = False
     else:
         try:
             active_alerts = json.loads(r.stdout)
         except Exception as e:
             print(f'Warning: could not parse Alertmanager response: {e}', file=sys.stderr)
+            alertmanager_reachable = False
+
+    # This bridge is itself a single point of failure for every alert it's
+    # meant to surface - confirmed live 2026-08-24/25: it silently failed to
+    # reach Alertmanager for at least the tail end of the k8s-1 hostname-
+    # collision outage (2 days NotReady, took down web-0), reporting "no
+    # issues" every 30 minutes the whole time instead of surfacing its own
+    # blindness, even though KubeNodeNotReady/KubeStatefulSetReplicasMismatch
+    # were firing continuously and would otherwise have caught this on the
+    # first run. Fail loud instead of fail closed: track this as its own
+    # !1 issue so a broken bridge is never silently indistinguishable from
+    # "all clear" - and auto-close once it's reachable again, same as any
+    # other bridged alert.
+    ALERTMANAGER_UNREACHABLE_MARKER = 'AlertmanagerUnreachable'
+    if not alertmanager_reachable:
+        if issue_tracked(ALERTMANAGER_UNREACHABLE_MARKER, existing_tasks):
+            print('Already tracked: Alertmanager unreachable')
+        else:
+            issues.append({
+                'resource': 'health-monitor/alertmanager-fetch',
+                'title': 'health-monitor cannot reach Alertmanager - alert bridging is blind',
+                'notes': (
+                    f'* curl to {ALERTMANAGER_API}/alerts failed or returned unparseable data.\n'
+                    f'* While this persists, NO Alertmanager-firing alert (NodeNotReady, '
+                    f'StatefulSetReplicasMismatch, KubeJobFailed, etc.) gets turned into a '
+                    f'tracked task even if it is actively firing - this script would otherwise '
+                    f'silently report "no issues" every run.\n'
+                    f'* {ALERTMANAGER_UNREACHABLE_MARKER}'
+                ),
+                'priority': '!1',
+            })
+    else:
+        for t in existing_tasks:
+            if t.get('status') != 'open' or ALERTMANAGER_UNREACHABLE_MARKER not in t.get('text', ''):
+                continue
+            print(f'Closing {t["id"]}: Alertmanager reachable again')
+            if update_task(t['id'], set_status(t['text'] + '\n* Resolved: Alertmanager reachable again', 'closed')):
+                closed.append(t['text'].split('\n', 1)[0])
 
     active_fingerprints = set()
     for alert in active_alerts:
@@ -248,7 +289,6 @@ data:
     # Close tasks for alerts that stopped firing since they were created —
     # only ones with a fingerprint marker (i.e. bridge-created), so this
     # never touches this script's own kubectl-based checks above.
-    closed = []
     for t in existing_tasks:
         if t.get('status') != 'open':
             continue
