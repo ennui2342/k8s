@@ -199,6 +199,19 @@ via the `<cli.cluster-health` or `<cli.cve-scanner`/`<cli.reconcile-scanner` sou
 route through the agent-orchestrator pipeline — see CVE Patch Management below), with Discord as a
 secondary, immediate-visibility notification alongside it, not a replacement for it. This applies
 symmetrically to closing: a task that auto-closes should also post to Discord, not just go quiet.
+**Corollary, confirmed live 2026-08-24/25: a bridge that can't reach its own data source must fail
+loud, never silently report "all clear."** `health-monitor` went blind to Alertmanager for at least
+the tail end of a 2-day `k8s-1` `NodeNotReady` outage (root cause: a hostname collision with `k8s-2`
+baked into `k8s-1`'s cloud-init seed during the 2026-08-22 reimage — see `tm` task `54e03d81`), and
+reported "no issues" every 30 minutes instead — even though `KubeNodeNotReady`/
+`KubeStatefulSetReplicasMismatch` were firing continuously the whole time and would otherwise have
+caught it on the first run. It now files its own `!1` task when the Alertmanager fetch fails, and —
+found only by live-testing that fix, not by reading the code — a matching bug where "no data" was
+misread as "nothing firing," silently auto-closing genuinely still-firing alert tasks during the
+same outage window. Both are fixed (`health-monitor/health-monitor.yaml`). Any future
+Alertmanager-bridging or similar polling script should apply the same rule: an unreachable data
+source is itself an alertable condition, and must never be allowed to look identical to "checked,
+found nothing."
 
 `kube-prometheus-stack`'s default `PrometheusRule`s (Alertmanager, routed to Discord via
 `prometheus/helmrelease.yaml`) already cover most general cluster-health failure modes
