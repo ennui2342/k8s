@@ -289,7 +289,19 @@ data:
     # Close tasks for alerts that stopped firing since they were created —
     # only ones with a fingerprint marker (i.e. bridge-created), so this
     # never touches this script's own kubectl-based checks above.
+    #
+    # Gated on alertmanager_reachable: confirmed live 2026-08-25 while
+    # testing the unreachable-Alertmanager handling above - when the fetch
+    # fails, active_alerts (and therefore active_fingerprints) is empty,
+    # which without this guard reads as "nothing is firing" and closes
+    # every previously-tracked alert task as resolved, even ones that are
+    # still genuinely firing and simply invisible right now. Silence must
+    # never be read as resolution - skip closing entirely until Alertmanager
+    # is actually reachable again and can positively confirm what's still
+    # firing.
     for t in existing_tasks:
+        if not alertmanager_reachable:
+            break
         if t.get('status') != 'open':
             continue
         m = re.search(r'AlertFingerprint:\s*(\S+)', t.get('text', ''))
