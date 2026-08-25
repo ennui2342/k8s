@@ -27,7 +27,7 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: linkding
-          image: 127.0.0.1:30500/linkding:1.46.0-patched
+          image: 127.0.0.1:30500/linkding:1.46.2-patched
           imagePullPolicy: IfNotPresent
           ports:
             - name: linkding
