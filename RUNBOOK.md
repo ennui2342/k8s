@@ -1070,49 +1070,85 @@ names from `/rest/config/devices`):
   This is how `Morat` (~929k files) was traced to one client subfolder holding
   99.5% of them (dev-cruft-style file explosion).
 
-**Mass deletion of `Obsidian/scifipraxis/assets/` (2026-08-07/08) — cause
-unconfirmed, treat similar incidents as suspicious.** ~100 image files vanished
-from the `writing` folder in two bursts (08:09-08:11 BST Aug 7, then
-08:53-09:10 BST Aug 8), confirmed via Loki (`{pod=~"syncthing.*"} |= "Deleted
-file"` — the cluster pod's own `kubectl logs` didn't go back far enough, Loki's
-31-day retention did). Nothing else synced-wide was deleted in the same pass —
-checked every folder across both burst windows. Files were recovered from a
+**Mass deletion of `Obsidian/scifipraxis/assets/` (2026-08-07/08) — origin
+narrowed to Mac Studio, exact trigger still unidentified.** ~100 image files
+vanished from the `writing` folder in two bursts. Files were recovered from a
 non-Syncthing backup (not from `.stversions` — no versioning existed yet at
-the time; see above for the fix now in place).
+the time; see above for the fix now in place). Full investigation ran across
+two machines' own Syncthing instances (not just the cluster's), via a
+cross-session Remote-Control pairing between Claude Code sessions on Mac
+Studio and the MacBook — see "Remote Control pairing" note below if doing this
+again.
 
-What's unresolved: the laptop that owns the source copy was unattended with
-the **lid closed** on both mornings, ruling out a manual `rm` or a person
-using Obsidian at the time. Something automated deleted real files at the
-source and Syncthing (or possibly Obsidian itself) faithfully propagated that
-deletion — it did its job correctly, the question is what triggered it.
-Confirmed *not* the cause: no cloud-sync layer (iCloud Drive, Dropbox,
-OneDrive) is involved — the vault is plain files on local disk, managed only
-by Syncthing. That rules out the "cloud storage optimization evicts a file,
-Syncthing's rescan mistakes the eviction for a delete" mechanism seen
-elsewhere.
+**Initial suspicion (the MacBook, lid closed and unattended both mornings)
+was wrong** — checking its own rotated Syncthing log
+(`~/Library/Application Support/Syncthing/syncthing.*.log` — the menubar app
+doesn't use a LaunchAgent `StandardOutPath`, so this, not `pmset`/unified-log
+retention, is the durable source) showed it was disconnected ("host is down")
+for 5+ minutes before the first delete on 08-07, and still hadn't reconnected
+when the main batch landed on 08-08. It only picked up the already-propagated
+delete on reconnecting — correct sendreceive behavior, not the cause. (A
+unified-log blackout on both machines for the incident windows briefly looked
+like evidence of deep sleep; it wasn't — Mac Studio shows the identical
+blackout for a window where its own Syncthing log proves it was actively
+writing, so `log show` simply doesn't retain data that far back here. Don't
+trust a unified-log gap as a sleep/activity signal on either machine.)
 
-One genuine tension worth keeping in mind for next time: the cluster-side logs
-show the laptop's Syncthing device (`FUUXQVG…`, `remote.name=Macbook`)
-actively re-establishing connections and sending index updates in the exact
-windows the deletes landed — i.e. it was reachable on the network at the time,
-which sits oddly next to "unattended, lid closed." A MacBook plugged into
-power can still run brief background wake cycles (Power Nap) with the lid
-closed, which would explain a live network connection without contradicting
-"nobody touched it" — but that's a plausible mechanism, not a confirmed one.
+**Mac Studio's own Syncthing log (same rotated-log location) shows the
+deletion earliest, every time** — 08:09:44 BST on 08-07 and 08:52:35/09:01:00
+BST on 08-08, each 1 second to ~1.5 minutes ahead of the cluster's copy of the
+same event, and well before the MacBook ever reconnected. Ruled out as the
+cause, on Mac Studio specifically:
+- The k8s `agent-orchestrator` pipeline — no run was active at either
+  timestamp (checked `~/Library/Logs/agent-orchestrator/*.log` start/end
+  times against both incident windows).
+- `crontab -l`, `launchctl list` (non-Apple), and every LaunchAgent/Daemon
+  plist with a `StartCalendarInterval`/`StartInterval` — nothing scheduled
+  near either time.
+- macOS Folder Actions, and Hazel/CleanMyMac-style automation apps — none
+  installed.
+- Every Obsidian community plugin in the vault (`harper`,
+  `obsidian-mkdocs-publisher`, `obsidian-smart-typography`,
+  `obsidian-wikidata-lookup` — identical set on both Mac Studio and the
+  MacBook, since `.obsidian/plugins/` syncs) — none do attachment cleanup.
+  **The deleted files never went through Obsidian's own trash** (vault
+  `.trash/` has older, unrelated stray files but nothing from this incident),
+  meaning whatever deleted them bypassed the Obsidian app entirely and hit
+  the filesystem directly — this alone rules out any plugin using Obsidian's
+  normal vault-delete API.
+- A whole-volume mount/unmount event on `/Volumes/SSD` (external, PCI-Express/
+  Thunderbolt) — ruled out because the sibling `projects` Syncthing folder on
+  the same disk shows brief, unrelated connection errors around the same
+  general time but **no file deletions**, and no other folder on the same
+  volume or machine shows anything at all. The blast radius is exactly one
+  subdirectory, not the disk.
+- Every Claude Code session ever run on Mac Studio, in any project — grepped
+  every transcript under `~/.claude/projects/*/*.jsonl` for the literal path;
+  the only hit is this investigation's own session reading it back out of
+  Loki. No agent (mine or otherwise) ever touched this path before.
+- Mac Studio has been up continuously since mid-April (no reboot in `last
+  reboot`), so this isn't a daily-reboot-triggered rescan landing at a
+  coincidentally similar time either.
 
-If this recurs, check on the source device (before restoring again, so the
-evidence isn't lost):
-- `pmset -g sched` and `pmset -g log | grep -i wake` for a scheduled wake or
-  Power Nap around the same time each morning, and what woke it.
-- `launchctl list` / `~/Library/LaunchAgents`, `~/Library/LaunchDaemons`, and
-  `crontab -l` for anything scheduled near 08:00 that touches the vault —
-  backup tools, antivirus/malware scanners, disk-cleanup utilities, or an
-  Obsidian community plugin that does attachment cleanup.
-- Syncthing's own event log on that device (Settings → Logs, or
-  `/rest/events?since=N` via its REST API) for what it saw immediately before
-  the deletes — specifically whether it logged a local scan finding the files
-  missing versus receiving a delete from yet another device (which would point
-  somewhere else entirely).
+**What's left unexplained:** something performed a raw filesystem deletion of
+exactly the newly-`assets/`-consolidated images (see the 2026-08-03 rename
+note below) on Mac Studio's own disk, at a time with no corresponding
+scheduled job, plugin, or logged agent action. `~/.zsh_history` doesn't reach
+back far enough to confirm or rule out a one-off manual command that morning.
+If this recurs, the fastest path to a real answer is catching it live —
+`fs_usage -w -f filesys | grep scifipraxis` (or an `fswatch`/Endpoint Security
+hook) running proactively on Mac Studio, since after-the-fact log forensics on
+both machines has now been pushed about as far as it can go without a live
+capture.
+
+**Remote Control pairing, for a repeat cross-machine investigation like this
+one:** a session started normally does **not** join the Remote Control mesh
+by default, even if Remote Control is active elsewhere — it needs its own
+`/remote-control` run in-session first (not just at launch) before
+`/list-agents`/`ListAgents` will show any peer, including peers on the *same*
+machine. Symptom: `/list-agents` reports zero peers on both ends even though
+both are supposedly "connected." Fix: run `/remote-control` in the session
+that isn't seeing anyone, then re-check `/list-agents`.
 
 **Archiving a huge subtree out of a share.** Moving a directory *out* of a share
 root is seen by SyncThing as a **mass delete that propagates to all peers**. To
