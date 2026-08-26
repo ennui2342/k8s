@@ -118,7 +118,20 @@ spec:
           livenessProbe:
             exec:
               command: ["pg_isready", "-U", "app", "-d", "app_production"]
-            initialDelaySeconds: 30
+            # Bumped 30s -> 300s 2026-08-26: confirmed live that the postgres
+            # entrypoint's own `find $PGDATA ! -user postgres -exec chown
+            # postgres {} +` (a one-time ownership fixup, runs before postgres
+            # itself is even started - zero log output during it, which is
+            # normal, not a symptom) was still running in "D" state
+            # (uninterruptible I/O wait) well past the old 30s+6*15s=~120s
+            # liveness budget, every single restart, during heavy NFS
+            # contention from same-day back-to-back k8s-1/k8s-2 card swaps -
+            # 9 restarts in a row, never once reaching postgres startup itself.
+            # This is a one-time-per-boot cost, not steady-state health
+            # checking, so the fix is a much bigger initialDelaySeconds
+            # specifically (not periodSeconds/timeoutSeconds/failureThreshold,
+            # which still matter once postgres is actually up).
+            initialDelaySeconds: 300
             periodSeconds: 10
             timeoutSeconds: 15
             failureThreshold: 6
