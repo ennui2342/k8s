@@ -709,6 +709,34 @@ SyncThing config is persisted on NFS (`/mnt/md0/sync/config`), so device
 identity and folder config survive a cluster rebuild without any extra steps.
 Verify the pod is up and the web UI is reachable at `syncthing.k8s.ecafe.org`.
 
+**Versioning: trashcan, 30-day cleanout, on all 7 folders** (`Documents`, `Morat`,
+`secure`, `projects`, `hobbies`, `writing`, `Pictures`) — set 2026-08-26 after a
+mass-delete incident (see the playbook below) wiped a directory with no way to
+recover it. **This is config-only, not GitOps-managed** — it lives in
+`config.xml` on the config PVC like device identity above, so it survives a
+normal cluster rebuild, but a full config-PVC loss/restore-from-scratch would
+silently lose it (no manifest in this repo would tell you it's missing). Verify
+after any config restore:
+
+```sh
+POD=$(kubectl get pods -n default -o name | grep syncthing)
+KEY=$(kubectl exec -n default "$POD" -- sh -c "grep -oE '<apikey>[^<]*</apikey>' /config/config.xml | sed 's/<[^>]*>//g'")
+kubectl exec -n default "$POD" -- sh -c "curl -s -H 'X-API-Key: $KEY' http://localhost:8384/rest/config/folders" \
+  | python3 -c "import json,sys; [print(f['label'], f['versioning']['type'], f['versioning']['params']) for f in json.load(sys.stdin)]"
+```
+
+Re-apply per folder if any show `type: ""`:
+
+```sh
+curl -s -X PATCH -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{"versioning":{"type":"trashcan","params":{"cleanoutDays":"30"}}}' \
+  http://localhost:8384/rest/config/folders/<folder-id>
+# note: this PATCH reliably reports a client-side curl timeout (exit 28,
+# HTTPSTATUS:000) even when it succeeds server-side, worse on larger folders
+# (Pictures took ~90s) — always verify with the GET above rather than trusting
+# the curl exit code.
+```
+
 ### Librarium
 
 Postgres data, covers, and media all live on NFS-backed PVCs (`librarium/postgres.yaml`,
@@ -1041,6 +1069,50 @@ names from `/rest/config/devices`):
   `for d in <dir>/*/; do printf '%8s %s\n' "$(find "$d" -type f|wc -l)" "$d"; done | sort -rn`.
   This is how `Morat` (~929k files) was traced to one client subfolder holding
   99.5% of them (dev-cruft-style file explosion).
+
+**Mass deletion of `Obsidian/scifipraxis/assets/` (2026-08-07/08) — cause
+unconfirmed, treat similar incidents as suspicious.** ~100 image files vanished
+from the `writing` folder in two bursts (08:09-08:11 BST Aug 7, then
+08:53-09:10 BST Aug 8), confirmed via Loki (`{pod=~"syncthing.*"} |= "Deleted
+file"` — the cluster pod's own `kubectl logs` didn't go back far enough, Loki's
+31-day retention did). Nothing else synced-wide was deleted in the same pass —
+checked every folder across both burst windows. Files were recovered from a
+non-Syncthing backup (not from `.stversions` — no versioning existed yet at
+the time; see above for the fix now in place).
+
+What's unresolved: the laptop that owns the source copy was unattended with
+the **lid closed** on both mornings, ruling out a manual `rm` or a person
+using Obsidian at the time. Something automated deleted real files at the
+source and Syncthing (or possibly Obsidian itself) faithfully propagated that
+deletion — it did its job correctly, the question is what triggered it.
+Confirmed *not* the cause: no cloud-sync layer (iCloud Drive, Dropbox,
+OneDrive) is involved — the vault is plain files on local disk, managed only
+by Syncthing. That rules out the "cloud storage optimization evicts a file,
+Syncthing's rescan mistakes the eviction for a delete" mechanism seen
+elsewhere.
+
+One genuine tension worth keeping in mind for next time: the cluster-side logs
+show the laptop's Syncthing device (`FUUXQVG…`, `remote.name=Macbook`)
+actively re-establishing connections and sending index updates in the exact
+windows the deletes landed — i.e. it was reachable on the network at the time,
+which sits oddly next to "unattended, lid closed." A MacBook plugged into
+power can still run brief background wake cycles (Power Nap) with the lid
+closed, which would explain a live network connection without contradicting
+"nobody touched it" — but that's a plausible mechanism, not a confirmed one.
+
+If this recurs, check on the source device (before restoring again, so the
+evidence isn't lost):
+- `pmset -g sched` and `pmset -g log | grep -i wake` for a scheduled wake or
+  Power Nap around the same time each morning, and what woke it.
+- `launchctl list` / `~/Library/LaunchAgents`, `~/Library/LaunchDaemons`, and
+  `crontab -l` for anything scheduled near 08:00 that touches the vault —
+  backup tools, antivirus/malware scanners, disk-cleanup utilities, or an
+  Obsidian community plugin that does attachment cleanup.
+- Syncthing's own event log on that device (Settings → Logs, or
+  `/rest/events?since=N` via its REST API) for what it saw immediately before
+  the deletes — specifically whether it logged a local scan finding the files
+  missing versus receiving a delete from yet another device (which would point
+  somewhere else entirely).
 
 **Archiving a huge subtree out of a share.** Moving a directory *out* of a share
 root is seen by SyncThing as a **mass delete that propagates to all peers**. To
