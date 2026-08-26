@@ -338,6 +338,54 @@ in practice.** Any new node-local cron entry or CronJob should avoid
 section for the other nightly windows (01:00/06:00 agent-orchestrator
 dispatch, 03:30 master backup) this was chosen to sit clear of.
 
+### 0g. Local registry mirror config — do this BEFORE the k3s join, not after
+
+**Easy to skip because nothing fails immediately — it only bites once a
+pod that needs a fresh image pull actually lands on the node.** Missed
+live during the `k8s-1` card swap 2026-08-26: a from-scratch step list
+that covered hostname/IP/packages/reboot-timing but not this got all
+the way through drain → physical swap → rejoin → `Ready` with no
+errors at all, because everything that happened to get scheduled there
+early on was already cached from earlier testing. The gap only surfaced
+~15 minutes later, mid-`k8s-2` drain, when the rescheduling storm sent
+`freshrss`, `kustomize-controller`, `isfdb-adapter`, and others onto the
+"fixed" `k8s-1` for the first time and every one of them sat in
+`ImagePullBackOff`.
+
+**Two-stage symptom, don't misread the first one:** initially showed
+`dial tcp 127.0.0.1:30500: connect: connection refused` — a red herring
+that looked identical to the registry pod itself being transiently
+unavailable (it *was* mid-reschedule at that exact moment, from the
+same drain). Once the registry pod came back `Running` and confirmed
+reachable (`curl http://127.0.0.1:30500/v2/` → `200 OK` from the node
+itself), the pulls *still* didn't recover — the real error underneath
+was `Head "https://127.0.0.1:30500/...": dial tcp 127.0.0.1:30500: i/o
+timeout`. Note the `https://` — without this mirror config, containerd
+has no reason to know `127.0.0.1:30500` is plain HTTP and defaults to
+HTTPS, which just hangs against a server that never speaks TLS. Fixed
+live: writing the file below and restarting `k3s-agent` cleared the
+backlog within a couple of backoff cycles, no data loss, no other
+damage — but it's a clean 15+ minute stall for anything that needs a
+first-time pull on the node in the meantime, entirely avoidable by
+doing this before the node ever rejoins:
+
+```sh
+cat <<'EOF' > /tmp/registries.yaml
+mirrors:
+  "127.0.0.1:30500":
+    endpoint:
+      - "http://127.0.0.1:30500"
+EOF
+scp /tmp/registries.yaml ubuntu@<node>:/tmp/registries.yaml
+ssh ubuntu@<node> "sudo mkdir -p /etc/rancher/k3s && sudo cp /tmp/registries.yaml /etc/rancher/k3s/registries.yaml"
+```
+
+If the node already joined without it (i.e. this was missed like above), applying it
+retroactively still works — just also `sudo systemctl restart k3s-agent` on that node
+afterward so containerd picks up the new mirror config immediately rather than waiting for
+its own reload timing. See "Local container registry" below for the full explanation of why
+`127.0.0.1:30500` (not a specific node's IP) is correct on every node unchanged.
+
 At this point the node is ready for Phase 1's "Worker nodes" section
 (or, for a master replacement, the "Restoring onto replacement
 hardware" procedure below) — but that needs the rest of the cluster
@@ -567,10 +615,11 @@ entirely:
 
 Every node is directly SSH-reachable now (flat network, see "Physical &
 Network Topology" above) — no more hopping through master to reach the
-workers. For a **new** node this is already handled by Phase 0's own
-provisioning steps (registries.yaml is written before k3s is even
-installed, so it's picked up on first start with no restart needed);
-this version is for re-applying it on an existing node:
+workers. For a **new or reimaged** node this is Phase 0's own step 0g
+(registries.yaml written before the k3s join, so it's picked up on
+first start with no restart needed) — see that section for the full
+story on what happens if it's skipped, confirmed live 2026-08-26. This
+version is for re-applying it on a node that already joined without it:
 
 ```sh
 cat <<'EOF' > /tmp/registries.yaml
