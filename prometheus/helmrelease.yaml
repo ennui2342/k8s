@@ -78,6 +78,22 @@ spec:
         userKey: admin-user
         passwordKey: admin-password
 
+      # Bumped initialDelaySeconds 60s -> 300s 2026-08-26: confirmed live
+      # that even the chart's already-fairly-generous default budget
+      # (60s + 10*30s ~= 6min) was juuust missing the mark under heavy NFS
+      # contention from the same-day k8s-1/k8s-2 card swaps - grafana kept
+      # getting killed and restarted right as it was about to finish
+      # starting (6 kill-cycles over 31 minutes, each ~5min, connection
+      # refused on :3000/api/health the whole time). Same root cause and
+      # same fix shape as opsimath/postgres.yaml's livenessProbe bump the
+      # same day - a one-time slow-start cost, not steady-state health
+      # checking, so only initialDelaySeconds needs to move.
+      livenessProbe:
+        initialDelaySeconds: 300
+        periodSeconds: 10
+        timeoutSeconds: 30
+        failureThreshold: 10
+
       grafana.ini:
         analytics:
           check_for_updates: true
