@@ -96,7 +96,13 @@ spec:
   jobTemplate:
     spec:
       ttlSecondsAfterFinished: 604800
-      activeDeadlineSeconds: 60
+      # 60s proved too tight while the NAS link runs over the temporary
+      # powerline-Ethernet hop (tm task 50cad5c2) - a single slow SSH/InfluxDB
+      # round-trip on 2026-08-26 tripped DeadlineExceeded and left a failed Job
+      # firing KubeJobFailed for its full 7d TTL, despite ~1080 later runs all
+      # completing in 5-9s. 120s still leaves ample headroom under the */5 schedule.
+      activeDeadlineSeconds: 120
+      backoffLimit: 2
       template:
         spec:
           restartPolicy: OnFailure
