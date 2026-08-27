@@ -243,7 +243,11 @@ spec:
           group_by: ['alertname', 'namespace']
           group_wait: 1m        # wait 1m to batch related alerts before sending
           group_interval: 5m    # wait 5m before sending updates to an existing group
-          repeat_interval: 4h   # re-notify after 4h if still firing
+          repeat_interval: 24h  # re-notify daily if still firing — a tracked tm task (via
+                                 # health-monitor's Alertmanager bridge) is the source of truth
+                                 # for ongoing tracking; this is just an independent safety-net
+                                 # check in case that bridge itself silently breaks (see tm task
+                                 # 54e03d81), not the primary "still broken" reminder
           receiver: discord
           routes:
             - matchers:

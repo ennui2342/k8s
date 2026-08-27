@@ -199,6 +199,18 @@ via the `<cli.cluster-health` or `<cli.cve-scanner`/`<cli.reconcile-scanner` sou
 route through the agent-orchestrator pipeline — see CVE Patch Management below), with Discord as a
 secondary, immediate-visibility notification alongside it, not a replacement for it. This applies
 symmetrically to closing: a task that auto-closes should also post to Discord, not just go quiet.
+**Corollary: keep Alertmanager's `repeat_interval` long (default: 24h), not short.** Once a
+`tm` task exists for an alert, that task — not Discord — is the durable, ongoing tracker; a
+short `repeat_interval` (the Alertmanager default is much shorter) just re-spams Discord with
+the same already-tracked, unchanged failure while nothing new is happening. Confirmed live
+2026-08-27: a weekly `isfdb-refresh` CronJob failure sat for 4 days re-notifying every 4h (~24
+pings) for one already-filed task, before the next scheduled run could even retry it. Don't
+drop `repeat_interval` to zero/disable it entirely, though — some periodic re-notification is
+still worth keeping as an independent safety net in case the task-bridge itself silently breaks
+(see the `health-monitor` blind-spot corollary below, `tm` task `54e03d81`) — 24h is long enough
+to kill the spam while still catching that failure mode within a day. This is the default for
+*all* alerts routed through Alertmanager (`prometheus/helmrelease.yaml`'s `route.repeat_interval`),
+not something to tune per-alert or per-CronJob.
 **Corollary, confirmed live 2026-08-24/25: a bridge that can't reach its own data source must fail
 loud, never silently report "all clear."** `health-monitor` went blind to Alertmanager for at least
 the tail end of a 2-day `k8s-1` `NodeNotReady` outage (root cause: a hostname collision with `k8s-2`
