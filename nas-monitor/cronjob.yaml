@@ -7,7 +7,12 @@ spec:
   schedule: "*/15 * * * *"
   jobTemplate:
     spec:
-      ttlSecondsAfterFinished: 604800
+      # 3600s, not the repo-standard 604800 (7d): runs every 15 min, mounts no
+      # RWO PVC. Keeps an isolated transient failure (e.g. a brief NAS SSH blip
+      # over the temporary powerline hop, tm task 50cad5c2) from lingering a full
+      # week re-firing KubeJobFailed; a persistent failure still re-alerts via
+      # fresh Failed Jobs on the */15 schedule. See LINT.md.
+      ttlSecondsAfterFinished: 3600
       template:
         spec:
           restartPolicy: OnFailure

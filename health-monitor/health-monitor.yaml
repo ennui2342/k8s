@@ -353,7 +353,11 @@ spec:
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
-      ttlSecondsAfterFinished: 604800
+      # 3600s, not the repo-standard 604800 (7d): runs every 30 min, mounts no
+      # RWO PVC. Keeps an isolated transient failure from lingering a full week
+      # re-firing KubeJobFailed; a persistent failure still re-alerts via fresh
+      # Failed Jobs on the */30 schedule. See LINT.md.
+      ttlSecondsAfterFinished: 3600
       template:
         spec:
           serviceAccountName: health-monitor

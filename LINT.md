@@ -26,16 +26,30 @@ completed Job pods never got cleaned up on their own. This isn't just tidiness �
 `trivy/trivy.yaml`'s CronJob mounts a real RWO PVC (`trivy-cache-pvc`), and stale completed pods
 from it ended up pinning that PVC and blocking a later run, caught mid-way through a nightly
 automated update rather than by design. Every `CronJob.spec.jobTemplate.spec` (sibling of
-`template:`, not inside it) must set:
+`template:`, not inside it) must set it.
 
-```yaml
-ttlSecondsAfterFinished: 604800
-```
+**Value depends on the schedule frequency:**
 
-7 days — long enough to inspect a failed run's logs before it's swept, short enough that pods
-don't accumulate indefinitely. `successfulJobsHistoryLimit`/`failedJobsHistoryLimit` (k8s
-defaults: 3/1) are a different, complementary mechanism — they cap how many Job *objects* are
-kept, not when the underlying pod's resources (including PVC mounts) actually get released.
+- **Daily or less frequent** (weekly/monthly — `trivy`, `isfdb-refresh`, `os-eol-scanner`,
+  `syncthing`): `ttlSecondsAfterFinished: 604800` (7 days) — long enough to inspect a failed
+  run's logs before it's swept, short enough that pods don't accumulate indefinitely.
+- **Sub-daily** (every few hours or less — `nas-diskio-monitor` `*/5`, `nas-monitor` `*/15`,
+  `health-monitor` `*/30`, `linkding-task-sync` `*/30`, `pvc-usage-monitor` `0 */2`):
+  `ttlSecondsAfterFinished: 3600` (1 hour). Confirmed live 2026-08-26 and again 2026-08-28 (tm
+  tasks around `50cad5c2` / `d88f06c9`): with a 7-day TTL, a *single* transient failure (one slow
+  SSH round-trip, one brief NAS/InfluxDB blip) leaves a Failed Job object sitting for the full
+  week, and `KubeJobFailed` keeps firing that entire time even though every subsequent run — 180
+  to 1000+ of them — succeeds. `failedJobsHistoryLimit` (default 1) does *not* help here: a later
+  *successful* run doesn't evict the failed Job, only its TTL does. At 3600s an isolated blip
+  self-clears within the hour, while a genuinely persistent failure still re-alerts via fresh
+  Failed Jobs on the next scheduled run. Only safe because none of these sub-daily jobs mount an
+  RWO PVC — the `trivy` PVC-pinning failure mode that motivated this rule can't occur when the
+  only volumes are ConfigMaps/Secrets. A sub-daily CronJob that *does* mount an RWO PVC should
+  keep 604800 and instead lengthen its schedule or fix the failure at the source.
+
+`successfulJobsHistoryLimit`/`failedJobsHistoryLimit` (k8s defaults: 3/1) are a different,
+complementary mechanism — they cap how many Job *objects* are kept, not when the underlying pod's
+resources (including PVC mounts) actually get released.
 
 **Every container in a Deployment/StatefulSet/DaemonSet should set resource `requests`/`limits`.**
 Audited repo-wide 2026-07-29 (first fleet-audit run): 21 containers across 19 manifests had no

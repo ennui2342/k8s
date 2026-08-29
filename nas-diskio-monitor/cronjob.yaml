@@ -95,11 +95,20 @@ spec:
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
-      ttlSecondsAfterFinished: 604800
+      # 3600s, not the repo-standard 604800 (7d): this job runs every 5 min and
+      # mounts no RWO PVC, so there's nothing for a stale completed pod to pin.
+      # A single transient failure (2026-08-26 DeadlineExceeded; 2026-08-28
+      # BackoffLimitExceeded from a brief NAS SSH/InfluxDB blip over the temporary
+      # powerline-Ethernet hop, tm task 50cad5c2) otherwise lingered a full week
+      # re-firing KubeJobFailed despite ~180-1080 later runs all completing in
+      # 5-9s. At 3600s an isolated blip self-clears within the hour, while a
+      # genuinely persistent failure still re-alerts via fresh Failed Jobs on the
+      # */5 schedule (failedJobsHistoryLimit defaults to 1). See LINT.md.
+      ttlSecondsAfterFinished: 3600
       # 60s proved too tight while the NAS link runs over the temporary
       # powerline-Ethernet hop (tm task 50cad5c2) - a single slow SSH/InfluxDB
       # round-trip on 2026-08-26 tripped DeadlineExceeded and left a failed Job
-      # firing KubeJobFailed for its full 7d TTL, despite ~1080 later runs all
+      # firing KubeJobFailed until its TTL swept it, despite ~1080 later runs all
       # completing in 5-9s. 120s still leaves ample headroom under the */5 schedule.
       activeDeadlineSeconds: 120
       backoffLimit: 2

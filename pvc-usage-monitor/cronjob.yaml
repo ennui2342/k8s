@@ -269,7 +269,12 @@ spec:
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
-      ttlSecondsAfterFinished: 604800
+      # 3600s, not the repo-standard 604800 (7d): mounts no RWO PVC, and on the
+      # 0 */2 schedule this clears an isolated transient failure (e.g. a kubectl
+      # API or NAS SSH blip) well before the next run, instead of letting it
+      # linger a week re-firing KubeJobFailed; a persistent failure still
+      # re-alerts via a fresh Failed Job every 2h. See LINT.md.
+      ttlSecondsAfterFinished: 3600
       activeDeadlineSeconds: 300
       template:
         spec:
