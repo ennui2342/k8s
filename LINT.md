@@ -116,7 +116,7 @@ Services table, and diff `find . -name '*-secret.yaml'` against CLAUDE.md's Secr
 list. Re-exercised 2026-09-01: `nas-diskio-monitor/` (added 2026-08-23, tm task `50cad5c2`) was
 live and in the root `kustomization.yaml` but absent from the Actively Deployed Services table,
 the Secrets Management list (its own `nas-diskio-ssh-key` secret), and Directory Structure Notes —
-same class as the freshrss/linkding/wallabag gap. Fixed directly (commit `a79c3e6`). Also found
+same class as the freshrss/linkding/wallabag gap. Fixed directly (commit `d32243f`). Also found
 the same run: the Directory Structure Notes line for `home-assistant/` still listed a "cleanup
 CronJob" that no longer exists in the manifests — corrected in the same commit.
 
