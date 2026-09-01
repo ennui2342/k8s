@@ -113,7 +113,30 @@ rebuilt from reading CLAUDE.md alone. Fixed directly this run (pure additive doc
 manifest risk). Check method for future audits: diff the directory list in root
 `kustomization.yaml`'s `resources:` against the namespace column of CLAUDE.md's Actively Deployed
 Services table, and diff `find . -name '*-secret.yaml'` against CLAUDE.md's Secrets Management
-list.
+list. Re-exercised 2026-09-01: `nas-diskio-monitor/` (added 2026-08-23, tm task `50cad5c2`) was
+live and in the root `kustomization.yaml` but absent from the Actively Deployed Services table,
+the Secrets Management list (its own `nas-diskio-ssh-key` secret), and Directory Structure Notes —
+same class as the freshrss/linkding/wallabag gap. Fixed directly (commit `a79c3e6`). Also found
+the same run: the Directory Structure Notes line for `home-assistant/` still listed a "cleanup
+CronJob" that no longer exists in the manifests — corrected in the same commit.
+
+**The cluster's k3s / Kubernetes control-plane version must not be past upstream End of Life.**
+New rule 2026-09-01 (Phase 2 research pass). Check method: `kubectl get nodes -o
+jsonpath='{.items[0].status.nodeInfo.kubeletVersion}'` gives the k3s/k8s version (e.g.
+`v1.32.13+k3s1`); cross-check the `1.MINOR` line against the Kubernetes release support window
+(`https://kubernetes.io/releases/` — each minor gets ~14 months, roughly 12 months of patches +
+2 months maintenance). Found live 2026-09-01: the fleet runs `v1.32.13+k3s1`, and Kubernetes
+1.32 reached upstream EOL on **2026-02-28** (v1.32.13 being its final patch) — so the control
+plane had been running an EOL, no-further-security-fixes k8s version for ~6 months with nothing
+in this checklist prompting the check. This is the control-plane analogue of the host-OS EOL gap
+that `os-eol-scanner/` was built to close (`tm` task `b914610a`), and of the
+`ttlSecondsAfterFinished` gap — a slow-moving liability that no single CVE task surfaces as
+"you are unsupported." Not a mechanical fix — a k3s minor-version jump crosses every node and
+needs a human-scheduled window. Already tracked as `tm` task `24344397` (`§wait`,
+`~k3s-upgrade`, `!1`, `+cli.claude-code.k8s`) — that task's assignee was also added this run
+(it was ownerless/orchestrator-invisible). Future audits: if this task is still open/wait and
+the running version is still EOL, note it in the report; if it's been closed but the version is
+still EOL, that's a new finding.
 
 **Every Deployment/StatefulSet/DaemonSet must include the soft worker-preference node affinity**
 from CLAUDE.md's Scheduling Constraints section (or, for a DaemonSet that must run on every node
@@ -147,7 +170,10 @@ both identically), fixed directly rather than ticketed.
 exception, not a default.** Checked live 2026-07-29 (Phase 2 research pass): only
 `mdns/master-daemonset.yaml` and `mdns/worker-daemonset.yaml` (both `default` namespace) set
 `privileged: true`/`hostNetwork: true` anywhere in the repo — CLAUDE.md's home-assistant row
-incorrectly claimed `hostNetwork` too (corrected same run). Whether to formally adopt Pod Security
+incorrectly claimed `hostNetwork` too (corrected same run). Re-checked 2026-09-01:
+`mdns/master-daemonset.yaml` was removed 2026-08-22 in the flat-network migration, so
+`mdns/worker-daemonset.yaml` is now the *only* privileged/`hostNetwork` workload in the repo —
+still `default` namespace, still the documented mDNS-relay exception. Whether to formally adopt Pod Security
 Admission (`pod-security.kubernetes.io/enforce` namespace labels — the GA replacement for the
 long-removed PodSecurityPolicy) to make this an enforced boundary rather than an implicit one is a
 security-posture decision, not a mechanical fix: ticketed as `tm` task `403129f3` (untagged, human-review-only)
@@ -178,5 +204,6 @@ but isn't — its probes are already set in the base `gotk-components.yaml`.
 
 ## Starter items — not yet verified repo-wide
 
-Empty as of 2026-08-15. The next durable finding (from a future audit's research pass, or from
-any session) seeds this list again.
+Empty as of 2026-09-01. The next durable finding (from a future audit's research pass, or from
+any session) seeds this list again. (2026-09-01 audit: the one Phase 2 finding — control-plane
+EOL — was concrete enough to go straight into "Confirmed rules" rather than land here first.)
