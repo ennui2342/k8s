@@ -3,6 +3,25 @@ kind: Ingress
 metadata:
   name: opsimath
   namespace: opsimath
+  annotations:
+    # HTTP-only: opsimath.k8s.ecafe.org is internal-DNS-only and has no TLS
+    # cert anywhere in its path (see CLAUDE.md). Without this, k3s Traefik
+    # also exposes the router on `websecure`, serving the self-signed
+    # TRAEFIK DEFAULT CERT. Any browser that ever hit
+    # https://opsimath.k8s.ecafe.org then got:
+    #   - an HSTS header (max-age=2y; includeSubDomains) from Rails'
+    #     ActionDispatch::SSL, poisoning the whole k8s.ecafe.org zone, and
+    #   - a chance to store the `_app_session` cookie with the `Secure`
+    #     attribute. Chrome then refuses to let the plain-HTTP origin
+    #     overwrite that Secure cookie, so the session never round-trips,
+    #     CSRF can't validate, and login bounces straight back to the form
+    #     (422 InvalidAuthenticityToken) - indefinitely, since the app-side
+    #     force_ssl carve-outs in config/environments/production.rb can't
+    #     dislodge a cookie already in the browser.
+    # Restricting to `web` removes the HTTPS path entirely. The real-HTTPS
+    # Tailscale path (opsimath-ts Ingress, ingressClassName: tailscale) is
+    # separate and unaffected.
+    traefik.ingress.kubernetes.io/router.entrypoints: web
 spec:
   ingressClassName: traefik
   rules:
