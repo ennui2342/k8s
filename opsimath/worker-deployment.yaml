@@ -37,7 +37,7 @@ spec:
           # the same Setter marker so this initContainer (just running
           # psql/pg_isready from the app image) never drifts from what
           # actually ships.
-          image: ghcr.io/ennui2342/opsimath:1.20260903.56 # {"$imagepolicy": "flux-system:opsimath"}
+          image: ghcr.io/ennui2342/opsimath:1.20260903.57 # {"$imagepolicy": "flux-system:opsimath"}
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
@@ -60,7 +60,7 @@ spec:
           # on every push to master; Flux image automation (see
           # flux-system/opsimath-image-automation.yaml) updates this tag
           # automatically - the Setter marker below is what it looks for.
-          image: ghcr.io/ennui2342/opsimath:1.20260903.56 # {"$imagepolicy": "flux-system:opsimath"}
+          image: ghcr.io/ennui2342/opsimath:1.20260903.57 # {"$imagepolicy": "flux-system:opsimath"}
           imagePullPolicy: IfNotPresent
           command: ["./bin/rails", "solid_queue:start"]
           envFrom:
