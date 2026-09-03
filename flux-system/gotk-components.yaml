@@ -8054,7 +8054,7 @@ spec:
             resourceFieldRef:
               containerName: manager
               resource: limits.memory
-        image: ghcr.io/fluxcd/helm-controller:v1.6.3
+        image: 127.0.0.1:30500/helm-controller:v1.6.4-patched
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:

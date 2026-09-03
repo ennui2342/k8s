@@ -217,3 +217,13 @@
   patched_date: "2026-09-03"
   critical: 0
   high: 1
+
+- workload: flux-system/Deployment/helm-controller
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/helm-controller:v1.6.4-patched
+  upstream_image: ghcr.io/fluxcd/helm-controller:v1.6.4
+  build_recipe: trivy/patched-images/helm-controller/Dockerfile
+  reason: "1 HIGH fixable CVE-2026-14456 (openssl DoS via unbounded memory growth in the QUIC server) in the Alpine 3.23.5 base of ghcr.io/fluxcd/helm-controller. Fixed package libssl3/libcrypto3 3.5.8-r0 is already published to the alpine v3.23/main repo, but the newest upstream release (v1.6.4, 2026-08-31) was baked before that and still ships 3.5.7-r0 (verified via `apk list --installed` in the base image). Rebased from v1.6.3 (the tag the CVE scanner flagged) onto v1.6.4: changelog v1.6.3->v1.6.4 reviewed — the one breaking change, 'Validate HelmRelease kubeconfigs' (#1572, kubeconfigs referencing local files now rejected, credentials/certs must be embedded inline), does NOT apply here (no HelmRelease in this repo sets spec.kubeConfig — all target the in-cluster API — verified via repo-wide grep); 'Move v1.6 back to upstream helm' (#1565) drops the temporary Flux Helm-SDK fork for upstream Helm v4.2.4, staying within Helm 4 (v1.6.x was already on the Helm 4 SDK), and this repo's HelmReleases are plain chart installs with no post-renderers/custom Helm behaviour; plus fluxcd/pkg dep bumps and k8s client libs to 1.36.4 (cluster is k3s v1.32.x, within client-go skew). Same-base `apk upgrade` on Alpine 3.23.5 bumps only libcrypto3+libssl3 3.5.7-r0 -> 3.5.8-r0 (verified in the built image) — the helm-controller binary and entrypoint are untouched, pure OS-package patch-level bump, no config or behaviour change. Revert (or rebase onto a newer release) once fluxcd ships a helm-controller image with openssl >= 3.5.8-r0."
+  patched_date: "2026-09-03"
+  critical: 0
+  high: 1
