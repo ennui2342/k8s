@@ -29,7 +29,13 @@ spec:
                     operator: DoesNotExist
       containers:
       - name: syncthing
-        image: lscr.io/linuxserver/syncthing:latest
+        # Frozen-rebuild fork of lscr.io/linuxserver/syncthing:v2.1.3-ls228
+        # (was the floating :latest tag). apk-upgraded on the same Alpine 3.23
+        # base to resolve CVE-2026-14456 (openssl 3.5.7-r0 -> 3.5.8-r0) — no
+        # newer LinuxServer -lsNNN build has shipped the fix.
+        # See trivy/patched-images.yaml + trivy/patched-images/syncthing/.
+        image: 127.0.0.1:30500/syncthing:2.1.3-ls228-patched
+        imagePullPolicy: IfNotPresent
         env:
         - name: TZ
           value: Europe/London
