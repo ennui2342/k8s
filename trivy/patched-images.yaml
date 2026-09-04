@@ -228,6 +228,16 @@
   critical: 0
   high: 1
 
+- workload: flux-system/Deployment/image-reflector-controller
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/image-reflector-controller:v1.2.3-patched
+  upstream_image: ghcr.io/fluxcd/image-reflector-controller:v1.2.3
+  build_recipe: trivy/patched-images/image-reflector-controller/Dockerfile
+  reason: "1 HIGH fixable CVE-2026-14456 (openssl DoS via unbounded memory growth in the QUIC server) in the Alpine 3.23.5 base of ghcr.io/fluxcd/image-reflector-controller:v1.2.3 (the tag this repo pins and the CVE scanner flagged). Fixed package libssl3/libcrypto3 3.5.8-r0 is already published to the alpine v3.23/main repo, but v1.2.3's image was baked before that and still ships 3.5.7-r0 (verified via `apk list --installed` in the base image). NOT rebased onto a newer release (v1.2.4/v1.2.5 exist): unlike its sibling image-automation-controller, image-reflector-controller's own v1.2.4/v1.2.5 changelogs are fluxcd/pkg dependency bumps only (ECR host-detection alignment #926, k8s client libs to 1.36.4 #934/#935) with no CRD schema change and no breaking changes — but rebasing this controller alone still would not fix the CVE: v1.2.5's image also ships openssl 3.5.7-r0 (verified via `apk list --installed`), so an apk-upgrade layer is required regardless. Kept on the v1.2.3 base to stay in lockstep with image-automation-controller (frozen at v1.2.3-patched for this same CVE, commit 659279d, because ITS v1.2.4 ships an ImageUpdateAutomation CRD schema change). Same-base `apk upgrade` on Alpine 3.23.5 bumps libcrypto3+libssl3 3.5.7-r0 -> 3.5.8-r0 plus apk-tools/libapk 3.0.6-r0 -> 3.0.8-r0 (verified in the built image) — the image-reflector-controller binary and entrypoint are untouched, pure OS-package patch-level bump, no config or behaviour change. Verified via local trivy 0.74.0 scan (--ignore-unfixed --pkg-types os): plain v1.2.3 alpine layer was 1 HIGH (CVE-2026-14456 on libcrypto3+libssl3), patched image scans 0 CRITICAL + 0 HIGH. Revert (or rebase onto a newer release) once fluxcd ships an image-reflector-controller image with openssl >= 3.5.8-r0. (An orphaned v1.1.1-patched tag from a long-dropped earlier fork still sits in the local registry — harmless, registry:2 has no tag-delete; left as-is.)"
+  patched_date: "2026-09-04"
+  critical: 0
+  high: 1
+
 - workload: flux-system/Deployment/image-automation-controller
   strategy: frozen-rebuild
   patched_image: 127.0.0.1:30500/image-automation-controller:v1.2.3-patched
