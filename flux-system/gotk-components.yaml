@@ -8143,7 +8143,7 @@ spec:
             resourceFieldRef:
               containerName: manager
               resource: limits.memory
-        image: ghcr.io/fluxcd/image-automation-controller:v1.2.3
+        image: 127.0.0.1:30500/image-automation-controller:v1.2.3-patched
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:

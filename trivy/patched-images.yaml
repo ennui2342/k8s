@@ -227,3 +227,13 @@
   patched_date: "2026-09-03"
   critical: 0
   high: 1
+
+- workload: flux-system/Deployment/image-automation-controller
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/image-automation-controller:v1.2.3-patched
+  upstream_image: ghcr.io/fluxcd/image-automation-controller:v1.2.3
+  build_recipe: trivy/patched-images/image-automation-controller/Dockerfile
+  reason: "1 HIGH fixable CVE-2026-14456 (openssl DoS via unbounded memory growth in the QUIC server) in the Alpine 3.23.5 base of ghcr.io/fluxcd/image-automation-controller:v1.2.3 (the tag this repo pins and the CVE scanner flagged). Fixed package libssl3/libcrypto3 3.5.8-r0 is already published to the alpine v3.23/main repo, but v1.2.3's image was baked before that and still ships 3.5.7-r0 (verified via `apk list --installed` in the base image). NOT rebased onto a newer release (v1.2.4/v1.2.5 exist): v1.2.4 ships an ImageUpdateAutomation CRD schema change ('the CRD must be updated along with the controller' per its changelog — reject deletion/force-update refspecs in .spec.git.push.refspec) which would require hand-splicing the regenerated CRD into gotk-components.yaml, out of scope for a routine OS-package CVE patch. The refspec restriction itself does not apply here — this repo's ImageUpdateAutomations (opsimath, taskmgt) both use plain .spec.git.push.branch, no refspec — but the CRD-migration mechanics do. v1.2.5 is fluxcd/pkg dependency bumps only. Same-base `apk upgrade` on Alpine 3.23.5 bumps libcrypto3+libssl3 3.5.7-r0 -> 3.5.8-r0 plus apk-tools/libapk 3.0.6-r0 -> 3.0.8-r0 (verified in the built image) — the image-automation-controller binary and entrypoint are untouched, pure OS-package patch-level bump, no config or behaviour change. This same v1.2.3-patched tag existed once before (a 2026-08-04 fork for openssl CVE-2026-45447, dropped 2026-08-21 in commit 9b73d81 once plain upstream v1.2.3 became CVE-identical); that orphaned tag is overwritten by this rebuild. Revert (or rebase onto a newer release, doing the CRD migration) once fluxcd ships an image-automation-controller image with openssl >= 3.5.8-r0."
+  patched_date: "2026-09-04"
+  critical: 0
+  high: 1
