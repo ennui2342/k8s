@@ -43,7 +43,7 @@ spec:
           # on every push to master; Flux image automation (see
           # flux-system/opsimath-image-automation.yaml) updates this tag
           # automatically - the Setter marker below is what it looks for.
-          image: ghcr.io/ennui2342/opsimath:1.20260905.81 # {"$imagepolicy": "flux-system:opsimath"}
+          image: ghcr.io/ennui2342/opsimath:1.20260905.82 # {"$imagepolicy": "flux-system:opsimath"}
           imagePullPolicy: IfNotPresent
           # Default CMD (thrust + rails server) - docker-entrypoint runs
           # `bin/rails db:prepare` automatically whenever the last two args
