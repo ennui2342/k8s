@@ -247,3 +247,13 @@
   patched_date: "2026-09-04"
   critical: 0
   high: 1
+
+- workload: flux-system/Deployment/notification-controller
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/notification-controller:v1.9.4-patched
+  upstream_image: ghcr.io/fluxcd/notification-controller:v1.9.4
+  build_recipe: trivy/patched-images/notification-controller/Dockerfile
+  reason: "1 HIGH fixable CVE-2026-14456 (openssl DoS via unbounded memory growth in the QUIC server) in the Alpine 3.23.5 base of ghcr.io/fluxcd/notification-controller. Fixed package libssl3/libcrypto3 3.5.8-r0 is already published to the alpine v3.23/main repo, but the newest upstream release (v1.9.4, 2026-08-31) was baked before that and still ships 3.5.7-r0 (verified via `apk list --installed` in the base image). Rebased from v1.9.3 (the tag the CVE scanner flagged) onto v1.9.4: changelog v1.9.3->v1.9.4 reviewed (official CHANGELOG.md) — dependency bumps only (fluxcd/pkg deps, Kubernetes client libs to 1.36.4; cluster is k3s v1.32.x, within client-go skew tolerance), no breaking changes, no CRD schema change, no config or behaviour change. Same-base `apk upgrade` on Alpine 3.23.5 bumps libcrypto3+libssl3 3.5.7-r0 -> 3.5.8-r0 (verified in the built image) — the notification-controller binary and entrypoint are untouched, pure OS-package patch-level bump. Same CVE/same Alpine 3.23.5 generation as the helm-controller/kustomize-controller/image-reflector-controller/image-automation-controller forks. Verified via local trivy 0.74.0 scan (--ignore-unfixed --pkg-types os --severity CRITICAL,HIGH): plain v1.9.3/v1.9.4 alpine layer was 1 HIGH (CVE-2026-14456 on libcrypto3+libssl3), patched image scans 0 vulnerabilities. Revert (or rebase onto a newer release) once fluxcd ships a notification-controller image with openssl >= 3.5.8-r0."
+  patched_date: "2026-09-05"
+  critical: 0
+  high: 1
