@@ -6,7 +6,6 @@ metadata:
   namespace: flux-system
 spec:
   interval: 1h
-  suspend: true  # TEMPORARY 2026-09-06: opsimath-db PV migration + probe-loop firefight; remove to resume
   retryInterval: 5m
   path: ./opsimath
   prune: true
