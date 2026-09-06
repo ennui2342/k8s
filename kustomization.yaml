@@ -2,6 +2,12 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - flux-system/
+  # Per-app Flux Kustomizations (tm 9db56d2e). Transitional: during the cutover
+  # every app dir below is ALSO still listed here so nothing is briefly
+  # unmanaged. Once each app's own Kustomization owns its resources, the
+  # individual app entries are removed, leaving only flux-system/ and
+  # kustomizations/ (see kustomizations/ CRs and RUNBOOK "Per-app Kustomizations").
+  - kustomizations/
   - cert-manager/
   - coredns/
   - home-assistant/

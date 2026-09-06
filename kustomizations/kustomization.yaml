@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - botkube.yaml
+  - cert-manager.yaml
+  - coredns.yaml
+  - dashboards.yaml
+  - epigone.yaml
+  - freshrss.yaml
+  - health-monitor.yaml
+  - home-assistant.yaml
+  - isfdb.yaml
+  - linkding.yaml
+  - mdns.yaml
+  - monitoring.yaml
+  - mosquitto.yaml
+  - nas-diskio-monitor.yaml
+  - nas-monitor.yaml
+  - nfs.yaml
+  - opsimath.yaml
+  - os-eol-scanner.yaml
+  - prometheus.yaml
+  - pvc-usage-monitor.yaml
+  - registry.yaml
+  - ring-mqtt.yaml
+  - solar.yaml
+  - syncthing.yaml
+  - tailscale.yaml
+  - taskmgt.yaml
+  - traefik.yaml
+  - trivy.yaml
+  - wallabag.yaml
+  - webdav.yaml
+  - website.yaml
