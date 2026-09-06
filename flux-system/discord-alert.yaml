@@ -29,15 +29,25 @@ spec:
   #    only two HelmRepository event reasons seen.
   #  - "stored artifact for commit": the GitRepository's per-commit "a push landed" event.
   #    It's repo-wide and never names which app changed, and the Kustomization's own
-  #    "Applied revision" event right after it already means "the deploy happened" (per-app
-  #    once tm 9db56d2e lands). GitRepository *failures* (clone/auth/checkout) use different
-  #    wording and still come through - this only drops the success line.
-  # None of these match eventSeverity: error, which stays info deliberately (see the
-  # HelmRelease/HelmRepository comment below) - real failures use different message text.
+  #    "configured" event already names what actually deployed. GitRepository *failures*
+  #    (clone/auth/checkout) use different wording and still come through.
+  #  - "Reconciliation finished in Xs": the per-Kustomization success heartbeat, emitted on
+  #    every reconcile whether or not anything changed. Harmless with one Kustomization,
+  #    but with the per-app Kustomizations (tm 9db56d2e) every git push fires ~30 of these
+  #    ("no changes" for every app the commit didn't touch) and Discord rate-limits. A
+  #    reconcile that *did* change something still emits a separate "<obj> configured"
+  #    event, which is not excluded - that's the per-app deploy line we want to keep.
+  #  - "Dependencies do not meet ready condition": transient dependsOn resolution chatter.
+  #    A genuinely stuck Kustomization/dependency is caught by health-monitor (Flux
+  #    failed-or-stalled check -> tm task), not something Discord needs to page on.
+  # None of these match eventSeverity: error - real failures ("Reconciliation failed after",
+  # "build failed", "Health check failed", ...) use different message text and still come through.
   exclusionList:
     - "^artifact up-to-date with remote revision:"
     - "^stored fetched index of size"
     - "^stored artifact for commit"
+    - "^Reconciliation finished in"
+    - "^Dependencies do not meet ready condition"
   eventSources:
     - kind: Kustomization
       name: "*"
