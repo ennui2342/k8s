@@ -40,3 +40,16 @@ patches:
   target:
     kind: Kustomization
     name: flux-system
+# Transitional (tm 9db56d2e, phase 2): the flux-system Kustomization no longer
+# builds the app directories — each is owned by its own Kustomization in
+# kustomizations/. prune: false keeps flux-system from garbage-collecting those
+# now-out-of-scope resources during the ownership handover. Removed again in
+# phase 3 once every app resource carries its per-app owner label, at which point
+# flux-system only manages flux-system/ + kustomizations/ and prune is safe.
+- patch: |
+    - op: replace
+      path: /spec/prune
+      value: false
+  target:
+    kind: Kustomization
+    name: flux-system
