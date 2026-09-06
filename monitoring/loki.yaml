@@ -84,12 +84,20 @@ spec:
     write:
       replicas: 0
 
-    # Override k8s-sidecar to patched version (fixes CVE-2025-15467, CVE-2026-31789 + 8 HIGH CVEs via Alpine 3.23;
-    # bumped 2026-08-14 to 2.8.2 for CVE-2026-45447 - openssl heap UAF in PKCS7_verify(), fixed via
-    # Alpine package upgrade to libcrypto3/libssl3 3.5.7-r0, confirmed via `apk info` in the built image)
+    # Pin k8s-sidecar ahead of the Loki chart default for Alpine-base CVEs. Handled by plain
+    # upstream tag bumps (no patched-images.yaml fork). History: CVE-2025-15467 / CVE-2026-31789
+    # (Alpine 3.23 era), then 2026-08-14 -> 2.8.2 for CVE-2026-45447 (openssl PKCS7_verify UAF).
+    # 2026-09-06 -> 2.11.2 for CVE-2026-14456 (HIGH: openssl DoS via unbounded memory growth in
+    # the QUIC server). 2.8.2's Dockerfile pinned libcrypto3/libssl3 == 3.5.7-r0 exactly, so no
+    # rebuild could ever pick up the fix; 2.10.3+ switched that to a `>=` floor constraint and
+    # 2.11.2 (built 2026-09-04) ships libcrypto3/libssl3 3.5.8-r0 on alpine 3.22.4 — confirmed
+    # via `apk list --installed` in the arm64 image. Changelog 2.8.2->2.11.2 reviewed: no
+    # breaking changes apply to this METHOD=WATCH rules sidecar (2.9.0's ENTRYPOINT-vs-CMD swap
+    # is moot — the chart sets no command/args; the 2.11.0 SLEEP/RESOURCE_NAME regression was
+    # fixed in 2.11.1 and never affected WATCH anyway).
     sidecar:
       image:
-        tag: "2.8.2"
+        tag: "2.11.2"
 
     # Disable extras not needed for single-binary homelab
     gateway:
