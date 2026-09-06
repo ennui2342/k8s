@@ -21,19 +21,23 @@ spec:
   eventMetadata:
     summary: "k8s homelab"
   eventSeverity: info
-  # Suppresses routine HelmRepository index-fetch chatter (ArtifactUpToDate fires on every
-  # poll where nothing changed - the dominant source of noise; NewArtifact fires whenever
-  # upstream actually publishes something, still not actionable on its own since every
-  # HelmRelease here is pinned to a specific minor line - a new index doesn't mean anything
-  # gets deployed). Confirmed live 2026-08-21 these are the only two HelmRepository event
-  # reasons seen; GitRepository uses different message wording ("no changes since last
-  # reconciliation"), so this doesn't bleed into git-sync visibility. Real HelmRepository/
-  # HelmRelease failures use different message text and still come through - this only
-  # matches the two specific "nothing to see here" patterns, not eventSeverity: error more
-  # broadly (which stays info deliberately, see the HelmRelease/HelmRepository comment below).
+  # Suppresses routine chatter that isn't actionable:
+  #  - "artifact up-to-date" / "stored fetched index of size": HelmRepository index-fetch
+  #    polling (ArtifactUpToDate on every no-change poll is the dominant noise source;
+  #    NewArtifact on an upstream publish still isn't actionable since every HelmRelease
+  #    here is pinned to a specific minor line). Confirmed live 2026-08-21 these are the
+  #    only two HelmRepository event reasons seen.
+  #  - "stored artifact for commit": the GitRepository's per-commit "a push landed" event.
+  #    It's repo-wide and never names which app changed, and the Kustomization's own
+  #    "Applied revision" event right after it already means "the deploy happened" (per-app
+  #    once tm 9db56d2e lands). GitRepository *failures* (clone/auth/checkout) use different
+  #    wording and still come through - this only drops the success line.
+  # None of these match eventSeverity: error, which stays info deliberately (see the
+  # HelmRelease/HelmRepository comment below) - real failures use different message text.
   exclusionList:
     - "^artifact up-to-date with remote revision:"
     - "^stored fetched index of size"
+    - "^stored artifact for commit"
   eventSources:
     - kind: Kustomization
       name: "*"
