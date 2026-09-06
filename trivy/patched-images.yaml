@@ -267,3 +267,13 @@
   patched_date: "2026-09-05"
   critical: 0
   high: 1
+
+- workload: tailscale/Deployment/operator
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/k8s-operator:v1.98.9-patched
+  upstream_image: tailscale/k8s-operator:v1.98.9
+  build_recipe: trivy/patched-images/k8s-operator/Dockerfile
+  reason: "1 HIGH fixable CVE-2026-14456 (openssl DoS via unbounded memory growth in the QUIC server) in the Alpine 3.22.5 base of tailscale/k8s-operator:v1.98.9 — the newest release in the 1.98.x chart line this repo's HelmRelease pins (tailscale/helmrelease.yaml, chart version \"1.98.x\"). Image is overridden via HelmRelease values operatorConfig.image. Fixed package libssl3/libcrypto3 3.5.8-r0 is published to the alpine v3.22/main repo (confirmed against https://secdb.alpinelinux.org/v3.22/main.json), but v1.98.9's image was baked before that and still ships 3.5.7-r0 (verified via `apk list --installed` in the base image). NOT rebased onto the next published line (1.102.x): that is a 4-minor version jump requiring its own breaking-change review AND v1.102.3 still ships the same vulnerable openssl 3.5.7-r0 (verified), so it is neither in scope for a routine CVE patch nor a fix. Same-base `apk upgrade` on Alpine 3.22.5 bumps libcrypto3+libssl3 3.5.7-r0 -> 3.5.8-r0 (verified in the built image) — the operator binary (/usr/local/bin/operator) and entrypoint are untouched, pure OS-package patch-level bump, no config or behaviour change. Same CVE-2026-14456 as the six Flux controller forks. Verified via local trivy 0.74.0 scan (--ignore-unfixed --pkg-types os --severity CRITICAL,HIGH): plain v1.98.9 alpine layer was 2 findings (both CVE-2026-14456, on libcrypto3 and libssl3), patched image scans 0 vulnerabilities. NOTE: the tailscale/tailscale proxy image (v1.98.9, used by the operator-created ProxyGroup/Connector/ingress pods) carries the identical vulnerable openssl but was not flagged by the scanner and is tracked separately. Revert to the plain chart image once tailscale ships a k8s-operator image with openssl >= 3.5.8-r0 (reconcile-scanner watches upstream_image)."
+  patched_date: "2026-09-06"
+  critical: 0
+  high: 1
