@@ -94,34 +94,37 @@ for the `.8N` convention): master `192.168.0.8`, `k8s-1` `.81`, `k8s-2`
   related issues. `CLAUDE.md`'s "Cluster Topology" section has been
   updated to match (old subnet split and SSH-hop requirement removed).
 
-### Current deviation from the design above: powerline Ethernet hop to the NAS (as of 2026-08-23)
+### Resolved deviation: powerline Ethernet hop to the NAS (2026-08-23 → 2026-09-06)
 
-The tower is currently sitting beside the desk, not under the stairs where
-it lived before the 2026-08-22 mid-incident relocation (see "Original
-design" above) and where the NAS's own switch segment physically is. The
-GS305's uplink from the desk location back to the NAS's segment currently
-runs over a **powerline Ethernet adapter**, not a plain wired run — so the
-"low-latency wired path to the NAS" gain claimed above isn't actually true
-right now, despite every node otherwise being on a flat `192.168.0.0/24`
-network as designed.
+From the 2026-08-22 mid-incident relocation until 2026-09-06 the tower sat
+beside the desk rather than under the stairs where the NAS's own switch
+segment physically is. Over that window the GS305's uplink back to the
+NAS's segment ran over a **powerline Ethernet adapter**, not a plain wired
+run — so the "low-latency wired path to the NAS" gain the flat-network
+design assumes wasn't actually true, despite every node otherwise being on
+a flat `192.168.0.0/24` network as designed.
 
-Suspected root cause (not yet fully confirmed, but consistent with the
-evidence) of the recurring `NodeHighIOWait`/`NodeCriticalIOWait` alerts
-investigated in tm task `50cad5c2`: real NAS disk I/O data (via
-`nas-diskio-monitor/`) showed the NAS's physical disks well under 10%
-utilized during a live firing window, ruling out disk saturation, while
-ping RTT from every node to the NAS was elevated and jittery (worst on
-`k8s-1`: avg 25.5ms/max 61ms/jitter 19ms; even the "healthy" `k8s-3` saw
-avg 9ms/max 21ms) — a latency signature much more consistent with
-powerline noise/interference than with genuine network congestion or NAS
-disk contention.
+That powerline hop was the root cause of the recurring
+`NodeHighIOWait`/`NodeCriticalIOWait` alerts investigated in tm task
+`50cad5c2`: real NAS disk I/O data (via `nas-diskio-monitor/`) showed the
+NAS's physical disks well under 10% utilized during a live firing window,
+ruling out disk saturation, while ping RTT from every node to the NAS was
+elevated and jittery (worst on `k8s-1`: avg 25.5ms/max 61ms/jitter 19ms;
+even the "healthy" `k8s-3` saw avg 9ms/max 21ms) — a latency signature
+consistent with powerline noise/interference, not network congestion or
+NAS disk contention.
 
-**Planned fix:** once the SD card upgrades (same task) are done, move the
-tower back under the stairs onto the NAS's direct switch segment, removing
-the powerline hop entirely. Re-check whether `NodeHighIOWait` recurs after
-the move before investing in further latency-diagnosis tooling (e.g.
-continuous NAS-side nfsd/ping monitoring) — if the move resolves it, that
-tooling would just be chasing a topology issue that no longer exists.
+**Resolved 2026-09-06:** during the graceful full-cluster shutdown for the
+SD-card work, the tower was moved back under the stairs onto the NAS's
+direct switch segment and the powerline hop removed. Post-move
+verification (all four nodes, 20-packet ping to `192.168.0.76`): avg
+0.40–0.50ms / max <1.5ms / jitter <0.35ms — a ~60× latency and ~100×
+jitter improvement over the powerline baseline. NFS throughput from the
+master's `/mnt/k8s` mount: 61 MB/s write, 99 MB/s read (`dd`, direct I/O).
+Node iowait 0–7%. The two Alertmanager silences on
+`NodeHighIOWait`/`NodeCriticalIOWait` (renewed 2026-09-03) were expired the
+same day. No further latency-diagnosis tooling was needed — the move
+resolved it, as expected.
 
 ---
 
