@@ -23,7 +23,7 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: frontend
-          image: ghcr.io/ennui2342/taskmgt-frontend:1.20260724.45 # {"$imagepolicy": "flux-system:taskmgt-frontend"}
+          image: ghcr.io/ennui2342/taskmgt-frontend:1.20260906.46 # {"$imagepolicy": "flux-system:taskmgt-frontend"}
           ports:
             - containerPort: 80
           readinessProbe:
