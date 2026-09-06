@@ -497,7 +497,46 @@ flux bootstrap git \
 ```
 
 Flux will write `flux-system/gotk-components.yaml` and
-`flux-system/gotk-sync.yaml` to the repo (it will push a commit).
+`flux-system/gotk-sync.yaml` to the repo (it will push a commit). Keep
+`--path=./` — the root `kustomization.yaml` lists only `flux-system/` and
+`kustomizations/`, so the bootstrap `flux-system` Kustomization reconciles
+the Flux system objects plus the per-app Kustomization CRs (see below), and
+those reconcile the app dirs.
+
+### Per-app Kustomizations
+
+Every app directory has its own `Kustomization` CR in `kustomizations/`
+(`path: ./<app>`, `prune: true`, `wait: false`, own `decryption:` SOPS block,
+`interval: 1h`, minimal `dependsOn`). The `flux-system` Kustomization does
+**not** build the app dirs directly. On a from-scratch bootstrap this needs
+nothing extra — the CRs are plain manifests reconciled like anything else;
+the `dependsOn` graph just orders first-boot. `monitoring/namespace.yaml`
+and `home-assistant/namespace.yaml` are in git (they used to be
+install-created, off-GitOps).
+
+Adding an app: `kustomizations/<app>.yaml` (copy an existing one) + add it to
+`kustomizations/kustomization.yaml`. Never add the app dir to the root
+`kustomization.yaml`.
+
+**Migration history (tm `9db56d2e`, 2026-09-06) — NOT a clean rollout.** The
+cutover commit combined trimming the root `kustomization.yaml` with flipping
+the `flux-system` Kustomization to `prune: false`. That flip can't take
+effect in the reconcile that introduces it (the running spec is still
+`prune: true` while it computes the garbage-collection set), so `flux-system`
+pruned every app resource that had left its scope but not yet had its
+`kustomize.toolkit.fluxcd.io/name` label re-owned by the per-app
+Kustomization — 6 namespaces (`monitoring`, `home-assistant`, `freshrss`,
+`isfdb`, `linkding`, `registry`) and ~25 pods. Recovery: NFS provisioner
+scaled to 0 within ~1 min to stop backing-dir deletion, per-app Kustomizations
+unsuspended to recreate. Data outcome — intact wherever a static `Retain` PV
+backed it (freshrss/linkding/home-assistant/ring-mqtt/InfluxDB and all the
+`default`-namespace apps); lost where a dynamic `nfs-client` PV backed it
+(`archiveOnDelete: false`): local registry images (re-pushed from the Mac's
+Docker cache — `docker push 192.168.0.8:30500/<repo>:<tag>` for each ref in
+`git grep 127.0.0.1:30500 -- '*.yaml'`), `isfdb-db` (reseeded via
+`isfdb-refresh`), Prometheus TSDB, Loki history, Grafana state.
+**If ever redone elsewhere:** land `prune: false` in its own commit, let it
+reconcile, THEN trim the root — two commits, not one.
 
 ---
 
