@@ -24,29 +24,65 @@ spec:
             - /bin/sh
             - -c
             - |
-              mdstat=$(ssh -p 9222 \
-                -i /ssh/id_rsa \
-                -o StrictHostKeyChecking=no \
-                -o BatchMode=yes \
-                -o ConnectTimeout=10 \
-                ennui2342@192.168.0.76 "cat /proc/mdstat" 2>/dev/null)
+              SSH="ssh -p 9222 -i /ssh/id_rsa -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=10 ennui2342@192.168.0.76"
 
-              if [ $? -ne 0 ]; then
-                echo "Failed to connect to NAS - skipping check"
+              # One round trip: /proc/mdstat + the previous alert state we stash on
+              # the NAS (~/.nas-raid-monitor.state) for dedup.
+              # trailing "; true" so $? reflects the SSH connection, not the
+              # (expected-to-fail on first run) cat of the state file.
+              data=$($SSH "cat /proc/mdstat; printf '\n===PREV===\n'; cat ~/.nas-raid-monitor.state 2>/dev/null; true" 2>/dev/null)
+              if [ $? -ne 0 ] || [ -z "$data" ]; then
+                echo "Failed to reach NAS - skipping check"
+                exit 0
+              fi
+              mdstat=$(printf '%s\n' "$data" | sed '/^===PREV===$/,$d')
+              prev=$(printf '%s\n' "$data" | sed '1,/^===PREV===$/d')
+
+              # Degradation is read from the authoritative [configured/active] token
+              # (e.g. "[2/1]"), NOT from counting the "sdX[n]" tokens on the array
+              # line: a physically REMOVED drive drops off that line entirely, so
+              # active==listed and the old count-the-tokens check reported "healthy"
+              # for a genuinely degraded array (seen live 2026-09-06 after HDD2 was
+              # pulled). md1/md8/md9 are the TerraMaster/Synology system+swap
+              # partitions — mdadm reports them as [24/N] by design — so skipped.
+              result=$(echo "$mdstat" | python3 -c "$(cat <<'PY'
+              import re, sys
+              m = sys.stdin.read()
+              SKIP = {'md1', 'md8', 'md9'}
+              issues = []
+              if '(F)' in m:
+                  issues.append('a drive is marked failed (F)')
+              for blk in re.finditer(r'^(md\w+)\s*:(.+?)(?=^md|\Z)', m, re.M | re.S):
+                  name = blk.group(1)
+                  if name in SKIP:
+                      continue
+                  nn = re.search(r'\[(\d+)/(\d+)\]', blk.group(0))
+                  if nn and int(nn.group(2)) < int(nn.group(1)):
+                      issues.append(f'{name}: {nn.group(2)}/{nn.group(1)} drives active (degraded)')
+              print('\n'.join(issues))
+              sys.exit(1 if issues else 0)
+              PY
+              )")
+              degraded=$?
+
+              [ "$degraded" -eq 1 ] && state="DEGRADED: $result" || state="HEALTHY"
+
+              if [ "$state" = "$prev" ]; then
+                echo "unchanged: $state"
                 exit 0
               fi
 
-              result=$(echo "$mdstat" | python3 -c "import re,sys;m=sys.stdin.read();failed='(F)'in m;pairs=[(x.group(1),len(re.findall(r'\w+\[\d+\]',x.group(0).split('\n')[0])),re.search(r'\[([U_]+)\]',x.group(0)))for x in re.finditer(r'^(md\w+)\s*:(.+?)(?=^md|\Z)',m,re.M|re.S)];degraded=[(n,s.group(1).count('U'),dc)for n,dc,s in pairs if s and s.group(1).count('U')<dc];i=(['Drive(s) marked as failed']if failed else[])+[n+': '+str(u)+'/'+str(dc)+' drives active'for n,u,dc in degraded];print('\n'.join(i));sys.exit(bool(i))")
-
-              if [ $? -eq 1 ]; then
+              # State changed since the last run — notify once, then persist it.
+              if [ "$degraded" -eq 1 ]; then
                 payload=$(jq -n --arg msg "$result" \
-                  '{"username": "k8s homelab", "content": "🚨 **NAS RAID alert**:\n```\n" + $msg + "\n```"}')
-                curl -s -X POST -H "Content-Type: application/json" \
-                  -d "$payload" "$DISCORD_WEBHOOK"
-                echo "Alert sent: $result"
-              else
-                echo "RAID healthy"
+                  '{username: "k8s homelab", content: "🚨 **NAS RAID alert**:\n```\n\($msg)\n```"}')
+                curl -s -X POST -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK"
+              elif [ -n "$prev" ] && [ "$prev" != "HEALTHY" ]; then
+                payload=$(jq -n '{username: "k8s homelab", content: "✅ **NAS RAID recovered** — full redundancy restored."}')
+                curl -s -X POST -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK"
               fi
+              printf '%s' "$state" | $SSH "cat > ~/.nas-raid-monitor.state" 2>/dev/null
+              echo "state: [$prev] -> [$state]"
             env:
             - name: DISCORD_WEBHOOK
               valueFrom:
