@@ -3,18 +3,8 @@ kind: Namespace
 metadata:
   name: registry
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: registry-data
-  namespace: registry
-spec:
-  accessModes: ["ReadWriteOnce"]
-  storageClassName: nfs-client
-  resources:
-    requests:
-      storage: 20Gi
----
+# registry-data PVC + its static Retain PV live in pv.yaml
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:

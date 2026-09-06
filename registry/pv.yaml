@@ -1,0 +1,38 @@
+# Static Retain PV — see CLAUDE.md "Per-app Kustomizations" incident note and
+# LINT.md's storage-durability rule. A datastore-backing PVC must not be left on
+# the nfs-client StorageClass's dynamic Delete policy (archiveOnDelete: false):
+# deleting the PVC then deletes the NAS directory. Registry images are
+# rebuildable, but a lost registry still means a fleet-wide ImagePullBackOff
+# storm, so it gets the same static-PV treatment as freshrss/linkding/etc.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: registry-data-pv
+spec:
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: 20Gi
+  claimRef:
+    name: registry-data
+    namespace: registry
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-client
+  volumeMode: Filesystem
+  nfs:
+    path: /mnt/md0/k8s/registry-data
+    server: 192.168.0.76
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: registry-data
+  namespace: registry
+spec:
+  volumeName: registry-data-pv
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 20Gi
