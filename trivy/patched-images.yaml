@@ -287,3 +287,13 @@
   patched_date: "2026-09-07"
   critical: 0
   high: 1
+
+- workload: monitoring/CronJob/cve-scanner
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/trivy:0.74.0-patched
+  upstream_image: aquasec/trivy:0.74.0
+  build_recipe: trivy/patched-images/trivy/Dockerfile
+  reason: "1 HIGH fixable CVE-2026-14456 (openssl DoS via unbounded memory growth in the QUIC server; trivy reports it as 2 findings, on libcrypto3 + libssl3) in the Alpine 3.24.1 base of aquasec/trivy:0.74.0 — the scanner image the cve-scanner CronJob's own `scan` and `reconcile` initContainers run. 0.74.0 is the tag this repo pins AND the newest upstream release (Docker Hub: published 2026-08-14, same digest as `latest`; only `canary` is newer), so no version rebase is possible — pure same-tag OS-package patch. Fixed package libssl3/libcrypto3 3.5.8-r0 is published to the alpine v3.24/main repo (confirmed against https://secdb.alpinelinux.org/v3.24/main.json — 3.5.8-r0 lists CVE-2026-14456 among 10 openssl CVEs), but 0.74.0's image was baked before that and still ships 3.5.7-r0 (verified via `apk list --installed` in the base image). Same-base `apk upgrade` on Alpine 3.24.1 bumps libcrypto3+libssl3 3.5.7-r0 -> 3.5.8-r0 (side effects: libcurl 8.21.0-r0 -> 8.22.0-r0, libexpat 2.8.2-r0 -> 2.8.4-r0, pcre2 10.47-r1 -> 10.48-r0, apk-tools/libapk 3.0.6-r0 -> 3.0.8-r0) — the trivy binary (/usr/local/bin/trivy) and entrypoint are untouched, alpine-release still 3.24.1, `trivy --version` still 0.74.0, pure OS-package patch-level bump, no config or behaviour change. Same CVE-2026-14456 / same frozen-rebuild pattern as the six Flux controller forks and the two Tailscale forks. Verified via local trivy 0.74.0 self-scan (--ignore-unfixed --pkg-types os --severity CRITICAL,HIGH, arm64): plain 0.74.0 alpine layer was 2 findings (both CVE-2026-14456), patched image scans 0 vulnerabilities. Revert once aquasec ships a trivy image with openssl >= 3.5.8-r0 (reconcile-scanner watches upstream_image)."
+  patched_date: "2026-09-07"
+  critical: 0
+  high: 1
