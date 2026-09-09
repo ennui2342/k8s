@@ -25,7 +25,16 @@ provisioner: cluster.local/nfs-subdir-external-provisioner
 allowVolumeExpansion: true
 reclaimPolicy: Delete
 parameters:
-  archiveOnDelete: "false"
+  # "true" (not the chart default "false"): on PVC delete the provisioner
+  # renames the backing NAS dir to archived-<name> instead of rm -rf'ing it.
+  # Blanket safety net after the 2026-09-06 prune incident wiped several
+  # dynamic Delete-policy PV dirs (tm 9db56d2e / ee653d77). The important
+  # datastores are on static Retain PVs now; this covers the rest
+  # (loki/prometheus/grafana/trivy-cache + any future dynamic PVC).
+  # NOTE: StorageClass parameters are immutable - changing this needs
+  # `kubectl delete sc nfs-client` + a Flux reconcile of the nfs Kustomization
+  # to recreate it (safe: existing bound volumes don't re-read SC params).
+  archiveOnDelete: "true"
 ---
 # Source: nfs-subdir-external-provisioner/templates/clusterrole.yaml
 kind: ClusterRole
