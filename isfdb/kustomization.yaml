@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - isfdb-secret.yaml
+  - db-pv.yaml
   - mariadb-statefulset.yaml
   - adapter-deployment.yaml
   - ingress.yaml

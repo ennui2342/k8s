@@ -1,0 +1,43 @@
+# Static Retain PV for the MariaDB datadir — see CLAUDE.md "Per-app
+# Kustomizations" incident note and LINT.md's storage-durability rule.
+# A datastore PVC must not sit on the nfs-client StorageClass's dynamic
+# Delete policy (archiveOnDelete: false), where deleting the PVC deletes the
+# NAS directory (lost data this way in the 2026-09-06 prune incident).
+#
+# The StatefulSet's volumeClaimTemplate (`data`, in mariadb-statefulset.yaml)
+# is immutable and left as-is. This PVC is pre-created with the exact name
+# the template would generate (data-<sts>-0); the StatefulSet adopts an
+# existing bound PVC of that name on scale-up rather than provisioning a new
+# one.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: isfdb-db-pv
+spec:
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: 20Gi
+  claimRef:
+    name: data-isfdb-db-0
+    namespace: isfdb
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-client
+  volumeMode: Filesystem
+  nfs:
+    path: /mnt/md0/k8s/isfdb-db
+    server: 192.168.0.76
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data-isfdb-db-0
+  namespace: isfdb
+spec:
+  volumeName: isfdb-db-pv
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 20Gi
