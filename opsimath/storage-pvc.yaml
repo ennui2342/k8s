@@ -9,15 +9,39 @@
 # Queue, not the web process. RWO would only reliably work if both pods
 # always land on the same node, which the soft worker-preference affinity
 # doesn't guarantee. nfs-subdir-external-provisioner has no node-locking
-# mechanism (it's just an NFS subdirectory mount), so RWX works natively -
-# first RWX PVC in this repo, but not a new capability, just the first
-# manifest that actually needs it.
+# mechanism (it's just an NFS subdirectory mount), so RWX works natively.
+#
+# Static Retain PV (not the nfs-client StorageClass's dynamic Delete policy)
+# - see CLAUDE.md "Per-app Kustomizations" incident note and LINT.md's
+# storage-durability rule. Under archiveOnDelete: false, deleting the PVC
+# deletes the backing NAS directory (lost data this way in the 2026-09-06
+# prune incident). A fixed nfs.path + claimRef keeps the data pinned and
+# lets the PVC auto-rebind after any PVC/namespace churn.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: opsimath-storage-pv
+spec:
+  accessModes: ["ReadWriteMany"]
+  capacity:
+    storage: 10Gi
+  claimRef:
+    name: opsimath-storage
+    namespace: opsimath
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-client
+  volumeMode: Filesystem
+  nfs:
+    path: /mnt/md0/k8s/opsimath-storage
+    server: 192.168.0.76
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: opsimath-storage
   namespace: opsimath
 spec:
+  volumeName: opsimath-storage-pv
   accessModes: ["ReadWriteMany"]
   storageClassName: nfs-client
   resources:

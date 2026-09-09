@@ -1,0 +1,44 @@
+# Static Retain PV for the bundled Postgres 18 datadir - see CLAUDE.md
+# "Per-app Kustomizations" incident note and LINT.md's storage-durability
+# rule. A datastore PVC must not sit on the nfs-client StorageClass's
+# dynamic Delete policy (archiveOnDelete: false), where deleting the PVC
+# deletes the NAS directory (lost data this way in the 2026-09-06 prune
+# incident).
+#
+# The StatefulSet's volumeClaimTemplate (`data`, in postgres.yaml) is
+# immutable and left as-is. This PVC is pre-created with the exact name the
+# template would generate (data-<sts>-0); the StatefulSet adopts an existing
+# bound PVC of that name on scale-up rather than provisioning a new one.
+# Apply this PV+PVC (and confirm Bound) BEFORE the StatefulSet is
+# reconciled - otherwise the STS controller races ahead and dynamically
+# provisions a fresh empty PVC of the same name.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: opsimath-db-pv
+spec:
+  accessModes: ["ReadWriteOnce"]
+  capacity:
+    storage: 10Gi
+  claimRef:
+    name: data-opsimath-db-0
+    namespace: opsimath
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-client
+  volumeMode: Filesystem
+  nfs:
+    path: /mnt/md0/k8s/opsimath-db
+    server: 192.168.0.76
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data-opsimath-db-0
+  namespace: opsimath
+spec:
+  volumeName: opsimath-db-pv
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 10Gi
