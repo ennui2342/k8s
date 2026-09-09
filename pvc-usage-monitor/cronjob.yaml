@@ -153,12 +153,22 @@ data:
     print(f'Tracking {len(pv_by_basename)} nfs-client-backed PV(s)')
 
     # --- Real per-directory usage from the NAS itself ---
-    r = subprocess.run(
-        ['ssh', '-p', NAS_PORT, '-i', '/ssh/id_rsa',
-         '-o', 'StrictHostKeyChecking=no', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10',
-         NAS_HOST, f'du -sk -d 1 {NAS_BASE_PATH}'],
-        capture_output=True, text=True
-    )
+    # `du -sk -d 1` over ~16GB of (mostly small) files takes ~2-3min warm and
+    # can push well past that under NAS load (e.g. a RAID resync — flapped every
+    # 2h through the 2026-09-08 rebuild, tm 92809f27). activeDeadlineSeconds is
+    # 600 to give it room; this subprocess timeout is the inner guard so a
+    # genuinely-stuck NAS exits the job cleanly (like the "no output" path
+    # below) instead of the pod being SIGKILLed at the deadline.
+    try:
+        r = subprocess.run(
+            ['ssh', '-p', NAS_PORT, '-i', '/ssh/id_rsa',
+             '-o', 'StrictHostKeyChecking=no', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10',
+             NAS_HOST, f'du -sk -d 1 {NAS_BASE_PATH}'],
+            capture_output=True, text=True, timeout=480
+        )
+    except subprocess.TimeoutExpired:
+        print('Warning: NAS du did not finish within 480s — skipping this run', file=sys.stderr)
+        sys.exit(0)
     # Nonzero exit is expected — du reports "Permission denied" on some
     # subdirectories it can't descend into (that's fine, -d 1 doesn't need
     # to) but still exits 1 for it. stdout is unaffected either way.
@@ -256,8 +266,6 @@ data:
         )
 
     print(f'Done: {len(created)} task(s) created, {len(closed)} task(s) closed')
-
-    print(f'Done: {len(created)} task(s) created')
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -275,7 +283,12 @@ spec:
       # linger a week re-firing KubeJobFailed; a persistent failure still
       # re-alerts via a fresh Failed Job every 2h. See LINT.md.
       ttlSecondsAfterFinished: 3600
-      activeDeadlineSeconds: 300
+      # 600, not 300: the NAS `du` walk (monitor.py) runs ~2-3min warm and
+      # overran 300s every run through the 2026-09-08 RAID rebuild
+      # (tm 92809f27, DeadlineExceeded flapping every 2h). 600 gives it 2x
+      # headroom; monitor.py also has an inner 480s timeout on the du itself
+      # so a stuck NAS exits cleanly rather than hitting this deadline.
+      activeDeadlineSeconds: 600
       template:
         spec:
           serviceAccountName: pvc-usage-monitor
