@@ -1,6 +1,16 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+namespace: home-assistant
 resources:
   - pvc.yaml
   - ring-mqtt.yaml
   - svc.yaml
+configMapGenerator:
+  - name: ring-mqtt-config
+    files:
+      - config.json
+generatorOptions:
+  # keep the content-hash suffix (default) so a config.json change rolls the
+  # Deployment - a subPath configMap mount is not updated in place on a
+  # running pod, it needs a restart
+  disableNameSuffixHash: false

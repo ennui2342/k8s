@@ -32,7 +32,26 @@ spec:
         volumeMounts:
         - name: ring-mqtt-data
           mountPath: /data
+        # config.json is managed here (configMapGenerator below), not left as
+        # runtime state on the PVC. It carries no secrets. ring-mqtt in docker
+        # runmode reads /data/config.json only - there is no env-var override
+        # (see lib/config.js: env overrides only apply in Home Assistant addon
+        # mode). The Ring OAuth refresh token (ring-state.json) and all other
+        # runtime state stay on the PVC and writable - this subPath mount
+        # covers the single file. mqtt_url MUST be the in-cluster broker
+        # Service, not the k8s.ecafe.org:31883 NodePort: the CoreDNS override
+        # (coredns/coredns-custom.yaml) resolves k8s.ecafe.org to Traefik's
+        # ClusterIP for in-cluster pods, which does not serve MQTT - that
+        # silently broke the Ring->HA doorbell notification path for ~2 weeks
+        # (2026-08-22 to 2026-09-09).
+        - name: ring-mqtt-config
+          mountPath: /data/config.json
+          subPath: config.json
+          readOnly: true
       volumes:
         - name: ring-mqtt-data
           persistentVolumeClaim:
             claimName: ring-mqtt-pvc-data
+        - name: ring-mqtt-config
+          configMap:
+            name: ring-mqtt-config
