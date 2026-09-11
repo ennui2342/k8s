@@ -50,13 +50,13 @@
 
 - workload: flux-system/Deployment/kustomize-controller
   strategy: frozen-rebuild
-  patched_image: 127.0.0.1:30500/kustomize-controller:v1.9.4-patched
-  upstream_image: ghcr.io/fluxcd/kustomize-controller:v1.9.4
+  patched_image: 127.0.0.1:30500/kustomize-controller:v1.9.5-patched
+  upstream_image: ghcr.io/fluxcd/kustomize-controller:v1.9.5
   build_recipe: trivy/patched-images/kustomize-controller/Dockerfile
-  reason: "Rebased 2026-08-05 from v1.8.4 onto v1.9.4 (gnutls/nghttp2 CVEs fixed upstream; Alpine base now scans clean at 0 CRITICAL + 0 HIGH after apk upgrade, verified via local trivy 0.70.0 scan). Changelog v1.8.4->v1.9.4 reviewed: only behavior change is v1.9.0's StrictPostBuildSubstitutions feature gate going default-on, which only affects Kustomizations using spec.postBuild.substitute — this repo has none, confirmed via repo-wide grep. Residual: golang.org/x/text CVE-2026-56852 + a grpc HIGH (GHSA-hrxh-6v49-42gf), both Go module deps baked into the binary, not Alpine OS packages — out of scope for this apk-upgrade patch strategy, same residual class as the image-automation-controller fork. patched_image migrated from the old ghcr.io/ennui2342/*-patched + imagePullPolicy: Never pattern to the local registry + IfNotPresent as part of this rebuild."
-  patched_date: "2026-08-05"
-  critical: 0
-  high: 2
+  reason: "Rebased 2026-09-11 from v1.9.4 onto v1.9.5 (reconcile-scanner task 950679d7: plain v1.9.5 improved to 1 CRITICAL + 12 HIGH from v1.9.4's 1 CRITICAL + 23 HIGH but still not clean). apk upgrade closes the remaining Alpine 3.23.5 base gap (libcrypto3/libssl3 3.5.7-r0 -> 3.5.8-r0 for CVE-2026-14456, plus libcurl 8.20.0-r0 -> 8.22.0-r0, libexpat 2.8.3-r0 -> 2.8.4-r0, pcre2 10.47-r0 -> 10.48-r0, apk-tools/libapk 3.0.6-r0 -> 3.0.8-r0) — verified via local trivy 0.74.0 scan: Alpine os-pkgs layer 0 CRITICAL + 0 HIGH after patch (was 1 CRITICAL + several HIGH). Changelog v1.9.4->v1.9.5 reviewed (official CHANGELOG.md): (1) 'purge tmp dirs at startup' — internal cleanup fix, no config/behaviour impact; (2) post-build substitution negative-length crash fix (${VAR:2:-1}) — only affects Kustomizations using spec.postBuild.substitute, none in this repo (grepped); (3) .spec.kubeConfig Secrets must now be self-contained (inline creds only, local-file references rejected) — only affects Kustomizations using spec.kubeConfig for remote-cluster apply, none in this repo (grepped); (4) fluxcd/pkg bump brings k8s client libs to 1.36.4 — cluster is k3s v1.32.x, within client-go skew tolerance (same call as the notification/source-controller forks). No CRD field removals or other breaking changes. Residual 1 CRITICAL + 3 HIGH are Go module deps baked into the controller binary (golang.org/x/crypto CVE-2026-56854; google.golang.org/grpc CVE-2026-84304 / CVE-2026-84445 / GHSA-hrxh-6v49-42gf), not Alpine OS packages — out of scope for this apk-upgrade patch strategy, same residual class as the other Flux controller forks."
+  patched_date: "2026-09-11"
+  critical: 1
+  high: 3
 
 - workload: default/DaemonSet/mdns-repeater
   strategy: frozen-rebuild
