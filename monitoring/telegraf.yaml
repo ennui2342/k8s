@@ -192,7 +192,7 @@ spec:
                     operator: DoesNotExist
       containers:
       - name: telegraf
-        image: 127.0.0.1:30500/telegraf:1.39.2-patched
+        image: 127.0.0.1:30500/telegraf:1.40-patched
         imagePullPolicy: IfNotPresent
         env:
         - name: HOSTNAME

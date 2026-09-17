@@ -80,13 +80,13 @@
 
 - workload: monitoring/Deployment/telegraf
   strategy: frozen-rebuild
-  patched_image: 127.0.0.1:30500/telegraf:1.39.2-patched
-  upstream_image: telegraf:1.39.2
+  patched_image: 127.0.0.1:30500/telegraf:1.40-patched
+  upstream_image: telegraf:1.40
   build_recipe: trivy/patched-images/telegraf/Dockerfile
-  reason: "Rebased 2026-08-06 from telegraf:1.38.3 onto telegraf:1.39.2 (gnutls/libcap/nghttp2 CVEs in the Debian bookworm base now fixed upstream; Debian 12.15 layer scans clean at 0 CRITICAL + 0 HIGH fixable after apt upgrade, verified via local trivy 0.70.0 scan with --ignore-unfixed — improvement over 1.38.3's 5 CRITICAL + 44 HIGH). Changelog 1.38.3->1.39.0->1.39.1->1.39.2 reviewed (official GitHub release notes): no breaking changes apply to this config's [agent]/outputs.influxdb(x2)/inputs.statsd/inputs.mqtt_consumer/processors.regex/inputs.snmp setup. Residual: 1 CRITICAL (github.com/rclone/rclone CVE-2026-49980, fixed 1.74.3) + 1 HIGH (google.golang.org/grpc GHSA-hrxh-6v49-42gf, fixed 1.82.1), both Go module deps baked into the telegraf binary, not Debian OS packages — out of scope for this apt-upgrade patch strategy, same residual class as the flux-controller and home-assistant forks. patched_image migrated from the old ghcr.io/ennui2342/*-patched pattern to the local registry as part of this rebuild (the Deployment manifest was already on the registry pattern; this entry's metadata was stale)."
-  patched_date: "2026-08-06"
-  critical: 1
-  high: 1
+  reason: "Rebased 2026-09-17 from telegraf:1.39.2 onto telegraf:1.40 (reconcile-scanner found 1.40 scans at 2 CRITICAL + 7 HIGH vs 1.39.2's 3 CRITICAL + 23 HIGH — an improvement, not a full resolution). Changelog 1.39.2->1.39.3->1.40.0 reviewed (official GitHub release notes): the only Breaking Changes in that range are removed/changed behavior in inputs.aerospike, inputs.cisco_telemetry_mdt, inputs.kafka_consumer, inputs.openstack, inputs.procstat, inputs.sflow, inputs.tail, and outputs.amon — none of which this deployment's config uses (verified via repo grep of monitoring/telegraf.yaml, which only has [agent]/outputs.influxdb(x2)/inputs.statsd/inputs.mqtt_consumer/processors.regex/inputs.snmp). Debian 12 OS-package layer scans clean at 0 CRITICAL + 0 HIGH fixable after apt upgrade (verified via local trivy 0.74.0 scan with --ignore-unfixed against 192.168.0.8:30500/telegraf:1.40-patched). Residual: 2 CRITICAL (github.com/rclone/rclone CVE-2026-88018 + CVE-2026-88044, fixed 1.75.1) + 3 HIGH (github.com/rclone/rclone CVE-2026-88017 + CVE-2026-88045, also fixed 1.75.1; google.golang.org/grpc CVE-2026-84445, fixed 1.82.2/1.83.2), all Go module deps baked into the telegraf binary, not Debian OS packages — out of scope for this apt-upgrade patch strategy, same residual class as the flux-controller and home-assistant forks. The prior 1.39.2 residual (rclone CVE-2026-49980, grpc GHSA-hrxh-6v49-42gf) is resolved by upstream's own 1.39.3 dependency bumps (rclone 1.75.0, grpc 1.82.1) baked into 1.40; the new residual CVEs above were disclosed after that bump landed."
+  patched_date: "2026-09-17"
+  critical: 2
+  high: 3
 
 - workload: home-assistant/Deployment/ring-mqtt
   strategy: frozen-rebuild
