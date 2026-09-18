@@ -278,6 +278,16 @@
   critical: 0
   high: 5
 
+- workload: monitoring/StatefulSet/loki (sidecar container)
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/k8s-sidecar:2.11.2-patched
+  upstream_image: docker.io/kiwigrid/k8s-sidecar:2.11.2
+  build_recipe: trivy/patched-images/k8s-sidecar/Dockerfile
+  reason: "6 HIGH fixable util-linux CVEs (CVE-2026-53612, CVE-2026-53613, CVE-2026-53614, CVE-2026-76642, CVE-2026-78408, CVE-2026-78410; fixed at util-linux 2.41.6-r0/-r1) in the Alpine 3.22.4 base of docker.io/kiwigrid/k8s-sidecar:2.11.2 — 2.11.2 (built 2026-09-04) is already the newest upstream tag (confirmed via Docker Hub tags API ordered by last_updated across all 180 published tags) and its manifest digest (sha256:2912be00...) is unchanged since then (confirmed by comparing the registry's current digest for the tag against the cluster's deployed imageID) — no plain tag bump can pick up the fix. Note: util-linux itself (the mount/nsenter binaries the CVE advisories describe) is NOT installed in this image at all — verified via `/lib/apk/db/installed` in the base image, the only installed package with util-linux as its origin is the `libuuid` shared-library subpackage, pulled in transitively (likely via python/sqlite-libs deps). Alpine versions the whole util-linux source package (all subpackages, including libuuid) together, and the v3.22/main repo already publishes libuuid 2.41.6-r1 (confirmed via pkgs.alpinelinux.org for both x86_64 and aarch64 — this fleet is all-arm64), which covers all six advisories. Same-base `apk upgrade` on Alpine 3.22.4 resolves it — verified in the built image: libuuid 2.41-r9 -> 2.41.6-r1 (plus incidental xz-libs/alpine-release/ca-certificates/tzdata bumps), sidecar Python app and ENTRYPOINT (`python -u -m sidecar`) untouched, non-root uid 65534:65534 preserved (apk runs as root mid-build, then USER switches back). Wired into the loki HelmRelease via `sidecar.image.{registry,repository,tag,pullPolicy}` values (monitoring/loki.yaml), not a manifest image field directly — this chart already pins its own k8s-sidecar tag ahead of the chart default (see that file's history comment) rather than using the loki chart's built-in default. Revert to the plain upstream tag once kiwigrid ships a 2.11.2 rebuild or a newer release with libuuid >= 2.41.6-r1 (reconcile-scanner watches upstream_image)."
+  patched_date: "2026-09-18"
+  critical: 0
+  high: 6
+
 - workload: monitoring/CronJob/cve-scanner
   strategy: frozen-rebuild
   patched_image: 127.0.0.1:30500/trivy:0.74.0-patched
