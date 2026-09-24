@@ -28,16 +28,6 @@
 # reconciliation scan compares the *current* upstream scan against these as
 # the bar upstream needs to clear (equal or better) before we revert.
 
-- workload: default/Deployment/mosquitto
-  strategy: frozen-rebuild
-  patched_image: ghcr.io/ennui2342/eclipse-mosquitto:2.1.2-patched
-  upstream_image: eclipse-mosquitto:2.1.2-alpine
-  build_recipe: trivy/patched-images/mosquitto/Dockerfile
-  reason: "gnutls CVEs in Alpine base; no newer 2.1.2 upstream tag"
-  patched_date: "2026-05-20"
-  critical: 1
-  high: 4
-
 - workload: default/Deployment/modpoll
   strategy: frozen-rebuild
   patched_image: ghcr.io/ennui2342/modpoll:1.6.0-patched
