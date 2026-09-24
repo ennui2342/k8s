@@ -5,7 +5,10 @@
 #      ship an equivalent fix, so we can revert instead of re-patching forever
 #
 # strategy: frozen-rebuild — a one-off custom image built with `docker build`
-#   locally and imported into node containerd (imagePullPolicy: Never). Has a
+#   locally, pushed to the local registry (192.168.0.8:30500), and referenced
+#   in the manifest as 127.0.0.1:30500/<name>:<tag> with imagePullPolicy:
+#   IfNotPresent (see RUNBOOK.md's "Local container registry" — every node
+#   pulls it automatically, no per-node containerd import needed). Has a
 #   Dockerfile under trivy/patched-images/<name>/. Reverting means switching
 #   the manifest back to `upstream_image` and deleting the Dockerfile + this
 #   entry.
