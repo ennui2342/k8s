@@ -301,7 +301,12 @@ version bumps.
 
 Weekly Trivy scan (`monitoring/cve-scanner` CronJob, Monday 07:00, `trivy/trivy.yaml`) files one
 `tm` task per vulnerable image (`+cli.claude-code.k8s <cli.cve-scanner`), deduping on creation and
-auto-closing tasks for images no longer flagged. A Mac-side aswarm pipeline
+auto-closing tasks for images no longer flagged. k3s-bundled `rancher/*` images (Traefik,
+local-path-provisioner, klipper-lb/helm) are the exception: no standalone bump exists, so instead
+of one task each they're folded into the single `#~k3s-upgrade` task (existing human one reused,
+§wait preserved; only its `CVE scan`/`BundledCVEHash` lines are rewritten, and only when that
+CVE set changes) — they used to be re-filed every Monday and closed as duplicates, burning
+nightly orchestrator slots (2026-09-21/28). A Mac-side aswarm pipeline
 (`/Volumes/SSD/pipelines/agent-orchestrator.yaml`, renamed 2026-08-19 from `nightly-agents`, then
 `k8s-orchestrator` — general-purpose task routing, not k8s-specific, though its only live wiring
 today is this repo — runs every 30min, though CVE/health work still only dispatches during the

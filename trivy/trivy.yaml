@@ -165,6 +165,7 @@ metadata:
 data:
   notify.py: |
     import json, subprocess, os, sys, re, hashlib, glob
+    from datetime import date
     import yaml
 
     TM_API = 'http://api.taskmgt.svc.cluster.local:8081'
@@ -227,6 +228,11 @@ data:
 
     def cve_hash(cve_ids):
         return hashlib.md5(','.join(sorted(cve_ids)).encode()).hexdigest()[:12]
+
+    K3S_TASK_TAG = '#~k3s-upgrade'
+
+    def is_k3s_bundled(image):
+        return image.startswith('rancher/')
 
     # --- Load main cluster scan ---
     try:
@@ -300,10 +306,20 @@ data:
     seen_images = set()
     new_findings = []
     updated_findings = []
+    bundled = {}  # k3s-bundled images, folded into one k3s-upgrade task below
     for image, info in images.items():
         # Already-tracked fork: suppress per-CVE nagging, reconciliation handles it.
         if any(image.startswith(p) for p in patched_by_image):
             print(f'Suppressing {image}: tracked fork in patched-images.yaml')
+            continue
+
+        # k3s-bundled Addon (rancher/*): no standalone bump exists, only a k3s
+        # upgrade fixes it. A per-image task here just got closed as a duplicate
+        # of the k3s task every week and re-filed the next Monday (only non-closed
+        # tasks dedupe), burning a nightly orchestrator slot each time — seen
+        # 2026-09-21 and again 2026-09-28. Fold them into that one task instead.
+        if is_k3s_bundled(image):
+            bundled[image] = info
             continue
 
         seen_images.add(image)
@@ -363,10 +379,54 @@ data:
         image = m.group(1)
         if image in seen_images or any(image.startswith(p) for p in patched_by_image):
             continue
+        if is_k3s_bundled(image):
+            # Pre-fold per-image task: the k3s task below now tracks it.
+            print(f'Auto-closing {t["id"]}: {image} is k3s-bundled, folded into {K3S_TASK_TAG} task')
+            note = f"\n* Closed: k3s-bundled image, tracked in the {K3S_TASK_TAG} task"
+            update_task(t['id'], set_status(t['text'] + note, 'closed'))
+            continue
         print(f'Auto-closing {t["id"]}: {image} no longer flagged')
         note = f"\n* Resolved: no longer flagged as of this scan"
         if update_task(t['id'], set_status(t['text'] + note, 'closed')):
             closed_findings.append(image)
+
+    # --- k3s-bundled images: one consolidated task, rewritten only on change ---
+    # Reuses the existing #~k3s-upgrade task (usually human-made and §wait) if
+    # there is one, replacing just its two scanner-owned lines so the human's
+    # own notes and §status survive. Untagged for routing (#~k3s-upgrade is not
+    # an orchestrator lane): a k3s upgrade is human-scheduled work.
+    k3s_task = next((t for t in existing_tasks if K3S_TASK_TAG in t.get('text', '').split('\n', 1)[0]), None)
+    if bundled:
+        all_ids = sorted({c for i in bundled.values() for c in i['cves']})
+        fingerprint = cve_hash(all_ids)
+        notes_by_id = {c: n for i in bundled.values() for c, n in i['cves'].items()}
+        crit = sum('(CRITICAL)' in n for n in notes_by_id.values())
+        high = sum('(HIGH)' in n for n in notes_by_id.values())
+        names = ', '.join(sorted(bundled))
+        scan_line = (f'* CVE scan (auto-updated by cve-scanner, {date.today().isoformat()}): '
+                     f'{crit} CRITICAL + {high} HIGH unique fixable CVEs across k3s-bundled images: {names}')
+        hash_line = f'* BundledCVEHash: {fingerprint}'
+        if k3s_task is None:
+            text = (f'Upgrade k3s to resolve bundled-component CVEs !2 {K3S_TASK_TAG} '
+                    f'+cli.claude-code.k8s <cli.cve-scanner ++ennui2342\n'
+                    f'* rancher/* images ship with k3s itself; no standalone image bump exists.\n'
+                    f'{scan_line}\n{hash_line}')
+            if create_task(text):
+                new_findings.append(f'k3s-bundled ({len(bundled)} images): {crit} CRITICAL + {high} HIGH -> new k3s upgrade task')
+        else:
+            old = re.search(r'BundledCVEHash:\s*(\S+)', k3s_task['text'])
+            if old and old.group(1) == fingerprint:
+                print(f'Skipping k3s-bundled images: unchanged since {k3s_task["id"]}')
+            else:
+                kept = [l for l in k3s_task['text'].split('\n')
+                        if not l.startswith(('* CVE scan (auto-updated by cve-scanner', '* BundledCVEHash:'))]
+                if update_task(k3s_task['id'], '\n'.join(kept + [scan_line, hash_line])):
+                    updated_findings.append(f'k3s-bundled ({len(bundled)} images): {crit} CRITICAL + {high} HIGH -> k3s task {k3s_task["id"][:8]}')
+    elif k3s_task and '<cli.cve-scanner' in k3s_task['text'].split('\n', 1)[0] and k3s_task.get('status') == 'open':
+        # Only auto-close a k3s task this scanner created; a human-made one
+        # tracks the upgrade itself, not just this CVE round.
+        if update_task(k3s_task['id'], set_status(k3s_task['text'] + '\n* Resolved: no k3s-bundled CVEs flagged as of this scan', 'closed')):
+            closed_findings.append('k3s-bundled images')
 
     # --- Discord summary: what changed this run, not everything outstanding ---
     # Confirmed live 2026-08-03: the old version listed every currently-vulnerable
