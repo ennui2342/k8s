@@ -645,7 +645,7 @@ To update a custom dashboard: edit in the UI, export the JSON, update the Config
 `registry/deployment.yaml` deploys `registry:2` (NFS-backed PVC, NodePort 30500) as the
 target for locally-built custom/CVE-patched images going forward, replacing the `docker
 save` / `scp` / `k3s ctr images import` workflow used throughout this repo's history (see
-`### Librarium local fork images` and `### ISFDB mirror` below, and every entry in
+`### ISFDB mirror` below, and every entry in
 `trivy/patched-images.yaml` — all still on the old workflow as of 2026-07-27, migrating
 opportunistically on each one's next rebuild rather than all at once).
 
@@ -779,80 +779,11 @@ curl -s -X PATCH -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
 # the curl exit code.
 ```
 
-### Librarium
-
-Postgres data, covers, and media all live on NFS-backed PVCs (`librarium/postgres.yaml`,
-`librarium/api-pvc.yaml`), so the book catalog survives a cluster rebuild without any
-extra steps — just verify `kubectl get pods -n librarium` comes up healthy and
-`librarium.k8s.ecafe.org` (or the Tailscale hostname on `librarium-ts`) loads.
-
-On a genuinely fresh instance (empty database), `REGISTRATION_ENABLED` starts `"true"` in
-`librarium/configmap.yaml` so you can create the first admin account through the web UI.
-Once that account exists, set `REGISTRATION_ENABLED: "false"`, commit, and:
-
-```sh
-kubectl rollout restart deploy/librarium-api -n librarium
-```
-
-### Librarium local fork images
-
-`librarium/api-deployment.yaml` and `librarium/web-deployment.yaml` reference **locally built
-images pushed to the local registry** (`127.0.0.1:30500/librarium-{api,web}:<version>`,
-`imagePullPolicy: IfNotPresent`) instead of the upstream `ghcr.io/fireball1725/*` tags. This is
-temporary: it carries the ISFDB metadata provider and its generic provider-config-fields UI,
-which are out as PRs against upstream but not yet merged —
-
-- `github.com/ennui2342/librarium-api` branch `feat/isfdb-provider` — upstream PRs #45 and #46
-- `github.com/ennui2342/librarium-web` branch `feat/refresh-metadata-by-title` — upstream PR #44
-  (carries a cherry-pick of PR #44's work; check `~/projects/librarium/CLAUDE.md` for the current
-  deployed branch before rebuilding, it drifts as PRs get rebased/superseded)
-
-**Versioned tags, not a floating one**: earlier this used a single reused tag
-(`local-isfdb`) that was never actually pushed anywhere (only `ctr images import`ed per node) —
-unparseable by `trivy`'s reconcile-scanner and impossible to tell which build was actually
-running. Every rebuild now stamps a fresh `1.YYYYMMDD.HHMM` tag (see global `~/.claude/CLAUDE.md`
-for the convention) and pushes it to the registry; the manifest is updated to point at that exact
-tag. Rebuild whenever source changes, on a cluster rebuild, or if a worker's local registry-pull
-cache is somehow lost (rare — registry storage is the source of truth now, not per-node
-containerd cache):
-
-```sh
-cd ~/projects/librarium/librarium-api
-git checkout feat/isfdb-provider  # confirm this matches CLAUDE.md's "currently deployed" branch
-go build ./... && go test ./...   # don't skip — see this repo's own CLAUDE.md
-
-TAG="1.$(date +%Y%m%d).$(date +%H%M)"
-docker build --build-arg VERSION=26.4.4-isfdb -t 192.168.0.8:30500/librarium-api:$TAG .
-docker push 192.168.0.8:30500/librarium-api:$TAG
-cd ..
-
-cd ~/projects/librarium/librarium-web
-git checkout feat/refresh-metadata-by-title
-npm run build && npx vitest run
-
-docker build --build-arg LIBRARIUM_VERSION=26.4.3-isfdb -t 192.168.0.8:30500/librarium-web:$TAG .
-docker push 192.168.0.8:30500/librarium-web:$TAG
-cd ..
-```
-
-Then update `librarium/api-deployment.yaml` and `librarium/web-deployment.yaml`'s `image:` to
-`127.0.0.1:30500/librarium-{api,web}:$TAG`, commit, push, let Flux reconcile.
-
-**Once PRs #44/#45/#46 merge upstream and ship in a tagged `fireball1725` release**, revert
-`librarium/api-deployment.yaml` and `librarium/web-deployment.yaml` back to
-`ghcr.io/fireball1725/librarium-{api,web}:<new-version>` with `imagePullPolicy: IfNotPresent`,
-commit. No node-side cleanup needed — old registry tags just sit unused in
-`registry-data` (see "Local container registry" above re: manual `registry garbage-collect`).
-
-The ISFDB provider itself is configured, not auto-enabled: in Librarium's admin settings
-(Metadata Providers), set ISFDB's **Mirror base URL** to
-`http://isfdb-adapter.isfdb.svc.cluster.local:8080` and enable it.
-
 ### ISFDB mirror
 
 `isfdb/adapter-deployment.yaml` and `isfdb/refresh-cronjob.yaml` reference a **locally built
 image pushed to the local registry** (`127.0.0.1:30500/isfdb-mirror:<version>`,
-`imagePullPolicy: IfNotPresent`) — same pattern as the Librarium local fork images above. Source
+`imagePullPolicy: IfNotPresent`) — see "Local container registry" above. Source
 is the standalone public repo `github.com/ennui2342/isfdb-adapter` (a clean reference
 implementation anyone can self-host — see its own `CLAUDE.md`/`README.md`), not anything embedded
 in this repo. On a cluster rebuild, before the adapter/CronJob pods can schedule, clone (or reuse
@@ -901,7 +832,7 @@ this automatically, no action needed unless it fails 3 times in a row.
 ### opsimath
 
 Fully automated as of 2026-08-06, same pattern as `taskmgt/` — **not** the manually-built
-local-registry pattern used by Librarium/ISFDB. Source is the standalone public repo
+local-registry pattern used by ISFDB. Source is the standalone public repo
 `github.com/ennui2342/opsimath` (Rails 8.1 / Ruby 4.0 / Postgres 18); its own
 `.github/workflows/build.yml` builds and pushes a real monotonic version tag
 (`1.YYYYMMDD.RUNNUMBER`) to `ghcr.io/ennui2342/opsimath` on every push to `master`. Flux's own
