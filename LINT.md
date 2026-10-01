@@ -78,7 +78,13 @@ in isolation. Re-checked 2026-09-15 (restricted to `git ls-files` — i.e. track
 only, excluding the `.gitignore`d inactive experiments under `nfs/old/`, `resilosync/`,
 `magic-mirror/`, `home-assistant/src/templates/`, `indi-allsky/`): still exactly the same 21
 containers across the same 19 manifests as 2026-08-15 — no drift, `tm` task `c6e594d0` still
-accurate as filed.
+accurate as filed. Re-checked 2026-10-01: still 21 containers / 19 manifests (19 regular + the
+`mdns` `setup` and opsimath `wait-for-schema` initContainers) — but note the *composition* has
+shifted from the original list: `librarium-db/postgres` and the master `mdns-repeater` are gone
+(both removed 2026-08-22), so the `librarium/*` files cited above as the "established pattern"
+no longer exist — use `isfdb/adapter-deployment.yaml`/`isfdb/mariadb-statefulset.yaml` or
+`opsimath/` as the reference instead. Task `c6e594d0` (`§wait`, now correctly untagged) still
+covers the gap.
 
 **No orphaned PVCs** (Bound, but no owning workload *and* no manifest reference anywhere in this
 repo). Audited repo-wide 2026-07-29: every Bound PVC was cross-checked against every manifest in
@@ -106,7 +112,7 @@ grep finds.
 **Every `imagePullPolicy: Never` entry should have an explicit comment explaining why** it's on
 that pattern instead of the local registry (`registry/`, `127.0.0.1:30500`). Audited repo-wide
 2026-07-29: **zero** manifests in the repo use `imagePullPolicy: Never` — every custom/forked
-image (`mdns-repeater`, `isfdb-mirror`, `librarium-api`/`librarium-web`, `mosquitto`, `modpoll`,
+image (`mdns-repeater`, `isfdb-mirror`, `librarium-api`/`librarium-web` (since removed), `mosquitto`, `modpoll`,
 `home-assistant`, `telegraf`, `ring-mqtt`, `trivy`, `botkube`, the Flux controllers,
 `k8s-toolbox`) has fully migrated to the local registry with `imagePullPolicy: IfNotPresent`.
 CLAUDE.md's per-service notes and the `registry/` row were stale (still described several of
@@ -134,6 +140,30 @@ same class as the freshrss/linkding/wallabag gap. Fixed directly (commit `d32243
 the same run: the Directory Structure Notes line for `home-assistant/` still listed a "cleanup
 CronJob" that no longer exists in the manifests — corrected in the same commit.
 
+**Check method changed 2026-10-01:** the root `kustomization.yaml` no longer lists app directories
+at all — since the per-app Flux Kustomization cutover (tm `9db56d2e`) it holds only
+`flux-system/` + `kustomizations/`. The authoritative app list is now
+`kustomizations/kustomization.yaml`'s `resources:` (one `kustomizations/<app>.yaml` per app, each
+with `path: ./<app>`) — diff *that* against CLAUDE.md. Re-checked 2026-10-01 against all 31
+per-app Kustomizations: every one appears in Directory Structure Notes, and every tracked
+`*-secret.yaml` (15) is in Secrets Management. `coredns/`, `dashboards/`, and `traefik/` have no
+Actively Deployed Services row, which is **not** a violation: they're config-only directories (a
+CoreDNS override ConfigMap, Grafana dashboard ConfigMaps, a k3s `HelmChartConfig`) with no
+workload of their own, and are documented in Directory Structure Notes (and Traefik
+Customization) instead.
+
+**The reverse direction is checked too: `CLAUDE.md` and `RUNBOOK.md` must not carry live
+instructions for app directories that no longer exist.** Found 2026-10-01: `librarium/` was
+removed from the repo and cluster 2026-08-22 (deleted inside the unrelated commit `852a6fe`),
+but `RUNBOOK.md` still had two full sections ("Librarium" and "Librarium local fork images")
+walking a from-scratch rebuild through five manifests that no longer existed. CLAUDE.md's own
+mentions were already phrased as history ("permanently removed … see git history") and are fine.
+Fixed directly (commit `3245c82`). Check method: extract every backticked `<dir>/…` path from
+both files (regex `[a-z0-9-]+/[A-Za-z0-9._/-]*` between backticks) and flag any whose top-level directory
+doesn't exist in `git ls-files`. Most hits are false positives: in-cluster `namespace/name`
+references, GitHub `owner/repo` slugs, and non-repo paths like `config/master.key`. Only a
+missing *app directory* that's described as current state is a violation.
+
 **The cluster's k3s / Kubernetes control-plane version must not be past upstream End of Life.**
 New rule 2026-09-01 (Phase 2 research pass). Check method: `kubectl get nodes -o
 jsonpath='{.items[0].status.nodeInfo.kubeletVersion}'` gives the k3s/k8s version (e.g.
@@ -151,7 +181,11 @@ needs a human-scheduled window. Already tracked as `tm` task `24344397` (`§wait
 (it was ownerless/orchestrator-invisible). Future audits: if this task is still open/wait and
 the running version is still EOL, note it in the report; if it's been closed but the version is
 still EOL, that's a new finding. Re-checked 2026-09-15: still `v1.32.13+k3s1`, still EOL, task
-`24344397` still `§wait` — no change, noted in report only.
+`24344397` still `§wait` — no change, noted in report only. Re-checked 2026-10-01: same — all
+four nodes `v1.32.13+k3s1`, `24344397` still `§wait`. Nodes now run Ubuntu 26.04 / kernel 7.0
+(cgroup v2 by default) with containerd 2.1.5, so the cgroup-v1/containerd-1.x removals in recent
+k8s minors shouldn't block the jump. See the deprecated-API rule below for the other pre-upgrade
+check.
 
 **Every app namespace should have an explicit answer on network segmentation, even if the answer
 is "not yet."** New rule 2026-09-15 (Phase 2 research pass). Check method: `git grep -l "kind:
@@ -166,7 +200,8 @@ single-tenant homelab, not the multi-tenant environment NetworkPolicy mainly pro
 of security-posture judgement call as Pod Security Admission above. Ticketed as `tm` task
 `eba39725` (untagged, human-review-only, `+cli.claude-code.k8s`) rather than adopted directly.
 Future audits: if this task is still open and still zero NetworkPolicies exist, note it in the
-report; if it's been closed but the gap is unaddressed, that's worth a fresh look.
+report; if it's been closed but the gap is unaddressed, that's worth a fresh look. Re-checked
+2026-10-01: still only Flux's three bootstrap policies, `eba39725` still open. No change.
 
 **Every Deployment/StatefulSet/DaemonSet must include the soft worker-preference node affinity**
 from CLAUDE.md's Scheduling Constraints section (or, for a DaemonSet that must run on every node
@@ -240,10 +275,39 @@ caveat found 2026-09-15:** init containers (e.g. `opsimath/worker-deployment.yam
 neither `readinessProbe` nor `livenessProbe` is meaningful for them; only the resources rule above
 applies to init containers, not this one. Re-checked 2026-09-15 (tracked files only, init
 containers excluded): still exactly the same 17 containers across 16 manifests as 2026-08-15 — no
-drift, `tm` task `cb71bb32` still accurate as filed.
+drift, `tm` task `cb71bb32` still accurate as filed. **Corrected 2026-10-01:** the real count is
+**16 containers across 15 manifests** — the 2026-09-15 re-check miscounted, since the master
+`mdns-repeater` (one of the original 17) was removed 2026-08-22 with `mdns/master-daemonset.yaml`.
+No new violations; `cb71bb32` covers the remaining 16 (its "17/16" title is one stale). Same
+`librarium-*` caveat as the resources rule: those reference manifests no longer exist.
+
+**No manifest may use a deprecated API version, and the live apiserver must report no
+deprecated-API traffic.** New rule 2026-10-01 (Phase 2 pass). Currently fully compliant, so it's
+kept as a regression guard. It matters most right before the pending k3s
+1.32 → 1.36 jump (`tm` `24344397`), since anything still on a deprecated version at that point
+risks becoming a removed one. Two halves, both mechanical:
+
+1. **Live traffic:** `kubectl get --raw /metrics | grep '^apiserver_requested_deprecated_apis'`
+   must print nothing. Each series names the group/version/resource some client (a controller, a
+   Helm chart, or a manifest Flux applies) is still calling. Checked 2026-10-01: zero series.
+2. **CRD versions in the repo:** list deprecated served versions with
+   `kubectl get crd -o json | jq -r '.items[] | .metadata.name as $n | .spec.versions[] |
+   select(.deprecated==true) | "\($n) \(.name)"'`, then confirm no tracked manifest uses any of
+   them (`git ls-files '*.yaml' | xargs grep -h '^apiVersion:' | sort | uniq -c`). Checked
+   2026-10-01: deprecated versions exist for the Flux `image.toolkit.fluxcd.io/v1beta2` and
+   `notification.toolkit.fluxcd.io/v1beta2` kinds and the Gateway API `BackendTLSPolicy`
+   `v1alpha3`. The repo uses only `image.toolkit.fluxcd.io/v1` and
+   `notification.toolkit.fluxcd.io/v1beta3` (the current storage version for `Alert`/`Provider`),
+   and no Gateway API objects. Compliant.
+
+Fix for any future violation: bump the manifest's `apiVersion` to the CRD's current
+`storage: true` version, checking the upstream migration notes for field renames first. This is
+a single-manifest fix when the schema is unchanged; ticket it if fields moved. A hit in
+half 1 that isn't explained by a repo manifest usually means a Helm chart or controller is too
+old, which is upgrade-shaped work (`#~upgrade`).
 
 ## Starter items — not yet verified repo-wide
 
-Empty as of 2026-09-01. The next durable finding (from a future audit's research pass, or from
+Empty as of 2026-10-01 (unchanged since 2026-09-01). The next durable finding (from a future audit's research pass, or from
 any session) seeds this list again. (2026-09-01 audit: the one Phase 2 finding — control-plane
 EOL — was concrete enough to go straight into "Confirmed rules" rather than land here first.)
