@@ -250,3 +250,13 @@
   patched_date: "2026-09-18"
   critical: 0
   high: 6
+
+- workload: monitoring/Deployment/telegraf
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/telegraf:1.40.1-patched
+  upstream_image: telegraf:1.40.1
+  build_recipe: trivy/patched-images/telegraf/Dockerfile
+  reason: "1 HIGH fixable CVE-2026-103111 (pcre2 out-of-bounds write via crafted regular expression) in the Debian 12.15 (bookworm) base of telegraf:1.40.1. telegraf:1.40.1 is still the newest upstream tag (Docker Hub last rebuilt 2026-09-21, digest sha256:90da3a5b identical to what was running), but its layer predates the bookworm-security pcre2 update — confirmed via `apt-cache policy libpcre2-8-0` inside the image (Installed 10.42-1+deb12u1, Candidate 10.42-1+deb12u2). Same-base apt upgrade; telegraf binary unchanged (still 1.40.1, git 26b8f447), pure OS-package patch-level bump, no config or behaviour change. Verified via trivy 0.75.0 (--ignore-unfixed): patched image 0 CRITICAL + 0 HIGH across both debian and gobinary targets. Revert once upstream rebuilds 1.40.x with libpcre2-8-0 >= 10.42-1+deb12u2."
+  patched_date: "2026-10-06"
+  critical: 0
+  high: 1
