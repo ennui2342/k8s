@@ -633,11 +633,7 @@ spec:
           restartPolicy: OnFailure
           initContainers:
           - name: scan
-            # Locally-patched fork of aquasec/trivy:0.74.0 — same-tag apk
-            # upgrade on the Alpine 3.24.1 base for CVE-2026-14456 (openssl
-            # QUIC DoS); 0.74.0 is the newest upstream release so no version
-            # bump is possible. See trivy/patched-images.yaml + .../trivy/Dockerfile.
-            image: 127.0.0.1:30500/trivy:0.74.0-patched
+            image: aquasec/trivy:0.75.0
             imagePullPolicy: IfNotPresent
             command:
             - /bin/sh
@@ -672,8 +668,7 @@ spec:
             - name: reconcile-scripts
               mountPath: /scripts
           - name: reconcile
-            # Locally-patched fork — see the `scan` initContainer above.
-            image: 127.0.0.1:30500/trivy:0.74.0-patched
+            image: aquasec/trivy:0.75.0
             imagePullPolicy: IfNotPresent
             command:
             - /bin/sh
