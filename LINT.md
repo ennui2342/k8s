@@ -298,7 +298,9 @@ risks becoming a removed one. Two halves, both mechanical:
    `notification.toolkit.fluxcd.io/v1beta2` kinds and the Gateway API `BackendTLSPolicy`
    `v1alpha3`. The repo uses only `image.toolkit.fluxcd.io/v1` and
    `notification.toolkit.fluxcd.io/v1beta3` (the current storage version for `Alert`/`Provider`),
-   and no Gateway API objects. Compliant.
+   and no Gateway API objects. Compliant. Rechecked 2026-10-07, after the Flux v2.9.6 upgrade
+   (`9f8a502`): the Flux `v1beta2` versions are gone from the CRDs entirely, and the only
+   deprecated version left is `BackendTLSPolicy` `v1alpha3` (`served: false`).
 
 Fix for any future violation: bump the manifest's `apiVersion` to the CRD's current
 `storage: true` version, checking the upstream migration notes for field renames first. This is
