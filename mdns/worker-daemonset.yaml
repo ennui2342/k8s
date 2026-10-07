@@ -22,7 +22,7 @@ spec:
                     operator: DoesNotExist
       initContainers:
         - name: setup
-          image: alpine:3.21
+          image: alpine:3.24.2
           command:
             - sh
             - -c

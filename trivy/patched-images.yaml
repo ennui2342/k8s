@@ -33,7 +33,7 @@
 
 - workload: default/Deployment/modpoll
   strategy: frozen-rebuild
-  patched_image: ghcr.io/ennui2342/modpoll:1.6.0-patched
+  patched_image: 127.0.0.1:30500/modpoll:1.6.0-patched
   upstream_image: topmaker/modpoll:1.6.0
   build_recipe: trivy/patched-images/modpoll/Dockerfile
   reason: "openssl/libpam CVEs in Debian 12 base; no newer modpoll upstream tag"
@@ -51,9 +51,9 @@
   critical: 0
   high: 4
 
-- workload: default/DaemonSet/mdns-repeater
+- workload: default/DaemonSet/mdns-repeater-worker
   strategy: frozen-rebuild
-  patched_image: ghcr.io/ennui2342/mdns-repeater:latest-patched
+  patched_image: 127.0.0.1:30500/mdns-repeater:latest-patched
   upstream_image: monstrenyatko/mdns-repeater:latest
   build_recipe: trivy/patched-images/mdns-repeater/Dockerfile
   reason: "upstream Docker Hub inactive since 2023; Alpine 3.15 base badly outdated, patched from the still-maintained v3.15 backport branch"
