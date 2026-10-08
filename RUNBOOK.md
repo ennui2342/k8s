@@ -725,9 +725,9 @@ Desktop just to push one image, push via a disposable `crane` container instead 
 an explicit `--insecure` flag per-invocation, no daemon config needed:
 ```sh
 docker save 192.168.0.8:30500/<name>:<tag> -o /tmp/image.tar
-docker run --rm -v /tmp/image.tar:/image.tar --entrypoint sh \
-  gcr.io/go-containerregistry/crane:debug \
-  -c "crane push /image.tar 192.168.0.8:30500/<name>:<tag> --insecure"
+docker run --rm -v /tmp/image.tar:/image.tar \
+  gcr.io/go-containerregistry/crane:v0.22.1 \
+  push /image.tar 192.168.0.8:30500/<name>:<tag> --insecure
 ```
 Check `docker ps` for anything without a restart policy before ever restarting Docker
 Desktop for an unrelated reason, same caution as the containerd-trust step above.
