@@ -656,9 +656,12 @@ spec:
             - name: cache
               mountPath: /root/.cache/trivy
           - name: discover-newer-tags
-            image: gcr.io/go-containerregistry/crane:debug
+            # Locally built (trivy/crane/Dockerfile): crane binary + busybox shell.
+            # Replaces the floating, CVE-laden crane:debug tag.
+            image: 127.0.0.1:30500/crane:0.22.1-20261007
+            imagePullPolicy: IfNotPresent
             command:
-            - /busybox/sh
+            - /bin/sh
             - /scripts/discover.sh
             volumeMounts:
             - name: report
