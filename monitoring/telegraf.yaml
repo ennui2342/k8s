@@ -192,7 +192,10 @@ spec:
                     operator: DoesNotExist
       containers:
       - name: telegraf
-        image: 127.0.0.1:30500/telegraf:1.40.1-patched
+        # Digest-pinned: Docker Hub rebuilt the 1.40.1 tag in place on 2026-10-06
+        # (pcre2 CVE-2026-103111 fix); k8s-1 still caches the pre-rebuild 1.40.1
+        # layer, which IfNotPresent would silently reuse without the digest.
+        image: telegraf:1.40.1@sha256:e91237482edcb054c81571923c6b7cf64f06ed6087a2f9cf0bd3bc2cd8c0ed61
         imagePullPolicy: IfNotPresent
         env:
         - name: HOSTNAME
