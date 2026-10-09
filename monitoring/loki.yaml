@@ -99,11 +99,14 @@ spec:
     # six advisories. Now a local frozen-rebuild fork — see trivy/patched-images.yaml and
     # trivy/patched-images/k8s-sidecar/Dockerfile (plain `apk upgrade` on the same 2.11.2 /
     # Alpine 3.22.4 base, sidecar app/entrypoint untouched, no config or behaviour change).
+    # 2026-10-09: fork rebased onto upstream 2.13.3 (same recipe) — 2.13.3 also clears
+    # the urllib3 HIGHs (CVE-2026-97687/97689) the 2.11.2 fork had picked up, but still
+    # ships libuuid 2.41-r9, so the apk-upgrade fork continues (0 CRITICAL / 0 HIGH).
     sidecar:
       image:
         registry: "127.0.0.1:30500"
         repository: "k8s-sidecar"
-        tag: "2.11.2-patched"
+        tag: "2.13.3-patched"
         pullPolicy: IfNotPresent
 
     # Disable extras not needed for single-binary homelab
