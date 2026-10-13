@@ -102,11 +102,15 @@ spec:
     # 2026-10-09: fork rebased onto upstream 2.13.3 (same recipe) — 2.13.3 also clears
     # the urllib3 HIGHs (CVE-2026-97687/97689) the 2.11.2 fork had picked up, but still
     # ships libuuid 2.41-r9, so the apk-upgrade fork continues (0 CRITICAL / 0 HIGH).
+    # 2026-10-13: rebased onto upstream 2.14.1 (Alpine 3.24 / Python 3.14, clears libuuid;
+    # kubernetes client 36). Upstream's residual 4 HIGH are all inside pip's vendored libs
+    # (msgpack/urllib3/setuptools), so the fork now also strips pip, which the sidecar never
+    # uses at runtime (0 CRITICAL / 0 HIGH).
     sidecar:
       image:
         registry: "127.0.0.1:30500"
         repository: "k8s-sidecar"
-        tag: "2.13.3-patched"
+        tag: "2.14.1-patched"
         pullPolicy: IfNotPresent
 
     # Disable extras not needed for single-binary homelab

@@ -1,44 +1,42 @@
 # Frozen-rebuild patch of docker.io/kiwigrid/k8s-sidecar.
 #
-# Base: 2.13.3 (rebased 2026-10-09 from 2.11.2, per reconcile-scanner task
-# e92b4840). 2.13.3 itself fixes the two urllib3 HIGHs (CVE-2026-97687/97689)
-# that had accumulated on the 2.11.2 fork, via upstream's requests/kubernetes
-# client bumps, but still ships the same Alpine 3.22.4 base with libuuid
-# 2.41-r9 — so the same `apk upgrade` recipe below is still needed. Changelog
-# 2.11.2 -> 2.13.3 is dependency/CI-only (kubernetes client 32 -> 35, requests
-# 2.34.2, python-json-logger 4.2.0); runtime config is identical (User
-# 65534:65534, WORKDIR /app, ENTRYPOINT `python -u -m sidecar`, Python
-# 3.15.0b2). Not jumping to 2.14.x yet: that line moves to Alpine 3.24 /
-# Python 3.14 and still scans 4 HIGH in Python packages (msgpack, setuptools,
-# urllib3) that a plain apk upgrade can't fix.
+# Base: 2.14.1 (rebased 2026-10-13 from 2.13.3, per reconcile-scanner task
+# baafbf9e). 2.14.x moves to Alpine 3.24.2 / stable Python 3.14.8 (from
+# Alpine 3.22.4 / Python 3.15.0b2), which clears the libuuid HIGHs the
+# earlier forks existed for. Changelog 2.13.3 -> 2.14.1: 2.14.0 = stable
+# Python 3.14 base + charset segfault fix + s390x re-added; 2.14.1 =
+# kubernetes client 35 -> 36.0.3 (pulls aiohttp & friends in as required
+# deps, but the sidecar still uses only the sync client). Runtime config
+# identical: User 65534:65534, WORKDIR /app, ENTRYPOINT `python -u -m
+# sidecar`, no env-var/CLI changes.
 #
-# Original 2.11.2 fork rationale follows.
+# Upstream 2.14.1 still scans 4 HIGH (trivy 0.75.0, --ignore-unfixed,
+# arm64), ALL inside pip's own vendored libraries — msgpack 1.1.2
+# (GHSA-6v7p-g79w-8964), urllib3 2.7.0 (CVE-2026-97687/97689) and
+# setuptools 70.3.0 (CVE-2025-47273), per pip/_vendor/vendor.txt — in both
+# the system pip (/usr/local, pip 26.2.1) and the venv pip (/app/.venv, pip
+# 26.1.2). pip 26.2.1 is already the newest release, so an upgrade can't fix
+# it. The sidecar never imports or shells out to pip (verified: no
+# pip/setuptools/pkg_resources/msgpack references in its modules), so pip is
+# simply removed from the runtime image. The app's own urllib3 (2.8.0, in
+# the venv's site-packages) is already the fixed version and is untouched.
+# `apk upgrade` is kept for any Alpine 3.24 OS-package fixes newer than the
+# upstream build.
 #
-# Base: 2.11.2 (built 2026-09-04) — the newest upstream tag (confirmed via
-# Docker Hub tags API ordered by last_updated). The digest currently deployed
-# (sha256:2912be00...) matches the digest the registry serves for this tag
-# today, so kiwigrid hasn't rebuilt it either — a plain tag bump can't pick up
-# the fix.
+# History: forked 2026-09-18 on 2.11.2 for 6 HIGH util-linux (libuuid)
+# CVEs fixed at libuuid 2.41.6-r1 (CVE-2026-53612/53613/53614/76642/78408/
+# 78410); rebased 2026-10-09 onto 2.13.3 (still Alpine 3.22.4 / libuuid
+# 2.41-r9, same apk-upgrade recipe).
 #
-# Resolves 6 HIGH util-linux CVEs (CVE-2026-53612, CVE-2026-53613,
-# CVE-2026-53614, CVE-2026-76642, CVE-2026-78408, CVE-2026-78410). Note:
-# util-linux itself (mount/nsenter binaries) is NOT installed in this image —
-# verified via `apk info`/`/lib/apk/db/installed` in the base image, the only
-# installed package from util-linux's origin is the `libuuid` shared-library
-# subpackage (pulled in transitively, no mount/nsenter binaries present).
-# Alpine's whole util-linux source package (including the libuuid
-# subpackage) shares one version number, and the v3.22/main repo already
-# publishes libuuid 2.41.6-r1, which covers all six advisories (fixed at
-# 2.41.6-r0/-r1). Pure OS-package patch-level bump via `apk upgrade` on the
-# same Alpine 3.22.4 base — the k8s-sidecar Python app and entrypoint are
-# untouched, no config or behaviour change. Verified in the built image:
-# libuuid 2.41-r9 -> 2.41.6-r1, alpine-release still 3.22.x line, entrypoint
-# unchanged (`python -u -m sidecar`).
-#
-# Base image runs as uid 65534:65534 (nobody, non-root, per the upstream
-# Dockerfile's own MustRunAsNonRoot comment) — apk requires root, so switch
-# back afterward to preserve the original runtime UID.
-FROM docker.io/kiwigrid/k8s-sidecar:2.13.3
+# Base image runs as uid 65534:65534 (nobody, non-root) — apk/rm require
+# root, so switch back afterward to preserve the original runtime UID.
+FROM docker.io/kiwigrid/k8s-sidecar:2.14.1
 USER root
-RUN apk update && apk upgrade --no-cache
+RUN apk update && apk upgrade --no-cache \
+ && rm -rf /usr/local/lib/python3.14/site-packages/pip \
+           /usr/local/lib/python3.14/site-packages/pip-*.dist-info \
+           /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.* \
+           /app/.venv/lib/python3.14/site-packages/pip \
+           /app/.venv/lib/python3.14/site-packages/pip-*.dist-info \
+           /app/.venv/bin/pip /app/.venv/bin/pip3 /app/.venv/bin/pip3.*
 USER 65534:65534
