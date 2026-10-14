@@ -23,3 +23,17 @@ data:
       answer "{{ .Name }} 60 IN A 10.43.225.80"
       fallthrough
     }
+  epigone.override: |
+    # Pods resolve epigone.ecafe.org (the public Home Assistant hostname) to
+    # Traefik's ClusterIP rather than the home router's public IP. Needed by
+    # cert-manager's HTTP-01 self-check, which GETs the challenge URL from
+    # inside the cluster before asking Let's Encrypt to validate: through the
+    # public IP that request NAT-hairpins via the router and times out, so
+    # the 2026-09-13 renewal sat "pending" for 30 days and the cert expired
+    # 2026-10-13 (first renewal since the 2026-08-22 flat-network move).
+    # Let's Encrypt's own validation still arrives externally via the router.
+    template IN A epigone.ecafe.org {
+      match ^epigone\.ecafe\.org\.$
+      answer "{{ .Name }} 60 IN A 10.43.225.80"
+      fallthrough
+    }
