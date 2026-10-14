@@ -126,6 +126,38 @@ Node iowait 0–7%. The two Alertmanager silences on
 same day. No further latency-diagnosis tooling was needed — the move
 resolved it, as expected.
 
+### Router port forwards (inbound from the internet)
+
+Configured in the home router's admin UI (`192.168.0.1`, Technicolor), not
+in git. The router selects the destination **by MAC address**, so these
+target master's wired `eth0`:
+
+| Public port | → master (`88:a2:9e:bd:35:b5`, `192.168.0.8`) | Used for |
+|---|---|---|
+| TCP 80 | 80 (Traefik `web`) | cert-manager HTTP-01 challenges for `epigone.ecafe.org` |
+| TCP 8123 | 443 (Traefik `websecure`) | Home Assistant at `https://epigone.ecafe.org:8123` |
+
+Master is the entry point on purpose: the router can forward to only one
+host, and master is already the cluster's single, non-interchangeable node,
+so this adds no new point of failure while keeping the workers
+interchangeable. Traefik's klipper `svclb` listens on every node, master
+included, so the forwarded traffic reaches the Traefik pod wherever it
+runs. (If inbound traffic ever needs to survive a master outage, the
+upgrade is a floating LAN IP via MetalLB L2 on the workers, which needs
+`--disable servicelb` on master's k3s.) **Don't pick `…:35:b6`:** that's
+master's `wlan0`, which has been down since the flat-network move.
+
+**History, 2026-10-14:** after the 2026-08-22 move, port 80 still pointed at
+master's old Wi-Fi MAC (and 8123 needed re-pointing too), so nothing reached
+the cluster from outside. Unnoticed until the Let's Encrypt cert for
+`epigone.ecafe.org` expired on 2026-10-13: the renewal had been stuck since
+09-13, first on cert-manager's in-cluster self-check (NAT hairpin; fixed with
+the `epigone.override` in `coredns/coredns-custom.yaml`), then on Let's
+Encrypt being unable to reach port 80. **After any network or router change,
+recheck these forwards** (e.g. a TCP check from outside via check-host.net,
+or `cmctl renew -n epigone epigone.ecafe.org-production` and watch the
+challenge). Expiry alerting is tm `d3cc0940`.
+
 ---
 
 ## Phase 0 — Provisioning a New Node (OS + first boot)
