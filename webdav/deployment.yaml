@@ -27,7 +27,7 @@ spec:
                     operator: DoesNotExist
       containers:
       - name: webdav
-        image: ghcr.io/hacdias/webdav:latest
+        image: ghcr.io/hacdias/webdav:v5.16.0
         args: ["-c", "/config.yml"]
         ports:
         - name: webdav
