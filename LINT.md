@@ -84,7 +84,7 @@ shifted from the original list: `librarium-db/postgres` and the master `mdns-rep
 (both removed 2026-08-22), so the `librarium/*` files cited above as the "established pattern"
 no longer exist — use `isfdb/adapter-deployment.yaml`/`isfdb/mariadb-statefulset.yaml` or
 `opsimath/` as the reference instead. Task `c6e594d0` (`§wait`, now correctly untagged) still
-covers the gap.
+covers the gap. Re-checked 2026-10-15: same 21 containers / 19 manifests, no drift.
 
 **No orphaned PVCs** (Bound, but no owning workload *and* no manifest reference anywhere in this
 repo). Audited repo-wide 2026-07-29: every Bound PVC was cross-checked against every manifest in
@@ -107,7 +107,7 @@ CR's own `volumeClaimTemplate` (not a StatefulSet this repo authors directly), s
 actively Bound to a `Running` pod. Before treating a no-owner, no-name-match PVC as orphaned,
 confirm no `Running` pod currently has it mounted (`kubectl get pod -A -o json` cross-referenced
 by volume claim name) — a live mount means "operator-managed", not "orphaned", regardless of what
-grep finds.
+grep finds. Re-checked 2026-10-15: only the two `resiliosync-*` PVCs flagged, `776f5af9` still open.
 
 **Every `imagePullPolicy: Never` entry should have an explicit comment explaining why** it's on
 that pattern instead of the local registry (`registry/`, `127.0.0.1:30500`). Audited repo-wide
@@ -182,7 +182,10 @@ needs a human-scheduled window. Already tracked as `tm` task `24344397` (`§wait
 the running version is still EOL, note it in the report; if it's been closed but the version is
 still EOL, that's a new finding. Re-checked 2026-09-15: still `v1.32.13+k3s1`, still EOL, task
 `24344397` still `§wait` — no change, noted in report only. Re-checked 2026-10-01: same — all
-four nodes `v1.32.13+k3s1`, `24344397` still `§wait`. Nodes now run Ubuntu 26.04 / kernel 7.0
+four nodes `v1.32.13+k3s1`, `24344397` still `§wait`. Re-checked 2026-10-15: same. The v1.33–v1.36
+removals (gitRepo volumes, kube-proxy IPVS mode, Service `externalIPs`, v1 `Endpoints`, and k3s's
+Traefik chart v40 `kubernetesIngressNginx` provider rename) were checked against the repo, and none
+apply. Recorded as a note on `24344397`. Nodes now run Ubuntu 26.04 / kernel 7.0
 (cgroup v2 by default) with containerd 2.1.5, so the cgroup-v1/containerd-1.x removals in recent
 k8s minors shouldn't block the jump. See the deprecated-API rule below for the other pre-upgrade
 check. **Resolved 2026-10-24:** upgraded v1.32.13 → v1.33.13 → v1.34.12 → v1.35.9 → **v1.36.5+k3s1** via system-upgrade-controller (Kubernetes 1.36 EOL 2027-06-28), `24344397` closed. The declared version now lives in `k3s-upgrade/plans.yaml`; check that file *and* `kubectl get nodes` against endoflife.date.
@@ -201,7 +204,7 @@ of security-posture judgement call as Pod Security Admission above. Ticketed as 
 `eba39725` (untagged, human-review-only, `+cli.claude-code.k8s`) rather than adopted directly.
 Future audits: if this task is still open and still zero NetworkPolicies exist, note it in the
 report; if it's been closed but the gap is unaddressed, that's worth a fresh look. Re-checked
-2026-10-01: still only Flux's three bootstrap policies, `eba39725` still open. No change.
+2026-10-01 and 2026-10-15: still only Flux's three bootstrap policies, `eba39725` still open. No change.
 
 **Every Deployment/StatefulSet/DaemonSet must include the soft worker-preference node affinity**
 from CLAUDE.md's Scheduling Constraints section (or, for a DaemonSet that must run on every node
@@ -280,6 +283,7 @@ drift, `tm` task `cb71bb32` still accurate as filed. **Corrected 2026-10-01:** t
 `mdns-repeater` (one of the original 17) was removed 2026-08-22 with `mdns/master-daemonset.yaml`.
 No new violations; `cb71bb32` covers the remaining 16 (its "17/16" title is one stale). Same
 `librarium-*` caveat as the resources rule: those reference manifests no longer exist.
+Re-checked 2026-10-15: same 16 / 15, no drift.
 
 **No manifest may use a deprecated API version, and the live apiserver must report no
 deprecated-API traffic.** New rule 2026-10-01 (Phase 2 pass). Currently fully compliant, so it's
@@ -300,7 +304,8 @@ risks becoming a removed one. Two halves, both mechanical:
    `notification.toolkit.fluxcd.io/v1beta3` (the current storage version for `Alert`/`Provider`),
    and no Gateway API objects. Compliant. Rechecked 2026-10-07, after the Flux v2.9.6 upgrade
    (`9f8a502`): the Flux `v1beta2` versions are gone from the CRDs entirely, and the only
-   deprecated version left is `BackendTLSPolicy` `v1alpha3` (`served: false`).
+   deprecated version left is `BackendTLSPolicy` `v1alpha3` (`served: false`). Rechecked
+   2026-10-15: unchanged, and both halves are still clean.
 
 Fix for any future violation: bump the manifest's `apiVersion` to the CRD's current
 `storage: true` version, checking the upstream migration notes for field renames first. This is
@@ -308,8 +313,39 @@ a single-manifest fix when the schema is unchanged; ticket it if fields moved. A
 half 1 that isn't explained by a repo manifest usually means a Helm chart or controller is too
 old, which is upgrade-shaped work (`#~upgrade`).
 
+**No deployed image may use a floating/mutable tag.** New rule 2026-10-15 (closes `tm` task
+`c479debe`). Every `image:` in a tracked manifest, and every image tag set in HelmRelease
+values, must match `^v?[0-9]+(\.[0-9]+)*` (an optional `-patched`/`-lsNNN`-style suffix after the
+numeric version is fine). `latest`, `latest-patched`, `debug`, `dev`, `local`, or a bare
+image with no tag are all violations. This is the global versioned-tag rule from the user's
+`CLAUDE.md`, checked mechanically here. A floating tag defeats the reconcile-scanner's
+version comparison (`trivy/patched-images.yaml` `upstream_image`; `discover.sh` skips unparseable
+tags) and hides what's actually deployed. It also lets an `IfNotPresent` node cache silently
+serve a stale image (see `f38e4a07`). How `crane:debug` went unnoticed in `trivy/trivy.yaml`
+until a CVE flagged it (fixed `cebac68`) is why this rule exists. Check method:
+`git grep -n -E 'image: ' -- '*.yaml' ':!flux-system/gotk-components.yaml'` and flag any tag that
+isn't numeric. Strip the registry host's `:30500` port before matching, since a naive
+`:[0-9]+` regex wrongly passes `127.0.0.1:30500/foo:latest-patched`. Also cross-check live with
+`kubectl get pods -A -o jsonpath='{range .items[*]}{range .spec.containers[*]}{.image}{"\n"}{end}{end}' | sort -u`.
+Exempt: `ImageRepository.spec.image` in `flux-system/*-image-automation.yaml` (a repo to watch,
+not a deployed tag), and `upstream_image` entries in `trivy/patched-images.yaml` (tracked per-fork
+under the tasks below). Found live 2026-10-15:
+- `webdav/deployment.yaml`: `ghcr.io/hacdias/webdav:latest`. Fixed directly by pinning to
+  `v5.16.0`, the tag whose digest (`sha256:fcde257b…`) matched the running pod exactly, so
+  there's no behaviour change. Note that `:latest` had already moved on to v5.17.1 upstream. Any
+  bump past v5.16.0 is a separate, deliberate upgrade.
+- `mdns/worker-daemonset.yaml`: `127.0.0.1:30500/mdns-repeater:latest-patched`. Already
+  ticketed as `f9bd4e02`.
+- `ring-mqtt/ring-mqtt.yaml`: `127.0.0.1:30500/ring-mqtt:latest-patched`. Already ticketed as
+  `6892ffca`.
+
+The fix for a third-party image is to pin to the version tag whose digest matches what's
+currently running (compare `kubectl get pod … -o jsonpath='{..imageID}'` against the registry's
+`Docker-Content-Digest` per tag). For a locally built fork, rebuild and push under a versioned tag
+(`<upstream-ver>-patched`), then update both the manifest and `trivy/patched-images.yaml`.
+
 ## Starter items — not yet verified repo-wide
 
-Empty as of 2026-10-01 (unchanged since 2026-09-01). The next durable finding (from a future audit's research pass, or from
+Empty as of 2026-10-15 (unchanged since 2026-09-01; the 2026-10-15 floating-tag rule came from an existing task and went straight into Confirmed rules). The next durable finding (from a future audit's research pass, or from
 any session) seeds this list again. (2026-09-01 audit: the one Phase 2 finding — control-plane
 EOL — was concrete enough to go straight into "Confirmed rules" rather than land here first.)
