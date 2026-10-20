@@ -12,48 +12,48 @@
 # than its own chart line, so there's no lockstep requirement here the way
 # there is when the *chart line itself* moves.
 #
-# Base: v1.102.3 (rebased 2026-09-14 from the earlier v1.98.9-patched fork).
-# reconcile-scanner found plain tailscale/tailscale:v1.102 improves on
-# v1.98.9's CVE count but still doesn't fully resolve — same underlying
-# OS-level CVE-2026-14456 (HIGH, openssl DoS via unbounded memory growth in
-# the QUIC server) remains, since v1.102.3's Alpine 3.22.5 base still ships
-# libssl3/libcrypto3 3.5.7-r0 (verified via `apk policy` in the base image:
-# installed 3.5.7-r0, candidate 3.5.8-r0 from
-# https://dl-cdn.alpinelinux.org/alpine/v3.22/main — the fixed package was
-# published after v1.102.3's image was baked).
+# Base: v1.104.1 (rebased 2026-10-20 from the v1.102.3-patched fork, tm task
+# f98dda28; earlier history: v1.98.9-patched -> v1.102.3-patched 2026-09-14).
+# reconcile-scanner found plain tailscale/tailscale:v1.104 improves on
+# v1.102.3 (12 HIGH vs 22) but still doesn't fully resolve.
 #
-# Changelog v1.98.9 -> v1.102 reviewed (tailscale.com/changelog): the only
-# breaking change in range is deprecated legacy 4via6 MagicDNS name formats
-# being removed (v1.102.1) — this repo's tailscale manifests (tailscale/,
-# */tailscale-ingress.yaml) never reference 4via6 naming at all (verified via
-# repo-wide grep), so it doesn't apply. Everything else in range (PeerRelays
-# CRD, workload-identity federation, TS_BOOT_TIMEOUT env var, ACME timeout,
-# various security fixes TS-2026-*) is additive/opt-in, not used by this
-# repo's plain ingress/egress/Connector/Funnel proxy usage. `tailscale
-# version` confirms 1.102.3 post-build; binaries are byte-identical in size
-# to the unpatched base (containerboot/tailscale/tailscaled untouched).
+# Changelog v1.102.3 -> v1.104.1 reviewed (tailscale.com/changelog): the only
+# breaking changes in range are platform-minimum bumps (v1.104 is built with
+# Go 1.27: macOS 12 Monterey and iOS 15 dropped) — irrelevant to the Linux
+# container proxies. Container image v1.104.1 is "no functional changes;
+# library updates only"; Linux client changes are netmap caching for faster
+# start-up, single WireGuard batch buffer, IPv6 link-local relay fix, and
+# v1.102.5's "container no longer stops tailscaled when it falls behind on
+# status updates" fix. Operator-side v1.104.1 changes (PeerRelay, ProxyGroup,
+# DNSConfig, `tailscale.com/experimental-forward-cluster-traffic-via-ingress`
+# annotation behaviour) don't touch this repo — no ProxyGroup/PeerRelay/
+# DNSConfig/ProxyClass resources and no such annotation anywhere (repo-wide
+# grep), and the operator itself stays on its own 1.98.x chart line.
+# `tailscale version` confirms 1.104.1 post-build; containerboot/tailscale/
+# tailscaled are byte-identical in size to the unpatched base.
 #
-# Same-base `apk upgrade` on Alpine 3.22.5 bumps libcrypto3 + libssl3
-# 3.5.7-r0 -> 3.5.8-r0 (verified in the built image: alpine layer scans 0
-# vulnerabilities post-patch, was 2 HIGH pre-patch) — the
-# tailscale/tailscaled/containerboot binaries and the containerboot
-# entrypoint are untouched, pure OS-package patch-level bump, no config or
-# behaviour change.
+# v1.104.1's Alpine 3.22.6 base already ships libssl3/libcrypto3 3.5.8-r0, so
+# the original reason for this fork (CVE-2026-14456) is resolved upstream.
+# Same-base `apk upgrade` now bumps libcrypto3+libssl3 3.5.8-r0 -> 3.5.9-r0
+# and zlib 1.3.2-r0 -> 1.3.2-r1 (CVE-2026-85091, MEDIUM) — the OS layer scans
+# 0 findings at any severity post-patch (was 1 MEDIUM). No CRITICAL/HIGH is
+# resolved by the apk layer itself; the fork is kept (rather than dropped for
+# plain upstream) so the reconcile-scanner keeps tracking upstream for the
+# Go-binary residuals below and files a Revert task once a clean tag ships.
 #
-# Residual (not fixed by this patch — baked into the Go binaries themselves,
-# not Alpine OS packages, so out of scope for an apk-upgrade patch strategy):
-# CVE-2026-56854 (HIGH, golang.org/x/crypto/ssh auth bypass via unenforced
-# source-address restrictions) in all three binaries, plus CVE-2026-46602 and
-# CVE-2026-46603 (HIGH, golang.org/x/image TIFF/VP8L decoder DoS) in the
-# tailscale CLI binary. 5 HIGH findings total, 0 CRITICAL, verified via local
-# trivy 0.74.0 scan (--ignore-unfixed --severity CRITICAL,HIGH — no
-# --pkg-types filter, so gobinary findings are included).
+# Residual (not fixable by an apk-upgrade — baked into the Go binaries):
+# 12 HIGH, 0 CRITICAL, trivy 0.76.0 (--ignore-unfixed --severity
+# CRITICAL,HIGH, gobinary included): in each of containerboot/tailscale/
+# tailscaled, Go stdlib 1.27.1 CVE-2026-78667, CVE-2026-78669, CVE-2026-97031
+# (fixed 1.27.2) and golang.org/x/net v0.59.0 CVE-2026-78669 (fixed 0.60.0).
+# Identical count to plain upstream v1.104.1. The previous fork's
+# golang.org/x/crypto CVE-2026-56854, golang.org/x/image CVE-2026-46602/46603
+# and golang.org/x/text CVE-2026-56851 are all gone in v1.104.1.
 #
-# Rebuild + repush with a new base + tag suffix whenever a newer upstream
-# release ships openssl >= 3.5.8-r0 AND the golang.org/x/crypto and
-# golang.org/x/image module versions above are bumped past their fixed
-# versions, or drop this fork entirely at that point (reconcile-scanner
-# tracks this against `upstream_image` in trivy/patched-images.yaml).
-FROM tailscale/tailscale:v1.102.3
+# Rebuild + repush with a new base + tag suffix when a newer upstream release
+# is built with Go >= 1.27.2 and golang.org/x/net >= 0.60.0, or drop this fork
+# entirely at that point (reconcile-scanner tracks this against
+# `upstream_image` in trivy/patched-images.yaml).
+FROM tailscale/tailscale:v1.104.1
 USER root
 RUN apk update && apk upgrade --no-cache
