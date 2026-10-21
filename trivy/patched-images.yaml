@@ -250,3 +250,13 @@
   patched_date: "2026-10-13"
   critical: 0
   high: 4
+
+- workload: monitoring/CronJob/cve-scanner
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/trivy:0.76.0-patched
+  upstream_image: aquasec/trivy:0.76.0
+  build_recipe: trivy/patched-images/trivy/Dockerfile
+  reason: "Forked 2026-10-21 (cve-scanner task 0d0e631c). Pinned aquasec/trivy:0.75.0 (Alpine 3.24.2) was flagged 1 HIGH os-pkg: libexpat 2.8.5-r0 CVE-2026-77214 (heap buffer over-read in XML_ParseBuffer, fixed 2.9.0-r0); a local --ignore-unfixed scan also found 4 fixable HIGH in the trivy Go binary (stdlib 1.27.1 CVE-2026-78667/78669/97031, golang.org/x/net 0.59.0 CVE-2026-78669). Newest upstream 0.76.0 (2026-10-14) clears the Go-binary findings but still ships the same Alpine 3.24.2 base with libexpat 2.8.5-r0 (1 HIGH), so no upstream tag is clean. Recipe: FROM aquasec/trivy:0.76.0 + apk upgrade (libexpat -> 2.9.0-r0, libssl3/libcrypto3 -> 3.5.9-r0); built linux/arm64. Result (local trivy 0.76.0 scan, --ignore-unfixed): 0 CRITICAL + 0 HIGH, both alpine and gobinary targets. Changelog 0.75.0 -> 0.76.0 reviewed (CHANGELOG.md + release highlights discussion #11409): features only (experimental CBOM crypto security levels / DSA bom-ref change, Echo Maven+npm advisories, RapidFort for more base OSes) and fixes (echo pip version matching, PHP dependency edges, VEX CSAF panic) — no flag removals or JSON report-schema changes affecting this repo's `trivy kubernetes` (--disable-node-collector/--parallel/--scanners vuln/--format json) or reconcile.sh's `trivy image` usage. Smoke-tested in-cluster with the trivy ServiceAccount: `trivy kubernetes --include-namespaces registry` rc=0 with JSON vuln results, and `trivy image aquasec/trivy:0.75.0` reported the expected CVEs. Revert to plain upstream once an aquasec/trivy release ships libexpat >= 2.9.0. (A prior 0.74.0-patched fork existed in the registry and was since reverted.)"
+  patched_date: "2026-10-21"
+  critical: 0
+  high: 5
