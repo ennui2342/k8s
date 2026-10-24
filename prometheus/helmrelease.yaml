@@ -252,6 +252,10 @@ spec:
             - matchers:
                 - alertname="Watchdog"
               receiver: "null"  # suppress the heartbeat alert
+            - matchers:
+                - alertname="InfoInhibitor"
+              receiver: "null"  # fires by design to mute severity=info alerts; never actionable
+                                # (also skipped by health-monitor's tm bridge, 2026-10-24)
 
         receivers:
           - name: "null"
