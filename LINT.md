@@ -185,7 +185,7 @@ still EOL, that's a new finding. Re-checked 2026-09-15: still `v1.32.13+k3s1`, s
 four nodes `v1.32.13+k3s1`, `24344397` still `§wait`. Nodes now run Ubuntu 26.04 / kernel 7.0
 (cgroup v2 by default) with containerd 2.1.5, so the cgroup-v1/containerd-1.x removals in recent
 k8s minors shouldn't block the jump. See the deprecated-API rule below for the other pre-upgrade
-check.
+check. **Resolved 2026-10-24:** upgraded v1.32.13 → v1.33.13 → v1.34.12 → v1.35.9 → **v1.36.5+k3s1** via system-upgrade-controller (Kubernetes 1.36 EOL 2027-06-28), `24344397` closed. The declared version now lives in `k3s-upgrade/plans.yaml`; check that file *and* `kubectl get nodes` against endoflife.date.
 
 **Every app namespace should have an explicit answer on network segmentation, even if the answer
 is "not yet."** New rule 2026-09-15 (Phase 2 research pass). Check method: `git grep -l "kind:

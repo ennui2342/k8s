@@ -18,7 +18,7 @@
 # k3s version bumps (to keep kubectl in sync) or when the weekly CVE scan flags
 # this image — it gets scanned like any other cluster-wide image, no special
 # handling needed.
-FROM alpine/k8s:1.32.13
+FROM alpine/k8s:1.36.5
 
 # `apk update && apk upgrade` pulls current packages from alpine's rolling edge
 # repos (this base image is NOT pinned to a fixed snapshot — see /etc/apk/repositories

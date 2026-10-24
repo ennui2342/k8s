@@ -447,7 +447,8 @@ reachable first if joining an existing one.
 
 ```sh
 ssh ubuntu@k8s.local
-curl -sfL https://get.k3s.io | sh -
+# Pin to the version in k3s-upgrade/plans.yaml (the cluster's declared k3s version):
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.36.5+k3s1 sh -
 # Copy kubeconfig to Mac
 sudo cat /etc/rancher/k3s/k3s.yaml
 ```
@@ -475,6 +476,40 @@ Verify:
 ```sh
 kubectl get nodes
 ```
+
+### Upgrading k3s (system-upgrade-controller)
+
+Since 2026-10-24 k3s upgrades are GitOps: `system-upgrade/` runs rancher/system-upgrade-controller
+(vendored upstream manifests + kustomize patches), and `k3s-upgrade/plans.yaml` declares the
+version. **To upgrade, change `version:` in both Plans (same value), commit, push.** The
+`server-plan` upgrades master; the `agent-plan`'s `prepare` step holds each worker until master is
+done, then does workers one at a time (cordon, drain, upgrade, uncordon, 2-minute settle). ~18-20
+minutes per minor on this cluster, ~40s of API unavailability while master's k3s restarts.
+
+Rules (learned on the 1.32.13 → 1.36.5 run, 2026-10-24, ~80 minutes for 4 minors):
+1. **One minor at a time.** k3s doesn't support skipping minors. Let a step finish on all four
+   nodes and pass the health check before bumping again.
+2. **Take a datastore backup first** (`sudo /usr/local/bin/k3s-backup.sh` on master, then integrity
+   check, see "Master Datastore Backup & Restore"). The controller runs on this control plane, so
+   it can't rescue a master whose own upgrade crash-loops (as happened on 2026-08-19); that's
+   still manual recovery.
+3. **Check the bundled Traefik chart first.** k3s bumps it with no notice (1.33.13+k3s2 jumped
+   v39 → v40), and `traefik/helmchartconfig.yaml` carries the public/publictls entry points that
+   keep Home Assistant on the internet. Get the chart version from `manifests/traefik.yaml` at the
+   k3s tag, fetch it from `k3s-io/k3s-charts`, and `helm template` it with that tag's values plus
+   ours. Entry points and Service ports should come out identical.
+4. **Expect ImagePullBackOff while the local registry moves.** `registry` is one replica, and
+   every `127.0.0.1:30500/...` image is pulled from it. When its node is drained, pods rescheduled
+   at the same moment fail to pull and sit in back-off for minutes. During the 2026-10-24 run,
+   pods were retried (deleted) as soon as `http://192.168.0.8:30500/v2/` answered again; 7-8 per
+   step. Without that, Home Assistant was down several minutes in step 1.
+5. Health check after each step: all nodes Ready on the new version; no pod outside
+   Running/Succeeded except the finished upgrade-job pods (they show `Unknown`, expected: k3s
+   restarts under them); every Flux Kustomization/HelmRelease Ready; LAN ingress hostnames;
+   `https://epigone.ecafe.org:8444` via master = 200 and any other host on 8444 = 404.
+6. After the last step, rebuild `k8s-toolbox` on the matching `alpine/k8s:<version>` (see
+   CLAUDE.md) and bump the drain-job kubectl in `system-upgrade/kustomization.yaml` if the cluster
+   has moved more than one minor past it.
 
 ---
 
@@ -1313,7 +1348,7 @@ exactly this:
 #    was live) rather than installing latest - avoids an unnecessary datastore schema
 #    migration on top of an already high-stakes restore. The install script auto-starts k3s
 #    at the end regardless of the env var; stop it immediately after, don't wait:
-curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.32.13+k3s1 sh -
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.36.5+k3s1 sh -   # = k3s-upgrade/plans.yaml at backup time
 sudo systemctl stop k3s
 
 # 3. Pick the most recent archive from /mnt/k8s/k3s-master-backups/. Mounting the NAS export

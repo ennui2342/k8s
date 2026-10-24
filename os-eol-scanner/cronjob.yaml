@@ -267,7 +267,7 @@ spec:
           restartPolicy: OnFailure
           containers:
           - name: scan
-            image: 127.0.0.1:30500/k8s-toolbox:1.32.13-20260802
+            image: 127.0.0.1:30500/k8s-toolbox:1.36.5-20261024
             imagePullPolicy: IfNotPresent
             env:
             - name: DISCORD_WEBHOOK
