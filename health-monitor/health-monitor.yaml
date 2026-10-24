@@ -259,7 +259,11 @@ data:
     for alert in active_alerts:
         labels = alert.get('labels', {})
         name = labels.get('alertname', 'unknown')
-        if name == 'Watchdog':
+        # Both fire by design and never need action: Watchdog is the always-on
+        # dead-man's switch; InfoInhibitor exists only to mute severity=info
+        # alerts (first seen as a task 2026-10-24, on kustomize-controller after
+        # the k3s 1.36 upgrade). Bridging either into tm defeats its purpose.
+        if name in ('Watchdog', 'InfoInhibitor'):
             continue
         fp = alert.get('fingerprint', '')
         active_fingerprints.add(fp)
