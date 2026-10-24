@@ -1,35 +1,21 @@
-# REBUILT 2026-10-24 as 1.29.1-patched-20261024 (unchanged recipe) for PHP2Shell
-# (CVE-2026-109618/-109619): php8.4 -> 8.4.27-1~deb13u1, apache2 -> 2.4.69-1~deb13u1.
-# Versioned tag from now on; rebuild with: docker build --pull --no-cache --platform linux/arm64 \
-#   -t 192.168.0.8:30500/freshrss:1.29.1-patched-$(date +%Y%m%d) . && docker push <that tag>
+# Rebased 2026-10-24 (tm 410d7741) from the 1.29.1 fork onto upstream FreshRSS 1.30.4: tag
+# 1.30.4-patched-20261024. 1.30.4 (2026-10-21) is the first upstream release shipping the
+# PHP2Shell fix (CVE-2026-109618/-109619; Debian 13.7, PHP 8.4.27-1~deb13u1, Apache 2.4.69) and
+# carries the 1.30.x security fixes. Breaking change checked: #8400's local-network default-deny
+# lives only in app/Utils/httpUtil.php + SimplePie, none of this instance's 89 feeds resolve to
+# a private IP, and the WallabagButton extension uses its own curl_init() (unaffected). Verified
+# on a copy of the real data: full actualize, same 2 feeds in error as on 1.29.1, 0 blocked.
+# The one remaining HIGH fixable CVE in upstream 1.30.4's Debian 13.7 base:
+#   libbrotli1   1.1.0-2+b7 -> 1.1.0-2+deb13u1   (CVE-2026-111497)
+# Plain trixie-security dist-upgrade of already-installed packages.
+# Rebuild: docker build --pull --no-cache --platform linux/arm64 \
+#   -t 192.168.0.8:30500/freshrss:1.30.4-patched-$(date +%Y%m%d) . && docker push <that tag>
 #
-# Patch built 2026-08-07 (task 33928d40-13ec-4dc6-a530-541e60d823f9).
-# Resolves 2 CRITICAL + 17 HIGH fixable CVEs in the Debian 13.5 (trixie) base, including:
-#   apache2 (and libapache2-mod-php)   2.4.67-1~deb13u2 -> 2.4.68-1~deb13u1
-#     (CVE-2026-34355, CVE-2026-42536, CVE-2026-44185, CVE-2026-44186, CVE-2026-49975 HIGH)
-#   php8.4 (and every php8.4-* subpackage) 8.4.21-1~deb13u1 -> 8.4.24-1~deb13u1
-#     (CVE-2026-17543, CVE-2026-17544 CRITICAL: ext-pgsql SQL injection, bccomp() OOB write RCE)
-#   libcurl4t64 / curl                 8.14.1-2+deb13u3 -> 8.14.1-2+deb13u4
-#     (CVE-2026-5773, CVE-2026-6276 HIGH)
-#   libexpat1                          2.7.1-2 -> 2.8.2-1~deb13u1
-#     (CVE-2025-59375 HIGH)
-# The image's own apt sources already include the trixie-security component, so a plain
-# dist-upgrade of already-installed packages picks up every published security fix rather
-# than a hand-maintained package list. FreshRSS itself (the PHP app) is unchanged — 1.29.1 is
-# already the latest upstream release (Docker Hub last rebuilt 2026-05-20, digest unchanged
-# since), so no newer tag exists yet to pick up an updated base image.
-#
-# ATTEMPTED rebase 2026-08-18 (task 11b88cee-46b3-4b1c-9daf-238946c72694) onto
-# freshrss/freshrss:8400 — reverted same day. freshrss/freshrss:8400 (an edge dev build past
-# 1.29.1, FRESHRSS_VERSION 1.29.2-dev, built from FreshRSS/FreshRSS PR #8400) turned out to be a
-# single-platform amd64-only image (confirmed via `docker buildx imagetools inspect
-# freshrss/freshrss:8400` — a flat manifest, not a multi-arch index), unlike 1.29.1/1.29.x
-# releases and `:edge`/`:edge-alpine` which are all multi-arch (amd64+arm/v7+arm64). This
-# cluster is all-arm64 (k8s/k8s-1/k8s-2), so a rebuild against that base crash-looped in
-# production with `exec format error`. See trivy/patched-images.yaml's entry for the full
-# writeup (including the CVE/breaking-change analysis, which was otherwise sound) before trying
-# any future numeric freshrss/freshrss:<PR#> tag as a base again.
-FROM freshrss/freshrss:1.29.1
+# History: 2026-08-07 first forked 1.29.1 (2 CRITICAL + 17 HIGH Debian 13.5 CVEs); 2026-08-18
+# attempted rebase onto freshrss/freshrss:8400 reverted (amd64-only PR-preview image; use only
+# multi-arch release or :edge tags, check `docker buildx imagetools inspect`); 2026-10-24 rebuilt
+# 1.29.1 for PHP 8.4.27, then rebased here.
+FROM freshrss/freshrss:1.30.4
 RUN apt-get update \
     && apt-get -y --only-upgrade dist-upgrade \
     && rm -rf /var/lib/apt/lists/*

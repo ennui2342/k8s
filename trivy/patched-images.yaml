@@ -133,13 +133,13 @@
 
 - workload: freshrss/Deployment/freshrss
   strategy: frozen-rebuild
-  patched_image: 127.0.0.1:30500/freshrss:1.29.1-patched-20261024
-  upstream_image: freshrss/freshrss:1.29.1
+  patched_image: 127.0.0.1:30500/freshrss:1.30.4-patched-20261024
+  upstream_image: freshrss/freshrss:1.30.4
   build_recipe: trivy/patched-images/freshrss/Dockerfile
-  reason: "REBUILT 2026-10-24 (same recipe, new versioned tag) for PHP2Shell CVE-2026-109618/-109619 (unauthenticated RCE in PHP core): php8.4 8.4.24 -> 8.4.27-1~deb13u1 and apache2 -> 2.4.69-1~deb13u1 from trixie-security; local trivy 0.75.0: 0 CRITICAL + 0 HIGH fixable. Upstream freshrss/freshrss:1.29.1 still ships PHP 8.4.21; the fix upstream is only in 1.30.x (:latest = 1.30.4, 2026-10-21) — moving to that is a separate app-version upgrade. Original 2026-08-07 patch: apache2/php8.4/libcurl4t64/libexpat1 (and 15 more) CVEs in Debian 13.5 (trixie) base; no newer 1.29.1-line upstream tag exists (Docker Hub last rebuilt 2026-05-20, digest unchanged since, and 1.29.1 is still the latest FreshRSS release upstream). Resolves all fixable CVEs found at patch time via trixie-security dist-upgrade — verified via local trivy 0.70.0 scan: 0 CRITICAL + 0 HIGH after patch (Debian layer upgraded to 13.6). FreshRSS app version unchanged, pure OS-package patch-level bump, no breaking changes. ATTEMPTED rebase 2026-08-18 (task 11b88cee) onto freshrss/freshrss:8400 (an edge dev build, FRESHRSS_VERSION 1.29.2-dev, PR #8400) — CVE/breaking-change analysis checked out (apt dist-upgrade against 8400 verified 0 CRITICAL + 0 HIGH fixable via local trivy 0.74.0; the PR #8400 SSRF/internal-network default-deny doesn't apply, confirmed live against this instance's actual feed list + only extension) but the deploy failed: freshrss/freshrss:8400 (also 8392, 7974) is a **single-platform amd64-only** image (`docker buildx imagetools inspect` shows a flat manifest, not a multi-arch index) — this cluster is all-arm64 (k8s/k8s-1/k8s-2), so the rebuilt image crash-looped with `exec format error` in production. Reverted same-day to this working 1.29.1-patched fork (second commit). Future reconcile-scanner passes should not re-suggest numeric freshrss/freshrss:<PR#> tags as a base without first checking `docker buildx imagetools inspect` for multi-arch — 1.29.1/1.29.x releases and `:edge`/`:edge-alpine` are multi-arch (amd64+arm/v7+arm64), the numeric PR-preview tags are not."
+  reason: "Rebased 2026-10-24 (tm 410d7741) from the 1.29.1 fork onto upstream FreshRSS 1.30.4 (2026-10-21; first release with the PHP2Shell-fixed Debian base, PHP 8.4.27, plus the 1.30.x security fixes). Breaking change #8400 (local-network default-deny) checked: enforced only in FreshRSS's httpUtil + SimplePie, none of the 89 feeds resolve to a private IP, WallabagButton uses its own curl (unaffected); verified on a copy of the real data (full actualize, same 2 feeds in error as 1.29.1, 0 blocked). Remaining HIGH fixable in upstream 1.30.4: libbrotli1 1.1.0-2+b7 -> 1.1.0-2+deb13u1 (CVE-2026-111497); trixie-security dist-upgrade resolves it, local trivy 0.75.0: 0 CRITICAL + 0 HIGH. Revert to plain freshrss/freshrss:1.30.x once upstream ships libbrotli1 >= 1.1.0-2+deb13u1. Only use multi-arch release or :edge tags as a base (the 2026-08-18 attempt on amd64-only PR-preview tag :8400 crash-looped on this arm64 cluster)."
   patched_date: "2026-10-24"
-  critical: 2
-  high: 17
+  critical: 0
+  high: 1
 
 - workload: wallabag/Deployment/wallabag
   strategy: frozen-rebuild
