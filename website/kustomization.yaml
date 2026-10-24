@@ -8,4 +8,3 @@ resources:
   - phpconfigmap.yaml
   - pv.yaml
   - svc.yaml
-  # php.ini excluded — referenced by phpconfigmap.yaml but not a k8s manifest itself

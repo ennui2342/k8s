@@ -7,16 +7,14 @@ spec:
     matchLabels:
       app: nginx
   serviceName: "nginx"
-  # 0 since 2026-10-24: PHP 7.0 (EOL) is unpatchable for PHP2Shell (CVE-2026-109618/-109619).
-  # Back to 1 once the php container is moved to a fixed PHP 8.x - see tm task.
-  replicas: 0
+  replicas: 1
   template:
     metadata:
       labels:
         app: nginx
       annotations:
         checksum/config: "67b9205b25ed"
-        checksum/phpconfig: "3cad52e955d0"
+        checksum/phpconfig: "4b582f2a3f10"
     spec:
       terminationGracePeriodSeconds: 10
       affinity:
@@ -44,12 +42,19 @@ spec:
             mountPath: /etc/nginx/conf.d/ddns.conf
             subPath: ddns.conf
         - name: php
-          image: php:7.0-fpm
+          # PHP 8.4 since 2026-10-24 (was php:7.0-fpm, EOL; PHP2Shell CVE-2026-109618/-109619
+          # fixed in 8.4.27). Fork of php:8.4.27-fpm, see trivy/patched-images/php-fpm/.
+          image: 127.0.0.1:30500/php:8.4.27-fpm-patched-20261024
+          imagePullPolicy: IfNotPresent
           ports:
           - containerPort: 9000
           volumeMounts:
           - name: web-data
             mountPath: /var/www/html
+          - name: php-ini-volume
+            mountPath: /usr/local/etc/php/conf.d/zz-website.ini
+            subPath: zz-website.ini
+            readOnly: true
       volumes:
         - name: nginx-config-volume
           configMap:
@@ -57,6 +62,9 @@ spec:
         - name: ddns-config-volume
           configMap:
             name: ddns-config
+        - name: php-ini-volume
+          configMap:
+            name: php-ini
   volumeClaimTemplates:
   - metadata:
       name: web-data

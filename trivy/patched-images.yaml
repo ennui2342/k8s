@@ -81,15 +81,15 @@
   critical: 1
   high: 7
 
-- workload: default/StatefulSet/web
-  strategy: deferred-migration
-  patched_image: "php:7.0-fpm"
-  upstream_image: null
-  build_recipe: null
-  reason: "PHP 7.0 / Debian 9 (stretch) EOL since 2020, 28 CRITICAL + 240 HIGH unpatchable CVEs — needs a PHP 8.x migration, not weekly CVE nagging. See tm task 2f2f1b21."
-  patched_date: null
+- workload: "default/StatefulSet/web (php container)"
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/php:8.4.27-fpm-patched-20261024
+  upstream_image: php:8.4.27-fpm
+  build_recipe: trivy/patched-images/php-fpm/Dockerfile
+  reason: "Replaced the deferred-migration php:7.0-fpm entry on 2026-10-24 (tm 844e4ee3 / 2f2f1b21) when the website moved to PHP 8.4 for PHP2Shell (CVE-2026-109618/-109619, fixed in 8.4.27). Upstream php:8.4.27-fpm (Debian 13.7 trixie) still had 1 HIGH fixable: libbrotli1 1.1.0-2+b7 -> 1.1.0-2+deb13u1 (CVE-2026-111497). trixie-security dist-upgrade resolves it; local trivy 0.75.0: 0 CRITICAL + 0 HIGH fixable. PHP untouched. Revert to plain php:8.4.x-fpm once upstream ships libbrotli1 >= 1.1.0-2+deb13u1."
+  patched_date: "2026-10-24"
   critical: 0
-  high: 0
+  high: 1
 
 - workload: "default/StatefulSet/web (nginx container)"
   strategy: frozen-rebuild
