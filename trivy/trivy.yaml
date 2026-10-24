@@ -428,6 +428,58 @@ data:
         if update_task(k3s_task['id'], set_status(k3s_task['text'] + '\n* Resolved: no k3s-bundled CVEs flagged as of this scan', 'closed')):
             closed_findings.append('k3s-bundled images')
 
+    # --- End-of-life OS bases: one task per image, independent of CVE counts ---
+    # Added 2026-10-24 (tm c64e7206) after PHP2Shell: website ran php:7.0-fpm
+    # (Debian 9) and wallabag an Alpine 3.19 / PHP 8.1 base, both EOL. Trivy only
+    # reports CVEs the distro publishes advisories for, and EOL distros publish
+    # none, so neither image could ever be flagged above, even for a critical
+    # RCE. trivy k8s still records Metadata[].OS.EOSL per image; act on that.
+    # Deliberately NOT suppressed by patched-images.yaml: a fork rebuilt on an
+    # EOL base (apk/apt upgrade can't move past the last EOL release) is exactly
+    # the blind spot. §wait = triaged, left alone, same as the CVE tasks.
+    def collect_eosl(report):
+        found = {}
+        for resource in report.get('Resources', []):
+            wl = f"{resource.get('Namespace', 'unknown')}/{resource.get('Kind', 'unknown')}/{resource.get('Name', 'unknown')}"
+            for meta in (resource.get('Metadata') or []):
+                osinfo = meta.get('OS') or {}
+                if not osinfo.get('EOSL'):
+                    continue
+                ref = meta.get('Reference') or (meta.get('RepoTags') or ['unknown'])[0]
+                os_str = f"{osinfo.get('Family', '?')} {osinfo.get('Name', '?')}"
+                found.setdefault(ref, {'os': os_str, 'workloads': set()})['workloads'].add(wl)
+        return found
+
+    eosl = collect_eosl(data)
+    eosl_seen = set()
+    for image, info in sorted(eosl.items()):
+        if is_k3s_bundled(image):
+            print(f'EOL base in k3s-bundled {image} ({info["os"]}): only a k3s upgrade fixes it, not filing')
+            continue
+        eosl_seen.add(image)
+        prefix = f"Replace EOL base of {image} ("
+        text = (f"{prefix}{info['os']}) — OS no longer gets security updates !2 #~upgrade "
+                f"+cli.claude-code.k8s <cli.cve-scanner\n"
+                f"* Trivy reports this image's OS as end-of-life (EOSL). EOL distros publish no new "
+                f"advisories, so this image will show 0 or few fixable CVEs no matter what is "
+                f"actually wrong with it; a clean CVE scan means nothing here.\n"
+                f"* Fix: move to a supported base (a newer upstream tag on a maintained distro, or "
+                f"rebuild the fork on one). An apk/apt upgrade can't get past the last EOL release.\n"
+                f"* Workloads: {', '.join(sorted(info['workloads']))}")
+        existing = find_task(prefix, cve_scanner_tasks)
+        if existing is None:
+            if create_task(text):
+                new_findings.append(f"{image}: end-of-life OS ({info['os']})")
+        else:
+            print(f'Skipping EOL {image}: already tracked in {existing["id"]} ({existing.get("status")})')
+    for t in cve_scanner_tasks:
+        m = re.match(r'^Replace EOL base of (.+?) \(', t.get('text', ''))
+        if not m or t.get('status') != 'open' or m.group(1) in eosl_seen:
+            continue
+        print(f'Auto-closing {t["id"]}: {m.group(1)} no longer on an EOL base')
+        if update_task(t['id'], set_status(t['text'] + '\n* Resolved: no longer on an end-of-life OS as of this scan', 'closed')):
+            closed_findings.append(f"{m.group(1)}: off its end-of-life OS")
+
     # --- Discord summary: what changed this run, not everything outstanding ---
     # Confirmed live 2026-08-03: the old version listed every currently-vulnerable
     # image every week regardless of whether anything was new, making the message
