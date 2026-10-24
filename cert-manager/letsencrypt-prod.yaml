@@ -17,3 +17,12 @@ spec:
     - http01:
         ingress:
           class: traefik
+          # The solver Ingress must be on "public" (the internet-facing entry
+          # point the router's port-80 forward reaches, see
+          # traefik/helmchartconfig.yaml) for Let's Encrypt, AND on "web" for
+          # cert-manager's own in-cluster self-check. Without this it would
+          # only get the asDefault entry points (web, websecure).
+          ingressTemplate:
+            metadata:
+              annotations:
+                traefik.ingress.kubernetes.io/router.entrypoints: web,public

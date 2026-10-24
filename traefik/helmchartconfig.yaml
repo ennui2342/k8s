@@ -7,3 +7,32 @@ spec:
   valuesContent: |-
     additionalArguments:
       - "--providers.kubernetescrd.allowCrossNamespace=true"
+    # Internet-facing entry points, kept separate from the LAN/Tailscale ones
+    # (2026-10-24, PHP2Shell). The router forwards only to these: public :8081
+    # (HTTP, for cert-manager HTTP-01 challenges) and publictls :8444 (HTTPS,
+    # Home Assistant at epigone.ecafe.org). Before this, the router forwarded
+    # straight to web/websecure, so Host-header routing exposed EVERY app in the
+    # cluster to the internet. web/websecure are asDefault, so any Ingress or
+    # IngressRoute that doesn't name an entry point stays LAN/Tailscale-only;
+    # a route is public only if it explicitly lists public/publictls. See
+    # RUNBOOK "Router port forwards".
+    ports:
+      web:
+        asDefault: true
+      websecure:
+        asDefault: true
+      public:
+        port: 8081
+        exposedPort: 8081
+        expose:
+          default: true
+        protocol: TCP
+      publictls:
+        port: 8444
+        exposedPort: 8444
+        expose:
+          default: true
+        protocol: TCP
+        http:
+          tls:
+            enabled: true

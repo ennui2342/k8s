@@ -5,7 +5,8 @@ metadata:
   namespace: epigone
 spec:
   entryPoints:
-    - websecure
+    - websecure   # LAN/Tailscale (and in-cluster via the CoreDNS override)
+    - publictls   # internet, via the router forward 8123 -> master:8444
   routes:
     - match: Host(`epigone.ecafe.org`)
       kind: Rule
