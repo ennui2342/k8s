@@ -6,7 +6,9 @@ metadata:
   labels:
     app: wallabag
 spec:
-  replicas: 1
+  # 0 since 2026-10-24: wallabag 2.6.14 ships PHP 8.1 (EOL), unpatchable for PHP2Shell
+  # (CVE-2026-109618/-109619). Back to 1 once on a fixed PHP 8.2+ image - see tm task.
+  replicas: 0
   strategy:
     type: Recreate
   selector:

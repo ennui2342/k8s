@@ -7,7 +7,9 @@ spec:
     matchLabels:
       app: nginx
   serviceName: "nginx"
-  replicas: 1 # by default is 1
+  # 0 since 2026-10-24: PHP 7.0 (EOL) is unpatchable for PHP2Shell (CVE-2026-109618/-109619).
+  # Back to 1 once the php container is moved to a fixed PHP 8.x - see tm task.
+  replicas: 0
   template:
     metadata:
       labels:
