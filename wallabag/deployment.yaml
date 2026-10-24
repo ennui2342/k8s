@@ -6,9 +6,7 @@ metadata:
   labels:
     app: wallabag
 spec:
-  # 0 since 2026-10-24: wallabag 2.6.14 ships PHP 8.1 (EOL), unpatchable for PHP2Shell
-  # (CVE-2026-109618/-109619). Back to 1 once on a fixed PHP 8.2+ image - see tm task.
-  replicas: 0
+  replicas: 1
   strategy:
     type: Recreate
   selector:
@@ -29,7 +27,9 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: wallabag
-          image: 127.0.0.1:30500/wallabag:2.6.14-patched
+          # Local build of upstream's own recipe on Alpine 3.24 + PHP 8.4.27 (the published
+          # 2.6.14 image is PHP 8.1, EOL). See trivy/patched-images/wallabag/build.sh.
+          image: 127.0.0.1:30500/wallabag:2.6.14-php8.4.27-20261024
           imagePullPolicy: IfNotPresent
           args: ["wallabag"]
           ports:

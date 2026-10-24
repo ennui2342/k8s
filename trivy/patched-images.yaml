@@ -143,13 +143,13 @@
 
 - workload: wallabag/Deployment/wallabag
   strategy: frozen-rebuild
-  patched_image: 127.0.0.1:30500/wallabag:2.6.14-patched
+  patched_image: 127.0.0.1:30500/wallabag:2.6.14-php8.4.27-20261024
   upstream_image: wallabag/wallabag:2.6.14
-  build_recipe: trivy/patched-images/wallabag/Dockerfile
-  reason: "musl/php81 CVEs in Alpine 3.19.8 base (php 8.1.32-r0 -> 8.1.34-r0, musl 1.2.4_git20230717-r5 -> r6); no newer 2.6.14-line upstream tag exists (Docker Hub last published 2025-10-07)"
-  patched_date: "2026-08-01"
-  critical: 2
-  high: 9
+  build_recipe: trivy/patched-images/wallabag/build.sh
+  reason: "2026-10-24 (tm ae346cd4): the published wallabag/wallabag:2.6.14 (= :latest, last published 2025-10-07) is Alpine 3.19 + PHP 8.1, EOL and unfixable for PHP2Shell (CVE-2026-109618/-109619). Built from upstream's own wallabag/docker recipe instead: master dd7191f (Alpine 3.24 + php84 since 5d9cc5e, CI-tested) + open PR #484 61638de (PHP >= 8.4.27 build check, session.upload_progress off for CVE-2026-115560). Result: Alpine 3.24.3, PHP 8.4.27, same wallabag 2.6.14 app, same entrypoint/data layout. Tested locally on a copy of the real sqlite DB: login, list/config/tag pages, no 5xx/PHP errors. Replaces the earlier 2.6.14-patched apk-upgrade fork of the 3.19 image. Local trivy 0.75.0: upstream 2.6.14 64 CRITICAL / 247 HIGH fixable (EOSL base) -> this build 7 CRITICAL / 23 HIGH, ALL residuals in wallabag 2.6.14's own vendored composer deps (guzzlehttp/guzzle, symfony/* 4.4 EOL, twig/twig, phpseclib, otphp), not the OS layer; out of scope for an image rebuild, needs a new wallabag release (or retiring wallabag, see tm ae346cd4). Revert to plain upstream once wallabag publishes a 2.6.14+ image on PHP >= 8.4.27."
+  patched_date: "2026-10-24"
+  critical: 64
+  high: 247
 
 - workload: monitoring/Deployment/kube-prometheus-stack-grafana
   strategy: frozen-rebuild
