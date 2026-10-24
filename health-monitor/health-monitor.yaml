@@ -104,7 +104,12 @@ data:
         stalled = find_condition(conditions, 'Stalled')
         if stalled and stalled.get('status') == 'True':
             return stalled, '!1'  # retries exhausted — won't self-heal, needs a human
-        if ready and ready.get('status') == 'False':
+        # DependencyNotReady only means "waiting for another Kustomization"; Flux
+        # retries on its own. A dependency that's genuinely broken is flagged under
+        # its own name, so counting its dependents too just filed transient tasks
+        # (10 were open on 2026-10-24, from moments when a dependency was briefly
+        # mid-reconcile right after a push) that nothing ever closed.
+        if ready and ready.get('status') == 'False' and ready.get('reason') != 'DependencyNotReady':
             return ready, '!2'
         return None, None
 
@@ -146,13 +151,17 @@ data:
     print(f'Existing cluster-health tasks: {len(existing_tasks)}')
 
     # --- Flux kustomizations: failed or stalled ---
+    flux_failing = set()   # resource ids failing right now, for auto-close below
+    flux_queries_ok = True
     data = kubectl_json('get', 'kustomizations.kustomize.toolkit.fluxcd.io', '-A')
+    flux_queries_ok &= 'items' in data
     for k in data.get('items', []):
         ns = k['metadata']['namespace']
         name = k['metadata']['name']
         cond, priority = flux_failure(k.get('status', {}).get('conditions', []))
         if cond:
             resource_id = f'kustomization/{name}'
+            flux_failing.add(resource_id)
             if issue_tracked(resource_id, existing_tasks):
                 print(f'Already tracked: {resource_id}')
                 continue
@@ -165,12 +174,14 @@ data:
 
     # --- Flux HelmReleases: failed or stalled ---
     data = kubectl_json('get', 'helmreleases.helm.toolkit.fluxcd.io', '-A')
+    flux_queries_ok &= 'items' in data
     for hr in data.get('items', []):
         ns = hr['metadata']['namespace']
         name = hr['metadata']['name']
         cond, priority = flux_failure(hr.get('status', {}).get('conditions', []))
         if cond:
             resource_id = f'helmrelease/{name}'
+            flux_failing.add(resource_id)
             if issue_tracked(resource_id, existing_tasks):
                 print(f'Already tracked: {resource_id}')
                 continue
@@ -180,6 +191,24 @@ data:
                 'notes': f'* Namespace: {ns}\n* Reason: {cond.get("reason", "")}\n* Message: {cond.get("message", "")[:200]}',
                 'priority': priority,
             })
+
+    # --- Auto-close Flux tasks whose object is healthy again ---
+    # Same rule as the Alertmanager bridge below: only when we actually got data.
+    # kubectl_json() returns {} on failure, which must never read as "nothing is
+    # failing" and close every open Flux task.
+    FLUX_TASK_RE = re.compile(r'^((?:kustomization|helmrelease)/\S+?)(?::| in )')
+    if flux_queries_ok:
+        for t in existing_tasks:
+            if t.get('status') != 'open':
+                continue
+            m = FLUX_TASK_RE.match(t.get('text', ''))
+            if not m or m.group(1) in flux_failing:
+                continue
+            print(f'Auto-closing {t["id"]}: {m.group(1)} is healthy again')
+            if update_task(t['id'], set_status(t['text'] + '\n* Resolved: no longer failing or stalled', 'closed')):
+                closed.append(t['text'].split('\n', 1)[0])
+    else:
+        print('Flux query failed, skipping Flux task auto-close', file=sys.stderr)
 
     # --- Alertmanager bridge ---
     # Prometheus's default kube-prometheus-stack rules already detect most of
