@@ -132,10 +132,23 @@ Configured in the home router's admin UI (`192.168.0.1`, Technicolor), not
 in git. The router selects the destination **by MAC address**, so these
 target master's wired `eth0`:
 
-| Public port | → master (`88:a2:9e:bd:35:b5`, `192.168.0.8`) | Used for |
-|---|---|---|
-| TCP 80 | 80 (Traefik `web`) | cert-manager HTTP-01 challenges for `epigone.ecafe.org` |
-| TCP 8123 | 443 (Traefik `websecure`) | Home Assistant at `https://epigone.ecafe.org:8123` |
+| Public port | → master (`88:a2:9e:bd:35:b5`, `192.168.0.8`) | Traefik entry point | Used for |
+|---|---|---|---|
+| TCP 80 | **8081** | `public` (HTTP) | cert-manager HTTP-01 challenges for `epigone.ecafe.org` |
+| TCP 8123 | **8444** | `publictls` (HTTPS) | Home Assistant at `https://epigone.ecafe.org:8123` |
+
+**Never forward to master's 80/443.** Those are Traefik's `web`/`websecure`, which
+serve *every* app by `Host` header. Forwarding there made the whole cluster
+internet-reachable (Grafana, Syncthing, the PHP apps…) from 2026-10-14 to
+2026-10-24, found during the PHP2Shell response (see
+`~/incident-php2shell-20261024/FINDINGS.md`; no compromise found). The `public`/`publictls`
+entry points (`traefik/helmchartconfig.yaml`) serve only routes that explicitly
+opt in: today just the `epigone` IngressRoute and cert-manager's solver Ingress
+(via the ClusterIssuer's `ingressTemplate`). `web`/`websecure` are `asDefault`, so
+any new Ingress stays LAN/Tailscale-only unless it names `public`/`publictls`.
+**To publish something new, add the entry point to its route deliberately.** Check
+with `curl -sk --resolve <host>:8444:192.168.0.8 https://<host>:8444/`: anything
+other than epigone should 404.
 
 Master is the entry point on purpose: the router can forward to only one
 host, and master is already the cluster's single, non-interchangeable node,
