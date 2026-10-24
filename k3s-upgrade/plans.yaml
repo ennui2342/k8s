@@ -1,0 +1,61 @@
+# The k3s version this cluster should be on, executed by system-upgrade-controller
+# (system-upgrade/). To upgrade: change `version:` in BOTH plans (same value), commit, push.
+# The server plan upgrades master first; the agent plan's `prepare` step blocks each worker
+# until the server plan has completed, then upgrades workers one at a time (cordon + drain).
+#
+# One MINOR at a time (k3s doesn't support skipping minors): bump, let it finish on all four
+# nodes, verify (nodes Ready, Flux Ready, ingress, public entry point), then the next minor.
+# Check the bundled Traefik chart against traefik/helmchartconfig.yaml before minors that
+# change it. If master's own upgrade fails, the controller can't help (it runs on that control
+# plane): recover per RUNBOOK "Master Datastore Backup & Restore".
+apiVersion: upgrade.cattle.io/v1
+kind: Plan
+metadata:
+  name: server-plan
+  namespace: system-upgrade
+spec:
+  concurrency: 1
+  cordon: true
+  nodeSelector:
+    matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: In
+        values: ["true"]
+  # The one deliberate exception to the control-plane NoSchedule rule: this Job IS the
+  # master's upgrade, so it has to run there.
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+  serviceAccountName: system-upgrade
+  upgrade:
+    image: rancher/k3s-upgrade
+  version: v1.33.13+k3s2
+---
+apiVersion: upgrade.cattle.io/v1
+kind: Plan
+metadata:
+  name: agent-plan
+  namespace: system-upgrade
+spec:
+  concurrency: 1
+  cordon: true
+  drain:
+    force: true
+    ignoreDaemonSets: true
+    deleteEmptydirData: true
+    timeout: 600s
+    skipWaitForDeleteTimeout: 60
+  # Let the drained pods settle elsewhere before the next worker goes.
+  postCompleteDelay: 2m
+  nodeSelector:
+    matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: DoesNotExist
+  prepare:
+    image: rancher/k3s-upgrade
+    args: ["prepare", "server-plan"]
+  serviceAccountName: system-upgrade
+  upgrade:
+    image: rancher/k3s-upgrade
+  version: v1.33.13+k3s2

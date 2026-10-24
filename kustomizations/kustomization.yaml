@@ -10,6 +10,7 @@ resources:
   - health-monitor.yaml
   - home-assistant.yaml
   - isfdb.yaml
+  - k3s-upgrade.yaml
   - linkding.yaml
   - mdns.yaml
   - monitoring.yaml
