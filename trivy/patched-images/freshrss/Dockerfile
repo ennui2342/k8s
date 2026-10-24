@@ -1,3 +1,8 @@
+# REBUILT 2026-10-24 as 1.29.1-patched-20261024 (unchanged recipe) for PHP2Shell
+# (CVE-2026-109618/-109619): php8.4 -> 8.4.27-1~deb13u1, apache2 -> 2.4.69-1~deb13u1.
+# Versioned tag from now on; rebuild with: docker build --pull --no-cache --platform linux/arm64 \
+#   -t 192.168.0.8:30500/freshrss:1.29.1-patched-$(date +%Y%m%d) . && docker push <that tag>
+#
 # Patch built 2026-08-07 (task 33928d40-13ec-4dc6-a530-541e60d823f9).
 # Resolves 2 CRITICAL + 17 HIGH fixable CVEs in the Debian 13.5 (trixie) base, including:
 #   apache2 (and libapache2-mod-php)   2.4.67-1~deb13u2 -> 2.4.68-1~deb13u1
