@@ -14,7 +14,7 @@ spec:
         app: nginx
       annotations:
         checksum/config: "67b9205b25ed"
-        checksum/phpconfig: "4b582f2a3f10"
+        checksum/phpconfig: "41a92cdce0ef"
     spec:
       terminationGracePeriodSeconds: 10
       affinity:

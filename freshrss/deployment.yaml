@@ -56,6 +56,10 @@ spec:
               mountPath: /var/www/FreshRSS/constants.local.php
               subPath: constants.local.php
               readOnly: true
+            - name: php-security
+              mountPath: /etc/php/8.4/apache2/conf.d/99-security.ini
+              subPath: 99-security.ini
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -66,3 +70,6 @@ spec:
         - name: constants
           configMap:
             name: freshrss-constants
+        - name: php-security
+          configMap:
+            name: freshrss-php-security

@@ -9,3 +9,4 @@ resources:
   - tailscale-ingress.yaml
   - freshrss-secret.yaml
   - constants-configmap.yaml
+  - php-security-configmap.yaml

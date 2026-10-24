@@ -14,3 +14,6 @@ data:
     log_errors = On
     error_log = /proc/self/fd/2
     expose_php = Off
+    ; PHP advisory 2026-10-23: CVE-2026-115560 in session upload progress affects even
+    ; PHP2Shell-patched 8.4.27. Off until the next PHP bugfix release (the site doesn't use it).
+    session.upload_progress.enabled = 0
