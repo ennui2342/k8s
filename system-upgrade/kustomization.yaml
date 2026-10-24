@@ -1,0 +1,50 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# rancher/system-upgrade-controller v0.20.2, vendored unmodified in upstream/ (release assets
+# crd.yaml + system-upgrade-controller.yaml). Local changes are patches below so a version bump
+# is "replace upstream/, re-check the patches still apply". The Plans it executes (the k3s
+# version this cluster should be on) live in k3s-upgrade/, a separate Flux Kustomization that
+# dependsOn this one so the CRDs exist first.
+resources:
+  - upstream/crd.yaml
+  - upstream/system-upgrade-controller.yaml
+patches:
+  # Controller: soft worker preference instead of upstream's REQUIRED control-plane affinity,
+  # and no control-plane tolerations, per CLAUDE.md's "control plane is off-limits" rule. It's
+  # a tiny poller, but the rule has no size exemption. Being drainable is fine: if its worker
+  # is drained mid-rollout it reschedules and resumes (Plans and Jobs are idempotent).
+  - target:
+      kind: Deployment
+      name: system-upgrade-controller
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/affinity/nodeAffinity
+        value:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      - op: replace
+        path: /spec/template/spec/tolerations
+        value:
+          - key: CriticalAddonsOnly
+            operator: Exists
+      - op: add
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 128Mi
+  # Job kubectl (cordon/drain): upstream defaults to v1.30.3, outside kubectl's +/-1 skew for
+  # this cluster's 1.32 -> 1.36 path. Bump alongside k3s.
+  - target:
+      kind: ConfigMap
+      name: default-controller-env
+    patch: |-
+      - op: replace
+        path: /data/SYSTEM_UPGRADE_JOB_KUBECTL_IMAGE
+        value: rancher/kubectl:v1.35.6

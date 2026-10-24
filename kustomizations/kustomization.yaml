@@ -25,6 +25,7 @@ resources:
   - ring-mqtt.yaml
   - solar.yaml
   - syncthing.yaml
+  - system-upgrade.yaml
   - tailscale.yaml
   - taskmgt.yaml
   - traefik.yaml
