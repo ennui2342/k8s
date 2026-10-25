@@ -260,3 +260,13 @@
   patched_date: "2026-10-21"
   critical: 0
   high: 5
+
+- workload: default/Deployment/nfs-subdir-external-provisioner
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/nfs-subdir-external-provisioner:v4.0.2-patched
+  upstream_image: registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
+  build_recipe: trivy/patched-images/nfs-subdir-external-provisioner/Dockerfile
+  reason: "Forked 2026-10-25 (cve-scanner EOSL task b1f467fc). Upstream v4.0.2 (2021) is still the newest tag registry.k8s.io has ever published (tags: v4.0.0/v4.0.1/v4.0.2 only), built on gcr.io/distroless/static Debian 9 (stretch) — EOSL, so no OS advisories will ever ship for it, and its binary was built with go1.14. No newer upstream tag exists to move to, and an apt upgrade can't apply (distroless, no package manager). Recipe: rebuild the exact v4.0.2 source (git tag v4.0.2 -> commit fab8b562, go.mod/go.sum and every dependency unchanged) with golang:1.27-bookworm, CGO_ENABLED=0 static (same as upstream's Makefile), onto gcr.io/distroless/static-debian13; image config kept identical (ENTRYPOINT /nfs-subdir-external-provisioner, User 0, same env). Built linux/arm64. Local trivy 0.76.0 (--ignore-unfixed --severity CRITICAL,HIGH): upstream debian 9.13 EOSL, os-pkgs 0/0 (meaningless on EOSL), gobinary 5 CRITICAL + 114 HIGH (incl. go1.14 stdlib); patched debian 13.7, os-pkgs 0 CRITICAL + 0 HIGH, gobinary 0 CRITICAL + 45 HIGH. Residual 45 HIGH are the 2020-era Go module deps v4.0.2 pins (k8s.io/kubernetes 1.18, golang.org/x/net/crypto/text/oauth2, gogo/protobuf, prometheus/client_golang) — fixing them means bumping deps in the provisioner source, out of scope for a base-image rebuild. Smoke-tested in-cluster by provisioning, binding, writing to and deleting a throwaway nfs-client PVC. Revert once kubernetes-sigs publishes a newer image on a supported base (reconcile-scanner watches upstream_image)."
+  patched_date: "2026-10-25"
+  critical: 5
+  high: 114

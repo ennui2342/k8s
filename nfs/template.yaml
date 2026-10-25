@@ -152,8 +152,19 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: nfs-subdir-external-provisioner
-          image: "registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2"
+          # Locally rebuilt fork: same v4.0.2 source, current Go toolchain, on
+          # distroless/static-debian13 instead of upstream's EOL Debian 9 base
+          # (v4.0.2 is still the newest upstream tag). See
+          # trivy/patched-images.yaml + trivy/patched-images/nfs-subdir-external-provisioner/.
+          image: "127.0.0.1:30500/nfs-subdir-external-provisioner:v4.0.2-patched"
           imagePullPolicy: IfNotPresent
+          # Sized from kubectl top (1m CPU / 6Mi steady state, 2026-10-25).
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
           volumeMounts:
             - name: nfs-subdir-external-provisioner-root
               mountPath: /persistentvolumes
