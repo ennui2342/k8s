@@ -66,10 +66,14 @@ spec:
         # prior to 2026-09-12). Plain upstream curlimages/curl:8.22.0 now
         # scans at 0 CRITICAL + 0 HIGH — resolves the remaining c-ares gap
         # upstream, so the fork was dropped and this reverted to the plain
-        # image.
-        registry: "docker.io"
-        repository: "curlimages/curl"
-        tag: "8.22.0"
+        # image. 2026-10-26 (tm 26a7e093): 8.22.0 picked up 2 HIGH (brotli
+        # CVE-2026-111497, libssh2 CVE-2026-58050); upstream 8.23.0 fixes
+        # libssh2 but not brotli, so re-forked as 8.23.0-patched (same-base
+        # apk upgrade). See trivy/patched-images.yaml and
+        # trivy/patched-images/curlimages-curl/Dockerfile.
+        registry: "127.0.0.1:30500"
+        repository: "curlimages-curl"
+        tag: "8.23.0-patched"
         pullPolicy: IfNotPresent
 
       admin:

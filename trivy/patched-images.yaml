@@ -270,3 +270,13 @@
   patched_date: "2026-10-25"
   critical: 5
   high: 114
+
+- workload: "monitoring/Deployment/kube-prometheus-stack-grafana (download-dashboards initContainer)"
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/curlimages-curl:8.23.0-patched
+  upstream_image: curlimages/curl:8.23.0
+  build_recipe: trivy/patched-images/curlimages-curl/Dockerfile
+  reason: "Forked 2026-10-26 (cve-scanner task 26a7e093): curlimages/curl:8.22.0 (Alpine 3.24.1) carried 2 HIGH fixable — CVE-2026-111497 (brotli-libs, fix 1.2.1-r0) and CVE-2026-58050 (libssh2, fix 1.11.1-r4). Newest upstream curlimages/curl:8.23.0 (Alpine 3.24.2, 2026-10-20) resolves libssh2 (1.11.1-r4) but still ships brotli-libs 1.2.0-r1 (local trivy, --ignore-unfixed: 1 HIGH). Fix already published in the same Alpine 3.24 repos, so a same-base apk upgrade on 8.23.0 closes it (brotli-libs 1.2.1-r0; also c-ares 1.34.9-r0, musl 1.2.6-r3). Patched image: 0 CRITICAL + 0 HIGH. curl 8.22->8.23 breaking changes (SMB dropped, --no-clobber suffix naming) don't apply — grafana's download_dashboards.sh is a plain `curl -skf` HTTPS GET piped to sed. Built linux/arm64. Revert to plain curlimages/curl once upstream ships brotli-libs >= 1.2.1-r0."
+  patched_date: "2026-10-26"
+  critical: 0
+  high: 2
