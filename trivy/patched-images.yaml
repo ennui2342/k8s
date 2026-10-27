@@ -43,13 +43,13 @@
 
 - workload: flux-system/Deployment/kustomize-controller
   strategy: frozen-rebuild
-  patched_image: 127.0.0.1:30500/kustomize-controller:v1.9.6-patched
-  upstream_image: ghcr.io/fluxcd/kustomize-controller:v1.9.6
+  patched_image: 127.0.0.1:30500/kustomize-controller:v1.10.0-patched
+  upstream_image: ghcr.io/fluxcd/kustomize-controller:v1.10.0
   build_recipe: trivy/patched-images/kustomize-controller/Dockerfile
-  reason: "Rebased 2026-10-02 from v1.9.5 onto v1.9.6 as part of the Flux distribution v2.8.1 -> v2.9.6 regeneration of flux-system/gotk-components.yaml (tm task 85f65544). Plain v1.9.6 (Alpine 3.23.6) is 0 CRITICAL + 5 HIGH: 1 os-pkgs HIGH (pcre2 CVE-2026-103111, 10.48-r0 -> 10.49-r0) + 4 lang-pkgs HIGH. apk upgrade closes the Alpine-base gap (verified in the built image: pcre2 10.48-r0 -> 10.49-r0, libssl3/libcrypto3 3.5.8-r0 -> 3.5.9-r0, nothing else; local trivy 0.74.0 scan: os-pkgs 0 CRITICAL + 0 HIGH after patch). Changelog v1.9.5 -> v1.9.6 reviewed (official CHANGELOG.md): SOPS error redaction extended to postBuild.substituteFrom values (no Kustomization here uses postBuild substitution), new opt-in DisableCommitStatusEvent feature gate (off by default), fluxcd/pkg dependency bumps - no breaking changes, no CRD removals, no arg/RBAC changes. Residual 0 CRITICAL + 4 HIGH are Go module deps baked into the controller binary (golang.org/x/crypto CVE-2026-56854; google.golang.org/grpc CVE-2026-84304 / CVE-2026-84445 / GHSA-hrxh-6v49-42gf), out of scope for this apk-upgrade patch strategy, same residual class as the other Flux controller forks. Prior history: v1.9.4-patched -> v1.9.5-patched rebase 2026-09-11 (reconcile-scanner task 950679d7)."
-  patched_date: "2026-10-02"
+  reason: "Rebased 2026-10-27 from v1.9.6 onto v1.10.0 (reconcile-scanner task c625b93b: plain v1.10.0 0 CRITICAL + 1 HIGH vs v1.9.6 re-scanned at 0 CRITICAL + 14 HIGH). This is a controller-only bump ahead of the rest of the Flux v2.9.6 distribution in flux-system/gotk-components.yaml - safe because upstream config/rbac/role.yaml and config/manager/deployment.yaml are byte-identical v1.9.6 -> v1.10.0 and the Kustomization CRD diff is description text plus an equivalent rewrite of the kubeConfig exactly-one-of CEL rule. Plain v1.10.0 (Alpine 3.24.3) residual 1 HIGH is os-pkgs libcurl CVE-2026-92392 (8.22.0-r0 -> 8.23.0-r0); apk upgrade closes it (verified via apk upgrade --simulate: libcurl is the only package bumped). Local trivy 0.76.0 scan (--ignore-unfixed --severity CRITICAL,HIGH, gobinary included) of the patched image: 0 CRITICAL + 0 HIGH - v1.10.0 (Go 1.27, k8s 1.37 libs) already drops v1.9.6s x/crypto and grpc Go-binary findings. Changelog v1.9.6 -> v1.10.0 reviewed (official CHANGELOG.md): ObjectLevelWorkloadIdentity feature gate retired (no --feature-gates passed here), --sops-vault-configmap superseded by transit-engine.auth.fluxcd.io annotations (unused - SOPS is age-only), spec.kubeConfig.configMapRef audiences key moved to an annotation (no Kustomization uses spec.kubeConfig), plus opt-in SPIFFE mTLS / --override-manager-before-dry-run / SOPS comment-regex decryption fix - none apply, all grepped. Fork kept only so reconcile-scanner can revert once a plain upstream tag ships libcurl >= 8.23.0-r0. Prior history: v1.9.5 -> v1.9.6 rebase 2026-10-02 (tm 85f65544), v1.9.4 -> v1.9.5 rebase 2026-09-11 (tm 950679d7)."
+  patched_date: "2026-10-27"
   critical: 0
-  high: 4
+  high: 0
 
 - workload: default/DaemonSet/mdns-repeater-worker
   strategy: frozen-rebuild
