@@ -9,7 +9,13 @@
 # frozen-rebuild bases on 0.76.0 and upgrades the Alpine package layer
 # (libexpat 2.8.5-r0 -> 2.9.0-r0, libssl3/libcrypto3 -> 3.5.9-r0).
 # The trivy binary (/usr/local/bin/trivy) is untouched.
+# Rebased 2026-10-29 (task e5bee7bc) onto 0.76.1 (security patch release: Go
+# 1.27.3 + eMudhra CA distrust). 0.76.1's Alpine 3.24.2 base already ships
+# libexpat 2.9.0-r0, but still has brotli-libs 1.2.0-r1 (CVE-2026-111497) and
+# libcurl 8.22.0-r0 (CVE-2026-92392); same apk upgrade -> brotli-libs 1.2.1-r0,
+# libcurl 8.23.0-r0, libssl3/libcrypto3 3.5.9-r0. Residual: 1 HIGH in the trivy
+# Go binary (go-jose/v4 4.1.5 CVE-2026-116587), not fixable by this recipe.
 # Build for the cluster's arch (all nodes arm64):
-#   docker build --platform linux/arm64 -t 192.168.0.8:30500/trivy:0.76.0-patched trivy/patched-images/trivy/
-FROM aquasec/trivy:0.76.0
+#   docker build --platform linux/arm64 -t 192.168.0.8:30500/trivy:0.76.1-patched trivy/patched-images/trivy/
+FROM aquasec/trivy:0.76.1
 RUN apk upgrade --no-cache
