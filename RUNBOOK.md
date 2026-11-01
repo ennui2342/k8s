@@ -1469,9 +1469,9 @@ upstream tag bump; only builds a custom image when no upstream fix exists.
 ### Custom-patched images
 
 Some images have no upstream fix available and are patched by rebuilding locally (`docker build`
-with an `apk upgrade`/`apt-get upgrade`), then imported directly into containerd on the relevant
-node(s) (`ctr image import` or equivalent) and referenced with `imagePullPolicy: Never` — no
-registry push required. Every such fork is recorded in `trivy/patched-images.yaml`:
+with an `apk upgrade`/`apt-get upgrade`), pushed to the local registry, and referenced as
+`127.0.0.1:30500/<name>:<tag>` with `imagePullPolicy: IfNotPresent` (see "Local container
+registry"). Every such fork is recorded in `trivy/patched-images.yaml`:
 
 - `strategy: frozen-rebuild` — has a committed Dockerfile under `trivy/patched-images/<name>/`
   capturing the recipe, so it can be reproduced on a from-scratch cluster rebuild instead of
