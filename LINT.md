@@ -84,7 +84,10 @@ shifted from the original list: `librarium-db/postgres` and the master `mdns-rep
 (both removed 2026-08-22), so the `librarium/*` files cited above as the "established pattern"
 no longer exist — use `isfdb/adapter-deployment.yaml`/`isfdb/mariadb-statefulset.yaml` or
 `opsimath/` as the reference instead. Task `c6e594d0` (`§wait`, now correctly untagged) still
-covers the gap. Re-checked 2026-10-15: same 21 containers / 19 manifests, no drift.
+covers the gap. Re-checked 2026-10-15: same 21 containers / 19 manifests, no drift. Re-checked 2026-11-01: **20
+containers / 18 manifests**. `nfs-subdir-external-provisioner` was fixed (`aa2a930`), the unreferenced
+`monitoring/node-exporter.yaml` was deleted, and `system-upgrade-controller` is new (vendored in
+`system-upgrade/upstream/`, so its fix belongs in that directory's kustomize patches). Noted on `c6e594d0`.
 
 **No orphaned PVCs** (Bound, but no owning workload *and* no manifest reference anywhere in this
 repo). Audited repo-wide 2026-07-29: every Bound PVC was cross-checked against every manifest in
@@ -107,7 +110,7 @@ CR's own `volumeClaimTemplate` (not a StatefulSet this repo authors directly), s
 actively Bound to a `Running` pod. Before treating a no-owner, no-name-match PVC as orphaned,
 confirm no `Running` pod currently has it mounted (`kubectl get pod -A -o json` cross-referenced
 by volume claim name) — a live mount means "operator-managed", not "orphaned", regardless of what
-grep finds. Re-checked 2026-10-15: only the two `resiliosync-*` PVCs flagged, `776f5af9` still open.
+grep finds. Re-checked 2026-10-15 and 2026-11-01: only the two `resiliosync-*` PVCs flagged, `776f5af9` still open.
 
 **Every `imagePullPolicy: Never` entry should have an explicit comment explaining why** it's on
 that pattern instead of the local registry (`registry/`, `127.0.0.1:30500`). Audited repo-wide
@@ -188,7 +191,7 @@ Traefik chart v40 `kubernetesIngressNginx` provider rename) were checked against
 apply. Recorded as a note on `24344397`. Nodes now run Ubuntu 26.04 / kernel 7.0
 (cgroup v2 by default) with containerd 2.1.5, so the cgroup-v1/containerd-1.x removals in recent
 k8s minors shouldn't block the jump. See the deprecated-API rule below for the other pre-upgrade
-check. **Resolved 2026-10-24:** upgraded v1.32.13 → v1.33.13 → v1.34.12 → v1.35.9 → **v1.36.5+k3s1** via system-upgrade-controller (Kubernetes 1.36 EOL 2027-06-28), `24344397` closed. The declared version now lives in `k3s-upgrade/plans.yaml`; check that file *and* `kubectl get nodes` against endoflife.date.
+check. **Resolved 2026-10-24:** upgraded v1.32.13 → v1.33.13 → v1.34.12 → v1.35.9 → **v1.36.5+k3s1** via system-upgrade-controller (Kubernetes 1.36 EOL 2027-06-28), `24344397` closed. The declared version now lives in `k3s-upgrade/plans.yaml`; check that file *and* `kubectl get nodes` against endoflife.date. Re-checked 2026-11-01: compliant. v1.36.5+k3s1 is still k3s's `stable` channel; 1.37 is out, but there's no EOL pressure yet.
 
 **Every app namespace should have an explicit answer on network segmentation, even if the answer
 is "not yet."** New rule 2026-09-15 (Phase 2 research pass). Check method: `git grep -l "kind:
@@ -204,7 +207,7 @@ of security-posture judgement call as Pod Security Admission above. Ticketed as 
 `eba39725` (untagged, human-review-only, `+cli.claude-code.k8s`) rather than adopted directly.
 Future audits: if this task is still open and still zero NetworkPolicies exist, note it in the
 report; if it's been closed but the gap is unaddressed, that's worth a fresh look. Re-checked
-2026-10-01 and 2026-10-15: still only Flux's three bootstrap policies, `eba39725` still open. No change.
+2026-10-01, 2026-10-15 and 2026-11-01: still only Flux's three bootstrap policies, `eba39725` still open. No change.
 
 **Every Deployment/StatefulSet/DaemonSet must include the soft worker-preference node affinity**
 from CLAUDE.md's Scheduling Constraints section (or, for a DaemonSet that must run on every node
@@ -250,7 +253,12 @@ Admission (`pod-security.kubernetes.io/enforce` namespace labels — the GA repl
 long-removed PodSecurityPolicy) to make this an enforced boundary rather than an implicit one is a
 security-posture decision, not a mechanical fix: ticketed as `tm` task `403129f3` (untagged, human-review-only)
 rather than adopted directly, since this is a trusted single-tenant homelab and blast-radius
-tradeoffs need a human call, not a default-on assumption.
+tradeoffs need a human call, not a default-on assumption. **Scope caveat found 2026-11-01:** a repo
+scan only sees what the repo authors. Check live too (`kubectl get pod -A -o json`, filter on
+`hostNetwork` and `securityContext.privileged`). Live, the other exceptions are chart- and
+operator-generated: `tailscale/ts-k8s-connector-*` (privileged), the kube-prometheus-stack
+node-exporter (`hostNetwork`), and the k3s-upgrade Plan Jobs (privileged by design, see CLAUDE.md). All
+expected; `mdns/worker-daemonset.yaml` is still the only repo-authored one.
 
 **Every container in a Deployment/StatefulSet/DaemonSet should set a `readinessProbe` and/or
 `livenessProbe`.** Audited repo-wide 2026-08-15 (Phase 2 research pass, new rule this run): 17 of
@@ -283,7 +291,9 @@ drift, `tm` task `cb71bb32` still accurate as filed. **Corrected 2026-10-01:** t
 `mdns-repeater` (one of the original 17) was removed 2026-08-22 with `mdns/master-daemonset.yaml`.
 No new violations; `cb71bb32` covers the remaining 16 (its "17/16" title is one stale). Same
 `librarium-*` caveat as the resources rule: those reference manifests no longer exist.
-Re-checked 2026-10-15: same 16 / 15, no drift.
+Re-checked 2026-10-15: same 16 / 15, no drift. Re-checked 2026-11-01: still 16 / 15, but the
+composition changed: `node-exporter` went (manifest deleted, it was never deployed) and
+`system-upgrade-controller` came in. Noted on `cb71bb32`.
 
 **No manifest may use a deprecated API version, and the live apiserver must report no
 deprecated-API traffic.** New rule 2026-10-01 (Phase 2 pass). Currently fully compliant, so it's
@@ -305,7 +315,8 @@ risks becoming a removed one. Two halves, both mechanical:
    and no Gateway API objects. Compliant. Rechecked 2026-10-07, after the Flux v2.9.6 upgrade
    (`9f8a502`): the Flux `v1beta2` versions are gone from the CRDs entirely, and the only
    deprecated version left is `BackendTLSPolicy` `v1alpha3` (`served: false`). Rechecked
-   2026-10-15: unchanged, and both halves are still clean.
+   2026-10-15: unchanged, and both halves are still clean. Rechecked 2026-11-01: halves 1 and 2 both
+   changed, see below.
 
 Fix for any future violation: bump the manifest's `apiVersion` to the CRD's current
 `storage: true` version, checking the upstream migration notes for field renames first. This is
@@ -313,11 +324,28 @@ a single-manifest fix when the schema is unchanged; ticket it if fields moved. A
 half 1 that isn't explained by a repo manifest usually means a Helm chart or controller is too
 old, which is upgrade-shaped work (`#~upgrade`).
 
+**Half 1 is not literally "must print nothing" any more (2026-11-01).** The gauge means "requested at
+least once since this apiserver started", and it never clears until k3s restarts, so a hit alone
+proves nothing. Before acting, confirm the traffic is current:
+`rate(apiserver_request_total{group=...,resource=...,version=...}[6h])` in Prometheus. Found
+live 2026-11-01, three series:
+- `endpoints` v1: deprecated in Kubernetes 1.33, with an empty `removed_release`. Not actionable by
+  itself. Consumers include the Prometheus stack, whose upgrade is tracked in `1b232a78`. Ignore this
+  series unless `removed_release` is ever set.
+- `notification.toolkit.fluxcd.io` `alerts`/`providers` v1beta3: `APPLY`/`GET` stopped with the
+  move to `v1` (`ad37bab`, 2026-10-28), which is what half 2 cares about. A low-rate `WATCH` on
+  v1beta3 was still running on 2026-11-01 from a client not identified here (no apiserver audit
+  log). Recorded on `4834c34f`, whose `storedVersions` cleanup is what retires v1beta3.
+
+Half 2 on 2026-11-01: `alerts`/`providers` v1beta3 are now deprecated-but-served and every tracked
+manifest uses `v1`, so it's compliant. The Gateway API deprecated versions are all `served: false`.
+
 **No deployed image may use a floating/mutable tag.** New rule 2026-10-15 (closes `tm` task
 `c479debe`). Every `image:` in a tracked manifest, and every image tag set in HelmRelease
-values, must match `^v?[0-9]+(\.[0-9]+)*` (an optional `-patched`/`-lsNNN`-style suffix after the
-numeric version is fine). `latest`, `latest-patched`, `debug`, `dev`, `local`, or a bare
-image with no tag are all violations. This is the global versioned-tag rule from the user's
+values, must match `^v?[0-9]+\.[0-9]+(\.[0-9]+)*` (at least MAJOR.MINOR, tightened 2026-11-01, with
+the full version where upstream publishes one; an optional `-patched`/`-lsNNN`-style suffix after the
+numeric version is fine). `latest`, `latest-patched`, `debug`, `dev`, `local`, a bare
+major (`registry:2`, `mariadb:11`), or a bare image with no tag are all violations. This is the global versioned-tag rule from the user's
 `CLAUDE.md`, checked mechanically here. A floating tag defeats the reconcile-scanner's
 version comparison (`trivy/patched-images.yaml` `upstream_image`; `discover.sh` skips unparseable
 tags) and hides what's actually deployed. It also lets an `IfNotPresent` node cache silently
@@ -339,13 +367,61 @@ under the tasks below). Found live 2026-10-15:
 - `ring-mqtt/ring-mqtt.yaml`: `127.0.0.1:30500/ring-mqtt:latest-patched`. Already ticketed as
   `6892ffca`.
 
+Re-checked 2026-11-01 (tm `bfb9d647`, found by the upgrade specialist): upstream retags a bare major
+on every release, so it's as mutable as `latest`, and the old regex passed it.
+- `isfdb/mariadb-statefulset.yaml`: `mariadb:11`. Pinned to `11.8.9`, the running version. No tag's
+  digest matched the running pod (`sha256:2439dcd7…` is an older build of 11.8.9), so the rollout
+  also picked up upstream's current 11.8.9 rebuild.
+- `registry/deployment.yaml`: `registry:2`. Tracked in `092fd102`, which replaces its EOL base.
+- `mdns-repeater` and `ring-mqtt` `latest-patched`: unchanged, still `f9bd4e02` and `6892ffca`.
+
 The fix for a third-party image is to pin to the version tag whose digest matches what's
 currently running (compare `kubectl get pod … -o jsonpath='{..imageID}'` against the registry's
 `Docker-Content-Digest` per tag). For a locally built fork, rebuild and push under a versioned tag
 (`<upstream-ver>-patched`), then update both the manifest and `trivy/patched-images.yaml`.
 
+**Every tracked manifest must be reachable from a Flux Kustomization.** New rule 2026-11-01. A
+`*.yaml` file that no `kustomization.yaml` includes is never applied, but it still reads as live
+config and pollutes every scan. Found live: `monitoring/node-exporter.yaml`, a whole DaemonSet that
+wasn't in `monitoring/kustomization.yaml` and wasn't running (the live node-exporter comes from
+kube-prometheus-stack). It had been counted in the resources and probes rules since they were
+written, and it was the one affinity-rule hit this run. Deleted directly, it's in git history.
+Check method: walk `resources`/`patches`/`components` from each `kustomizations/*.yaml`
+`spec.path`, then diff against `git ls-files '*.yaml'`. Expected leftovers: `.sops.yaml` and
+`trivy/patched-images.yaml` (a `configMapGenerator` input, not a manifest). Inactive manifests
+belong in `.gitignore` (GitOps Principle 5), not tracked.
+
+**Every `127.0.0.1:30500/...` image in use must actually exist in the registry.** New rule
+2026-11-01. The local-registry tag is pulled with `IfNotPresent`, so a running pod proves nothing: a
+node's containerd cache hides a missing image until a pod lands on a node without it. Found live:
+`127.0.0.1:30500/botkube:v1.14.0-patched` returned 404, most likely lost in the 2026-09-06 prune
+recovery (not confirmed). It was cached on `k8s-1`/`k8s-3` only, so a reschedule to `k8s-2` would
+have hit `ImagePullBackOff`. Fixed directly by pushing the Mac's cached copy after confirming that its
+layers and build time matched the node image, then pulling it on `k8s-2`. Check method: collect every
+`127.0.0.1:30500/` image from live pods, workload specs, and tracked manifests (including HelmRelease
+`registry`/`repository`/`tag` values), then `curl` each
+`http://192.168.0.81:30500/v2/<name>/manifests/<tag>` with OCI index, Docker manifest-list, and v2
+`Accept` headers. Anything but 200 is a violation. Rebuild from `trivy/patched-images/<name>/` if
+no cached copy exists. Compare diff IDs, not image IDs: Docker Desktop's ID differs from
+containerd's for the same image.
+
+**`trivy/patched-images.yaml` `patched_image` must equal the image actually deployed.** New rule
+2026-11-01. `trivy/trivy.yaml` keys forks on this exact string (`patched_by_image`), so a stale value
+makes the fork invisible to fork-aware scanning. Found live: `ring-mqtt` and `botkube` still said
+`ghcr.io/ennui2342/...` from before the registry migration. Both fixed directly. Check method:
+every `patched_image` must appear in a tracked manifest or a HelmRelease image value. `influxdb:1.8.0`
+is a tracked non-fork entry and passes.
+
+**Exec probes on NFS-backed databases must set `timeoutSeconds`, never the 1s default.** New rule
+2026-11-01 (from `e8934151`). An exec probe that spawns a client on a Pi-class node over NFS can
+exceed 1s under ordinary latency, and a timed-out liveness probe restarts the database. That happened
+to `librarium-db` (51 restarts) and is why `opsimath-db` uses 15s. Found live:
+`isfdb/mariadb-statefulset.yaml` had both probes on the default. Fixed directly (`timeoutSeconds:
+15`, matching `opsimath/postgres.yaml`). Check method: list every `exec` probe in a
+Deployment/StatefulSet, flag any with `timeoutSeconds` unset or below 5.
+
 ## Starter items — not yet verified repo-wide
 
-Empty as of 2026-10-15 (unchanged since 2026-09-01; the 2026-10-15 floating-tag rule came from an existing task and went straight into Confirmed rules). The next durable finding (from a future audit's research pass, or from
+Empty as of 2026-11-01 (unchanged since 2026-09-01; the floating-tag rule and this run's four new rules were concrete enough to go straight into Confirmed rules). The next durable finding (from a future audit's research pass, or from
 any session) seeds this list again. (2026-09-01 audit: the one Phase 2 finding — control-plane
 EOL — was concrete enough to go straight into "Confirmed rules" rather than land here first.)
