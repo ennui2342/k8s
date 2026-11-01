@@ -73,7 +73,7 @@
 
 - workload: home-assistant/Deployment/ring-mqtt
   strategy: frozen-rebuild
-  patched_image: ghcr.io/ennui2342/ring-mqtt:latest-patched
+  patched_image: 127.0.0.1:30500/ring-mqtt:latest-patched
   upstream_image: tsightler/ring-mqtt:latest
   build_recipe: trivy/patched-images/ring-mqtt/Dockerfile
   reason: "openssl/musl/nghttp2/zlib CVEs in Alpine base"
@@ -113,7 +113,7 @@
 
 - workload: botkube/Deployment/botkube
   strategy: frozen-rebuild
-  patched_image: ghcr.io/ennui2342/botkube:v1.14.0-patched
+  patched_image: 127.0.0.1:30500/botkube:v1.14.0-patched
   upstream_image: ghcr.io/kubeshop/botkube:v1.14.0
   build_recipe: trivy/patched-images/botkube/Dockerfile
   reason: "git/musl CVEs in Alpine 3.18.9 base; botkube upstream inactive since v1.14.0 (2024-11-13), no newer release exists"
