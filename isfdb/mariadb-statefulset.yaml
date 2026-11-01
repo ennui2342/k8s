@@ -38,7 +38,7 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: mariadb
-          image: mariadb:11
+          image: mariadb:11.8.9
           ports:
             - containerPort: 3306
               name: mysql
@@ -95,6 +95,7 @@ spec:
                 - mariadb-admin ping -uroot -p"$MARIADB_ROOT_PASSWORD"
             initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 15
           livenessProbe:
             exec:
               command:
@@ -103,6 +104,7 @@ spec:
                 - mariadb-admin ping -uroot -p"$MARIADB_ROOT_PASSWORD"
             initialDelaySeconds: 30
             periodSeconds: 15
+            timeoutSeconds: 15
           resources:
             requests:
               cpu: 200m
