@@ -420,8 +420,16 @@ to `librarium-db` (51 restarts) and is why `opsimath-db` uses 15s. Found live:
 15`, matching `opsimath/postgres.yaml`). Check method: list every `exec` probe in a
 Deployment/StatefulSet, flag any with `timeoutSeconds` unset or below 5.
 
+**The Mac kubeconfig's client certificate must have more than 60 days left.** New rule 2026-11-01
+(Phase 2 pass). Certificate expiry isn't a manifest property, but this one takes out every
+automated specialist at once. Found live: `/Volumes/SSD/sync/secure/kubeconfig` embeds the k3s
+`system:admin` cert, which expires 2027-03-09, and nothing tracked that. k3s renews its own leaf
+certs on restart, but that doesn't update the Mac's copy. Check method: `kubectl config view --raw
+--minify -o jsonpath='{.users[0].user.client-certificate-data}' | base64 -d | openssl x509 -noout
+-enddate`. Ticketed as `tm` task `9da1734f`.
+
 ## Starter items — not yet verified repo-wide
 
-Empty as of 2026-11-01 (unchanged since 2026-09-01; the floating-tag rule and this run's four new rules were concrete enough to go straight into Confirmed rules). The next durable finding (from a future audit's research pass, or from
+Empty as of 2026-11-01 (unchanged since 2026-09-01; the floating-tag rule and this run's five new rules were concrete enough to go straight into Confirmed rules). The next durable finding (from a future audit's research pass, or from
 any session) seeds this list again. (2026-09-01 audit: the one Phase 2 finding — control-plane
 EOL — was concrete enough to go straight into "Confirmed rules" rather than land here first.)
