@@ -41,16 +41,6 @@
   critical: 2
   high: 8
 
-- workload: flux-system/Deployment/kustomize-controller
-  strategy: frozen-rebuild
-  patched_image: 127.0.0.1:30500/kustomize-controller:v1.10.0-patched
-  upstream_image: ghcr.io/fluxcd/kustomize-controller:v1.10.0
-  build_recipe: trivy/patched-images/kustomize-controller/Dockerfile
-  reason: "Rebased 2026-10-27 from v1.9.6 onto v1.10.0 (reconcile-scanner task c625b93b: plain v1.10.0 0 CRITICAL + 1 HIGH vs v1.9.6 re-scanned at 0 CRITICAL + 14 HIGH). This is a controller-only bump ahead of the rest of the Flux v2.9.6 distribution in flux-system/gotk-components.yaml - safe because upstream config/rbac/role.yaml and config/manager/deployment.yaml are byte-identical v1.9.6 -> v1.10.0 and the Kustomization CRD diff is description text plus an equivalent rewrite of the kubeConfig exactly-one-of CEL rule. Plain v1.10.0 (Alpine 3.24.3) residual 1 HIGH is os-pkgs libcurl CVE-2026-92392 (8.22.0-r0 -> 8.23.0-r0); apk upgrade closes it (verified via apk upgrade --simulate: libcurl is the only package bumped). Local trivy 0.76.0 scan (--ignore-unfixed --severity CRITICAL,HIGH, gobinary included) of the patched image: 0 CRITICAL + 0 HIGH - v1.10.0 (Go 1.27, k8s 1.37 libs) already drops v1.9.6s x/crypto and grpc Go-binary findings. Changelog v1.9.6 -> v1.10.0 reviewed (official CHANGELOG.md): ObjectLevelWorkloadIdentity feature gate retired (no --feature-gates passed here), --sops-vault-configmap superseded by transit-engine.auth.fluxcd.io annotations (unused - SOPS is age-only), spec.kubeConfig.configMapRef audiences key moved to an annotation (no Kustomization uses spec.kubeConfig), plus opt-in SPIFFE mTLS / --override-manager-before-dry-run / SOPS comment-regex decryption fix - none apply, all grepped. Fork kept only so reconcile-scanner can revert once a plain upstream tag ships libcurl >= 8.23.0-r0. Prior history: v1.9.5 -> v1.9.6 rebase 2026-10-02 (tm 85f65544), v1.9.4 -> v1.9.5 rebase 2026-09-11 (tm 950679d7)."
-  patched_date: "2026-10-27"
-  critical: 0
-  high: 0
-
 - workload: default/DaemonSet/mdns-repeater-worker
   strategy: frozen-rebuild
   patched_image: 127.0.0.1:30500/mdns-repeater:latest-patched
