@@ -43,8 +43,11 @@ spec:
             subPath: ddns.conf
         - name: php
           # PHP 8.4 since 2026-10-24 (was php:7.0-fpm, EOL; PHP2Shell CVE-2026-109618/-109619
-          # fixed in 8.4.27). Fork of php:8.4.27-fpm, see trivy/patched-images/php-fpm/.
-          image: 127.0.0.1:30500/php:8.4.27-fpm-patched-20261024
+          # fixed in 8.4.27). Plain upstream since 2026-11-03 (local libbrotli1 fork dropped,
+          # tm 5c3e8c83). Digest-pinned: Docker Hub rebuilds official-image tags in place
+          # (this one on 2026-10-28), and IfNotPresent would silently reuse a node's cached
+          # pre-rebuild copy without the digest.
+          image: php:8.4.27-fpm@sha256:3a6527017daca7917709afa08a37388ec108db093857f31d642cfff2e6f0449e
           imagePullPolicy: IfNotPresent
           ports:
           - containerPort: 9000
