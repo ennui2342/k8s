@@ -28,8 +28,9 @@ spec:
       containers:
         - name: wallabag
           # Local build of upstream's own recipe on Alpine 3.24 + PHP 8.4.27 (the published
-          # 2.6.14 image is PHP 8.1, EOL). See trivy/patched-images/wallabag/build.sh.
-          image: 127.0.0.1:30500/wallabag:2.6.14-php8.4.27-20261024
+          # 2.6.15 image is Alpine 3.22 + PHP 8.2 with a misplaced php.ini). See
+          # trivy/patched-images/wallabag/build.sh.
+          image: 127.0.0.1:30500/wallabag:2.6.15-php8.4.27-20261104
           imagePullPolicy: IfNotPresent
           args: ["wallabag"]
           ports:
