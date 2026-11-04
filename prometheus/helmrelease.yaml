@@ -69,11 +69,13 @@ spec:
         # image. 2026-10-26 (tm 26a7e093): 8.22.0 picked up 2 HIGH (brotli
         # CVE-2026-111497, libssh2 CVE-2026-58050); upstream 8.23.0 fixes
         # libssh2 but not brotli, so re-forked as 8.23.0-patched (same-base
-        # apk upgrade). See trivy/patched-images.yaml and
-        # trivy/patched-images/curlimages-curl/Dockerfile.
-        registry: "127.0.0.1:30500"
-        repository: "curlimages-curl"
-        tag: "8.23.0-patched"
+        # apk upgrade). 2026-11-04 (reconcile-scanner tm 9999f207): upstream
+        # re-published 8.23.0 on Alpine 3.24.3 with brotli-libs 1.2.1-r0 —
+        # scans 0 CRITICAL + 0 HIGH, so the fork was dropped again and this
+        # reverted to the plain image (see git history for the old recipe).
+        registry: "docker.io"
+        repository: "curlimages/curl"
+        tag: "8.23.0"
         pullPolicy: IfNotPresent
 
       admin:
