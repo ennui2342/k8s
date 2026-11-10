@@ -26,6 +26,10 @@
 # - Ring entity removals: no `ring` config entry (front_door_* come from
 #   ring-mqtt via MQTT discovery). No telegram/smtp/nanoleaf/unifiprotect/
 #   zwave/matter/etc. in core.config_entries (now also includes esphome).
+# - SMOKE-TEST BREAK, fixed forward: foxess_modbus 1.15.0's sensor platform
+#   failed on 2026.11 (IntegrationSensor now requires device_class). Upgraded
+#   to foxess_modbus v1.16.0 (#1294 fixes exactly this) on the config PVC;
+#   1.15.0 kept at /config/bak/foxess_modbus-1.15.0-20261110.
 # Previous rebase (2026-10-08 onto 2026.10, task c920a827): see git history
 # and patched-images.yaml's reason field for the 2026.9->2026.10 review.
 # NOTE: base image's Config.User is empty (defaults to root), so `USER root`
