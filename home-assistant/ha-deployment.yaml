@@ -5,6 +5,15 @@ metadata:
   namespace: home-assistant
 spec:
   replicas: 1
+  # Never run two HA pods at once: both would open the same SQLite recorder DB
+  # (home-assistant_v2.db) and .storage on the NFS config PVC. maxSurge 0 +
+  # maxUnavailable 1 stops the old pod before starting the new one — same
+  # effect as Recreate, without an SSA type flip on the live object.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: homeassistant-label
@@ -23,7 +32,7 @@ spec:
                     operator: DoesNotExist
       containers:
       - name: homeassistant
-        image: 127.0.0.1:30500/home-assistant:2026.10-patched
+        image: 127.0.0.1:30500/home-assistant:2026.11-patched-20261110
         imagePullPolicy: IfNotPresent
         ports:
           - containerPort: 8123
