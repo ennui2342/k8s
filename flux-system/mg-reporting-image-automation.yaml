@@ -1,0 +1,60 @@
+# Watch ghcr.io/ennui2342/mg-reporting for new tags. PRIVATE repo + image
+# (commercially sensitive), unlike opsimath/taskmgt - the ImageRepository
+# needs secretRef to authenticate (mg-reporting-ghcr-secret.yaml, a
+# read:packages-only PAT).
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  name: mg-reporting
+  namespace: flux-system
+spec:
+  image: ghcr.io/ennui2342/mg-reporting
+  interval: 5m
+  secretRef:
+    name: mg-reporting-ghcr
+---
+# Select latest semver tag matching the 1.YYYYMMDD.RUNNUMBER pattern
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  name: mg-reporting
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: mg-reporting
+  policy:
+    semver:
+      range: ">=1.0.0"
+---
+# Commit updated image tags back to this repo (Setter marker on
+# mg-reporting/worker-deployment.yaml's image line). Its own automation
+# scoped to ./mg-reporting only, so it never races opsimath's.
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageUpdateAutomation
+metadata:
+  name: mg-reporting
+  namespace: flux-system
+spec:
+  interval: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  git:
+    checkout:
+      ref:
+        branch: main
+    commit:
+      author:
+        email: fluxcdbot@users.noreply.github.com
+        name: Flux
+      messageTemplate: |
+        chore: update mg-reporting image tag(s)
+
+        {{range .Changed.Changes -}}
+        - {{.OldValue}} -> {{.NewValue}}
+        {{end -}}
+    push:
+      branch: main
+  update:
+    path: ./mg-reporting
+    strategy: Setters

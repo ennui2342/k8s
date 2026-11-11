@@ -5,6 +5,8 @@ resources:
 - gotk-sync.yaml
 - taskmgt-image-automation.yaml
 - opsimath-image-automation.yaml
+- mg-reporting-image-automation.yaml
+- mg-reporting-ghcr-secret.yaml
 - discord-alert.yaml
 - discord-webhook-secret.yaml
 patches:

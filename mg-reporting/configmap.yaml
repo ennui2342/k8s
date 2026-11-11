@@ -1,0 +1,11 @@
+# Non-sensitive configuration for mg-reporting. Edit, then:
+#   kubectl rollout restart deploy/mg-reporting-worker -n mg-reporting
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mg-reporting-config
+  namespace: mg-reporting
+data:
+  RAILS_ENV: "production"
+  DATABASE_HOST: "mg-reporting-db"
+  DATABASE_PORT: "5432"

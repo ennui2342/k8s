@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mg-reporting-worker
+  namespace: mg-reporting
+spec:
+  # DELIBERATELY 0 at first deploy (tm ab70cca6): the production database
+  # must be loaded from the dev database (a separate, interactive task)
+  # before the worker's first scheduled run (collectors 06:20 Europe/London
+  # daily), otherwise it baselines an empty registry. That data-load task
+  # scales this to 1.
+  replicas: 0
+  strategy:
+    type: Recreate # single Solid Queue supervisor; never two at once
+  selector:
+    matchLabels:
+      app: mg-reporting-worker
+  template:
+    metadata:
+      labels:
+        app: mg-reporting-worker
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      # Private GHCR image (commercially sensitive repo) - unlike opsimath/
+      # taskmgt, this needs a pull secret. Read-only PAT (read:packages).
+      imagePullSecrets:
+        - name: ghcr-pull
+      containers:
+        - name: mg-reporting-worker
+          # Built and pushed by mg-reporting's own CI (.github/workflows/build.yml);
+          # Flux image automation (flux-system/mg-reporting-image-automation.yaml)
+          # updates this tag via the Setter marker below.
+          image: ghcr.io/ennui2342/mg-reporting:1.20261111.1 # {"$imagepolicy": "flux-system:mg-reporting"}
+          imagePullPolicy: IfNotPresent
+          # The image's entrypoint (/rails/bin/docker-entrypoint) runs
+          # db:prepare first when the command is bin/jobs - there is no web
+          # Deployment, so this single replica is the only process that ever
+          # runs it (no CREATE DATABASE race, no wait-for-schema
+          # initContainer needed).
+          #
+          # `args`, NOT `command`: in Kubernetes `command` replaces the
+          # image's ENTRYPOINT, which would skip docker-entrypoint and so
+          # skip db:prepare. `args` replaces only CMD, so the entrypoint
+          # still runs and execs bin/jobs.
+          args: ["bin/jobs"]
+          envFrom:
+            - configMapRef:
+                name: mg-reporting-config
+            - secretRef:
+                name: mg-reporting-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 384Mi
+            limits:
+              memory: 1Gi

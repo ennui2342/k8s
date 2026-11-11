@@ -1,0 +1,43 @@
+# Static Retain PV for the bundled Postgres 18 datadir - same pattern as
+# opsimath/postgres-pv.yaml (see LINT.md's storage-durability rule): a
+# datastore PVC must not sit on the nfs-client StorageClass's dynamic
+# Delete policy.
+#
+# The StatefulSet's volumeClaimTemplate (`data`, in postgres.yaml) generates
+# data-mg-reporting-db-0; this PVC is pre-created with that exact name so the
+# StatefulSet adopts it instead of provisioning a fresh dynamic one. Listed
+# before postgres.yaml in kustomization.yaml for that reason.
+#
+# NAS dir /mnt/md0/k8s/mg-reporting-db was created by hand (mode 777, same
+# as the other static-PV dirs) before first apply - see RUNBOOK's
+# "mg-reporting" section.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mg-reporting-db-pv
+spec:
+  accessModes: ["ReadWriteOnce"]
+  capacity:
+    storage: 5Gi
+  claimRef:
+    name: data-mg-reporting-db-0
+    namespace: mg-reporting
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-client
+  volumeMode: Filesystem
+  nfs:
+    path: /mnt/md0/k8s/mg-reporting-db
+    server: 192.168.0.76
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data-mg-reporting-db-0
+  namespace: mg-reporting
+spec:
+  volumeName: mg-reporting-db-pv
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 5Gi

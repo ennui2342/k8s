@@ -1,0 +1,95 @@
+# Postgres 18 for mg-reporting - a copy of opsimath/postgres.yaml (see that
+# file for the reasoning behind every setting below: the patched image, no
+# POSTGRES_DB, the /var/lib/postgresql mount, -d app_production on
+# pg_isready, and the NFS-tolerant probe timings).
+apiVersion: v1
+kind: Service
+metadata:
+  name: mg-reporting-db
+  namespace: mg-reporting
+spec:
+  clusterIP: None
+  selector:
+    app: mg-reporting-db
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mg-reporting-db
+  namespace: mg-reporting
+spec:
+  serviceName: mg-reporting-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mg-reporting-db
+  template:
+    metadata:
+      labels:
+        app: mg-reporting-db
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      containers:
+        - name: postgres
+          # Same local fork as opsimath-db (tracked once, by image string, in
+          # trivy/patched-images.yaml) - bump both together.
+          image: 127.0.0.1:30500/postgres:18.6-trixie-patched
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            # config/database.yml's production block hardcodes username: app.
+            - name: POSTGRES_USER
+              value: app
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mg-reporting-secrets
+                  key: APP_DATABASE_PASSWORD
+            # No POSTGRES_DB deliberately - app_production and
+            # app_production_queue are both created by bin/rails db:prepare
+            # (the worker's entrypoint runs it before bin/jobs).
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "app", "-d", "app_production"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 15
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "app", "-d", "app_production"]
+            initialDelaySeconds: 300
+            periodSeconds: 10
+            timeoutSeconds: 15
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: nfs-client
+        resources:
+          requests:
+            storage: 5Gi

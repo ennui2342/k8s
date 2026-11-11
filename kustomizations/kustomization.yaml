@@ -12,6 +12,7 @@ resources:
   - isfdb.yaml
   - k3s-upgrade.yaml
   - linkding.yaml
+  - mg-reporting.yaml
   - mdns.yaml
   - monitoring.yaml
   - mosquitto.yaml

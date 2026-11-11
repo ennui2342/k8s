@@ -958,6 +958,42 @@ delete pvc data-opsimath-db-0 -n opsimath` (safe pre-data; the StatefulSet recre
 it initialize fresh, uninterrupted this time — check `kubectl exec -n opsimath opsimath-db-0 --
 cat /var/lib/postgresql/18/docker/pg_hba.conf` afterward for that line before assuming it's fixed.
 
+### mg-reporting
+
+Worker-only Rails 8.1 + Solid Queue app (Competitor Watch), same CI + Flux image automation
+pattern as opsimath (`flux-system/mg-reporting-image-automation.yaml`), with two differences:
+
+- **Private repo and private image.** `ghcr.io/ennui2342/mg-reporting` needs auth to pull *and* to
+  scan. Two SOPS `docker-registry` secrets carry the same read:packages-only classic PAT
+  (`GHCR_READ_TOKEN` in `~/projects/mg-reporting/.env`, username `ennui2342`):
+  `mg-reporting/ghcr-pull-secret.yaml` (`ghcr-pull`, the pod's `imagePullSecrets`) and
+  `flux-system/mg-reporting-ghcr-secret.yaml` (`mg-reporting-ghcr`, the `ImageRepository`'s
+  `secretRef`). If the PAT is rotated or expires, regenerate both. Never echo the token:
+  ```sh
+  TOK=$(grep '^GHCR_READ_TOKEN=' ~/projects/mg-reporting/.env | cut -d= -f2-)
+  kubectl create secret docker-registry ghcr-pull -n mg-reporting --docker-server=ghcr.io \
+    --docker-username=ennui2342 --docker-password="$TOK" --dry-run=client -o yaml \
+    | grep -v creationTimestamp > mg-reporting/ghcr-pull-secret.yaml
+  sops --encrypt --in-place mg-reporting/ghcr-pull-secret.yaml   # same again for flux-system/mg-reporting-ghcr
+  ```
+  `mg-reporting/mg-reporting-secret.yaml` holds `APP_DATABASE_PASSWORD` and `SECRET_KEY_BASE`
+  (generate fresh with `openssl rand -hex`; the DB password only has to match the bundled
+  Postgres) plus the API/Gmail keys and `DIGEST_TO`, copied from that same `.env`.
+- **No web pod.** The worker runs `args: ["bin/jobs"]`, and the image's `docker-entrypoint` runs
+  `db:prepare` first. Keep it `args`, not `command`: `command` replaces the ENTRYPOINT and would
+  skip `db:prepare`.
+
+**Static PV dir:** `/mnt/md0/k8s/mg-reporting-db` was created by hand before first apply
+(`ssh -p 9222 ennui2342@192.168.0.76 'mkdir /mnt/md0/k8s/mg-reporting-db && chmod 777
+/mnt/md0/k8s/mg-reporting-db'`, matching the other static-PV dirs; the Postgres entrypoint chowns
+it). On a rebuild the dir and data already exist on the NAS, so there's nothing to do.
+
+**Bring-up order (first deploy, 2026-11-11):** the worker was committed at `replicas: 0`. The
+production DB must be loaded from the dev DB (a separate interactive task) before the worker's
+first scheduled collector run (06:20 Europe/London daily), or it baselines an empty registry. That
+task scales the Deployment to 1 in git. On a cluster rebuild where the NAS data survived, the
+worker can go straight to 1.
+
 ### WebDAV (Zotero) — Tailscale Funnel
 
 `webdav/funnel-ingress.yaml` exposes webdav at a stable `*.ts.net` hostname via the
