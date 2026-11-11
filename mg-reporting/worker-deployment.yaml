@@ -35,7 +35,7 @@ spec:
           # Built and pushed by mg-reporting's own CI (.github/workflows/build.yml);
           # Flux image automation (flux-system/mg-reporting-image-automation.yaml)
           # updates this tag via the Setter marker below.
-          image: ghcr.io/ennui2342/mg-reporting:1.20261111.1 # {"$imagepolicy": "flux-system:mg-reporting"}
+          image: ghcr.io/ennui2342/mg-reporting:1.20261111.2 # {"$imagepolicy": "flux-system:mg-reporting"}
           imagePullPolicy: IfNotPresent
           # The image's entrypoint (/rails/bin/docker-entrypoint) runs
           # db:prepare first when the command is bin/jobs - there is no web
