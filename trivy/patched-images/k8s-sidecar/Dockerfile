@@ -1,7 +1,11 @@
 # Frozen-rebuild patch of docker.io/kiwigrid/k8s-sidecar.
 #
-# Base: 2.14.1 (rebased 2026-10-13 from 2.13.3, per reconcile-scanner task
-# baafbf9e). 2.14.x moves to Alpine 3.24.2 / stable Python 3.14.8 (from
+# Base: 2.14.3 (rebased 2026-11-11 from 2.14.1, per reconcile-scanner task
+# 3861ae0e; changelog 2.14.1 -> 2.14.3: 2.14.2 was never published, 2.14.3
+# moves the base to python:3.14.10-alpine3.24 (musl 1.2.6-r3,
+# CVE-2026-107891) for riscv64 support + CI action bumps — no app, config or
+# runtime changes; system pip now 26.2.2, venv pip still 26.1.2, same paths).
+# Previously rebased 2026-10-13 from 2.13.3 onto 2.14.1 (task baafbf9e). 2.14.x moves to Alpine 3.24.2 / stable Python 3.14.8 (from
 # Alpine 3.22.4 / Python 3.15.0b2), which clears the libuuid HIGHs the
 # earlier forks existed for. Changelog 2.13.3 -> 2.14.1: 2.14.0 = stable
 # Python 3.14 base + charset segfault fix + s390x re-added; 2.14.1 =
@@ -30,7 +34,7 @@
 #
 # Base image runs as uid 65534:65534 (nobody, non-root) — apk/rm require
 # root, so switch back afterward to preserve the original runtime UID.
-FROM docker.io/kiwigrid/k8s-sidecar:2.14.1
+FROM docker.io/kiwigrid/k8s-sidecar:2.14.3
 USER root
 RUN apk update && apk upgrade --no-cache \
  && rm -rf /usr/local/lib/python3.14/site-packages/pip \

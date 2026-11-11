@@ -106,11 +106,14 @@ spec:
     # kubernetes client 36). Upstream's residual 4 HIGH are all inside pip's vendored libs
     # (msgpack/urllib3/setuptools), so the fork now also strips pip, which the sidecar never
     # uses at runtime (0 CRITICAL / 0 HIGH).
+    # 2026-11-11: rebased onto upstream 2.14.3 (python 3.14.10 base, musl CVE-2026-107891;
+    # no app/config changes) — upstream still 0 CRITICAL / 5 HIGH in pip's vendored libs,
+    # same pip-strip recipe -> 0 CRITICAL / 0 HIGH (reconcile-scanner task 3861ae0e).
     sidecar:
       image:
         registry: "127.0.0.1:30500"
         repository: "k8s-sidecar"
-        tag: "2.14.1-patched"
+        tag: "2.14.3-patched"
         pullPolicy: IfNotPresent
 
     # Disable extras not needed for single-binary homelab
