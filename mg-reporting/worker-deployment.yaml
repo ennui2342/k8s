@@ -4,12 +4,10 @@ metadata:
   name: mg-reporting-worker
   namespace: mg-reporting
 spec:
-  # DELIBERATELY 0 at first deploy (tm ab70cca6): the production database
-  # must be loaded from the dev database (a separate, interactive task)
-  # before the worker's first scheduled run (collectors 06:20 Europe/London
-  # daily), otherwise it baselines an empty registry. That data-load task
-  # scales this to 1.
-  replicas: 0
+  # Was 0 at first deploy (tm ab70cca6) until the production database was
+  # loaded from dev (tm 05600a16, 2026-11-11). Only ever 1: a single Solid
+  # Queue supervisor owns the recurring schedule.
+  replicas: 1
   strategy:
     type: Recreate # single Solid Queue supervisor; never two at once
   selector:
