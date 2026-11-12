@@ -370,7 +370,7 @@ health-monitor/   — CronJob: Flux Kustomization/HelmRelease checks + Alertmana
 home-assistant/   — HA deployment, service, ingress, PVC
 isfdb/            — Self-hosted ISFDB mirror: MariaDB StatefulSet, adapter Deployment (JSON API over the mirror), weekly refresh CronJob; adapter/ holds the custom image source (Dockerfile, adapter.py, refresh.py)
 master-backup/    — k3s-backup.sh, deployed by hand to master (node-local cron, not GitOps-managed) — see RUNBOOK "Master Datastore Backup & Restore"
-node-provisioning/ — Host-local config deployed by hand to every node (not GitOps-managed): 52unattended-upgrades-local.conf
+node-provisioning/ — Host-local config deployed by hand to every node (not GitOps-managed): 52unattended-upgrades-local.conf, 99-k8s-apparmor.conf (sysctl; kernel 1023 AppArmor stacking broke in-container signals 2026-11-12, see RUNBOOK 0f-bis)
 k8s-toolbox/      — Dockerfile only, no manifests: shared image for lightweight CronJobs (kubectl + openssh-client/curl/jq/python3/py3-yaml), see Monitoring & Alerting
 linkding/         — Self-hosted bookmark manager: deployment, data PVC, internal + Tailscale ingress, bootstrap + API-token secrets, linkding-task-sync CronJob (bookmark→tm bridge)
 mg-reporting/     — Worker-only Rails app (private GHCR image): Solid Queue worker Deployment (replicas: 1), bundled Postgres 18 StatefulSet + static Retain PV, GHCR pull secret, app secret

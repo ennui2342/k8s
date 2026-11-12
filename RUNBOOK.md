@@ -386,6 +386,36 @@ in practice.** Any new node-local cron entry or CronJob should avoid
 section for the other nightly windows (01:00/06:00 agent-orchestrator
 dispatch, 03:30 master backup) this was chosen to sit clear of.
 
+### 0f-bis. AppArmor sysctl: let runc apply container profiles unstacked
+
+Deploy `node-provisioning/99-k8s-apparmor.conf` to `/etc/sysctl.d/` on
+every node (it's the same on every node, nothing per-node to change):
+```sh
+scp node-provisioning/99-k8s-apparmor.conf ubuntu@<node>:/tmp/
+ssh ubuntu@<node> "sudo mv /tmp/99-k8s-apparmor.conf /etc/sysctl.d/ && sudo chown root:root /etc/sysctl.d/99-k8s-apparmor.conf && sudo sysctl --system >/dev/null && sysctl kernel.apparmor_restrict_unprivileged_unconfined"
+```
+Expect `= 0`. It overrides the `= 1` in the apparmor package's
+`/usr/lib/sysctl.d/10-apparmor.conf`.
+
+**Why:** confirmed live 2026-11-12. After the nodes rebooted onto kernel
+`7.0.0-1023-raspi`, the kernel started converting runc's `change_onexec`
+into a stack (dmesg: `change_profile unprivileged unconfined converted
+to stacking`). Every container then ran as
+`cri-containerd.apparmor.d//&unconfined`. containerd's default profile
+only accepts signals from peer `cri-containerd.apparmor.d`, so signals
+between processes *inside the same container* were denied, and the
+stack also let Ubuntu's host profiles (e.g. `/etc/apparmor.d/mosquitto`)
+attach inside containers. Result: mosquitto (and modpoll behind it)
+crash-looped, and isfdb-db, opsimath-db and mg-reporting-db never became
+ready. The same kernel on 1020 was fine.
+
+The sysctl only affects containers started **after** it's set. A process
+still on the stacked label shows `//&unconfined` in
+`/proc/<pid>/attr/current`; restart its pod:
+```sh
+sudo grep -l '//&unconfined' /proc/[0-9]*/attr/current | wc -l   # expect 0
+```
+
 ### 0g. Local registry mirror config — do this BEFORE the k3s join, not after
 
 **Easy to skip because nothing fails immediately — it only bites once a
