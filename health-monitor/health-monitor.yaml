@@ -44,6 +44,13 @@ data:
 
     STATUS_TOKEN_RE = re.compile(r'\s*§\S+')
 
+    # Auto-close applies to §wait tasks too, not just §open. A health specialist
+    # that escalates an alert task to a human parks it in §wait; checking only
+    # §open meant that task never closed once the alert cleared, and the
+    # resolution never reached Discord (2026-11-12 kernel-1023 AppArmor
+    # incident, b92a02d6).
+    CLOSABLE_STATUSES = ('open', 'wait')
+
     def strip_status(text):
         lines = text.split('\n', 1)
         first = STATUS_TOKEN_RE.sub('', lines[0])
@@ -199,7 +206,7 @@ data:
     FLUX_TASK_RE = re.compile(r'^((?:kustomization|helmrelease)/\S+?)(?::| in )')
     if flux_queries_ok:
         for t in existing_tasks:
-            if t.get('status') != 'open':
+            if t.get('status') not in CLOSABLE_STATUSES:
                 continue
             m = FLUX_TASK_RE.match(t.get('text', ''))
             if not m or m.group(1) in flux_failing:
@@ -278,7 +285,7 @@ data:
             })
     else:
         for t in existing_tasks:
-            if t.get('status') != 'open' or ALERTMANAGER_UNREACHABLE_MARKER not in t.get('text', ''):
+            if t.get('status') not in CLOSABLE_STATUSES or ALERTMANAGER_UNREACHABLE_MARKER not in t.get('text', ''):
                 continue
             print(f'Closing {t["id"]}: Alertmanager reachable again')
             if update_task(t['id'], set_status(t['text'] + '\n* Resolved: Alertmanager reachable again', 'closed')):
@@ -335,7 +342,7 @@ data:
     for t in existing_tasks:
         if not alertmanager_reachable:
             break
-        if t.get('status') != 'open':
+        if t.get('status') not in CLOSABLE_STATUSES:
             continue
         m = re.search(r'AlertFingerprint:\s*(\S+)', t.get('text', ''))
         if not m or m.group(1) in active_fingerprints:
