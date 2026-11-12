@@ -37,6 +37,7 @@ metadata:
 data:
   monitor.py: |
     import json, subprocess, os, sys, re, hashlib
+    from datetime import datetime, timedelta, timezone
 
     TM_API = 'http://api.taskmgt.svc.cluster.local:8081'
     ALERTMANAGER_API = 'http://kube-prometheus-stack-alertmanager.monitoring.svc:9093/api/v2'
@@ -90,6 +91,41 @@ data:
         except Exception as e:
             print(f'Warning: could not parse task list: {e}', file=sys.stderr)
             return []
+
+
+    # A flapping alert (e.g. ReplicasMismatch while a pod crash-loops) used to
+    # close its task and file a brand-new one on every flap, each with its own
+    # Discord post: 2026-11-12, f27c1209 -> c7600ea2 and 150d9ccc -> 5ee532a3
+    # (tm ece94500). A fingerprint that re-fires within this window reopens its
+    # last task instead. The gaps that day were ~2.5h, so a short grace period
+    # before closing would not have helped.
+    REOPEN_WINDOW = timedelta(hours=24)
+
+    def get_recently_closed_alert_tasks():
+        """Most recently closed bridge task per alert fingerprint, closed within REOPEN_WINDOW."""
+        r = subprocess.run(['curl', '-sf', f'{TM_API}/tasks?status=closed'],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            print('Warning: could not fetch closed tasks; re-firing alerts get new tasks', file=sys.stderr)
+            return {}
+        try:
+            data = json.loads(r.stdout)
+            tasks = data if isinstance(data, list) else data.get('tasks', [])
+        except Exception as e:
+            print(f'Warning: could not parse closed task list: {e}', file=sys.stderr)
+            return {}
+        cutoff = datetime.now(timezone.utc) - REOPEN_WINDOW
+        latest = {}
+        for t in tasks:
+            if '<cli.cluster-health' not in t.get('text', '') or not t.get('completed_at'):
+                continue
+            m = re.search(r'AlertFingerprint:\s*(\S+)', t['text'])
+            if not m:
+                continue
+            done = datetime.fromisoformat(t['completed_at'].replace('Z', '+00:00'))
+            if done >= cutoff and (m.group(1) not in latest or done > latest[m.group(1)][0]):
+                latest[m.group(1)] = (done, t)
+        return {fp: t for fp, (_, t) in latest.items()}
 
 
     def issue_tracked(resource_id, existing_tasks):
@@ -155,6 +191,8 @@ data:
     issues = []
     closed = []
     existing_tasks = get_existing_health_tasks()
+    recently_closed = get_recently_closed_alert_tasks()
+    reopened = []
     print(f'Existing cluster-health tasks: {len(existing_tasks)}')
 
     # --- Flux kustomizations: failed or stalled ---
@@ -306,6 +344,15 @@ data:
         if issue_tracked(alert_fingerprint_marker(fp), existing_tasks):
             print(f'Already tracked: alert {name} ({fp})')
             continue
+        if fp in recently_closed:
+            t = recently_closed.pop(fp)
+            note = (f'\n* Re-fired {alert.get("startsAt", "unknown")} after closing at '
+                    f'{t["completed_at"][:16]}Z: reopened, not re-filed')
+            if update_task(t['id'], set_status(t['text'] + note, 'open')):
+                print(f'Reopened {t["id"]}: alert {name} ({fp}) re-fired')
+                reopened.append(t['text'].split('\n', 1)[0])
+                continue
+            print(f'Reopen of {t["id"]} failed, filing a new task instead', file=sys.stderr)
 
         priority = SEVERITY_PRIORITY.get(labels.get('severity', ''), '!3')
         kept_labels = {k: v for k, v in labels.items() if k not in SKIP_LABELS}
@@ -360,13 +407,19 @@ data:
     else:
         print('No new cluster health issues detected')
 
-    if (created or closed) and DISCORD_WEBHOOK:
+    if (created or closed or reopened) and DISCORD_WEBHOOK:
         lines = ['**Cluster Health Monitor**']
         if created:
             lines.append(f'{len(created)} new issue(s):')
             lines.append('```')
             for issue in created:
                 lines.append(f"{issue['priority']} {issue['resource']}")
+            lines.append('```')
+        if reopened:
+            lines.append(f'{len(reopened)} re-fired (task reopened):')
+            lines.append('```')
+            for title in reopened:
+                lines.append(f'🔁 {title}')
             lines.append('```')
         if closed:
             lines.append(f'{len(closed)} resolved:')
@@ -381,7 +434,7 @@ data:
             capture_output=True
         )
 
-    print(f'Done: {len(created)} task(s) created, {len(closed)} task(s) closed')
+    print(f'Done: {len(created)} task(s) created, {len(reopened)} reopened, {len(closed)} task(s) closed')
 ---
 apiVersion: batch/v1
 kind: CronJob
