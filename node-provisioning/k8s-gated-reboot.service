@@ -1,0 +1,10 @@
+# Host-local, NOT GitOps-managed: deploy to /etc/systemd/system/ on every node.
+# See k8s-gated-reboot.sh and RUNBOOK.md "0f. Automatic reboot for security updates".
+[Unit]
+Description=Reboot for pending updates, only if the k8s cluster is healthy
+After=network-online.target k3s.service k3s-agent.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/k8s-gated-reboot

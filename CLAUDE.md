@@ -336,9 +336,15 @@ is.
 Routine host-OS security patches themselves are handled by `unattended-upgrades`, present by
 default on the base image, not something this repo configures — except the actual **reboot**
 to activate a patch that needs one (kernel updates, mainly), which is: see
-`node-provisioning/52unattended-upgrades-local.conf`, deployed by hand to every node (not
-GitOps-managed, host-local like the containerd registry trust config and master's backup cron).
-**Reserves 04:15–05:15 daily, staggered per node (master 04:15, `k8s-1` 04:30, `k8s-2` 04:45,
+`node-provisioning/` (`52unattended-upgrades-local.conf` + `k8s-gated-reboot.{sh,service,timer}`),
+deployed by hand to every node (not GitOps-managed, host-local like the containerd registry
+trust config and master's backup cron). unattended-upgrades' own `Automatic-Reboot` is off;
+`k8s-gated-reboot.timer` reboots at the node's slot **only if Prometheus shows the cluster
+healthy** (all nodes Ready, nothing crash-looping, no Running pod stuck not-Ready, and
+kube-state-metrics actually reporting), otherwise holds and posts a `NodeRebootHeld` alert that
+health-monitor turns into a task. Added after 2026-11-12, when the old blind timer rebooted all
+four nodes onto a kernel (7.0.0-1023) that broke container AppArmor, k8s-1 first and the rest
+anyway (tm 17f100eb). **Reserves 04:15–05:15 daily, staggered per node (master 04:15, `k8s-1` 04:30, `k8s-2` 04:45,
 `k8s-3` 05:00, ~5min each in practice), for an automatic reboot** if one's pending — avoid
 scheduling any new node-local cron entry or CronJob in that window. Staggered deliberately, not
 a single shared time: every node runs the identical OS image, so an update needing a reboot

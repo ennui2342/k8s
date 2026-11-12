@@ -380,6 +380,37 @@ that's apt's own merged view, the same thing `unattended-upgrades`
 actually reads, and confirms the value is actually distinct per node,
 not accidentally the same file copied everywhere.
 
+**Then deploy the health gate, which does the actual reboot.** Since
+2026-11-12 the conf above sets `Automatic-Reboot "false"`. The reboot is
+done by `k8s-gated-reboot.timer` at the same per-node slot. It reboots only
+if `/run/reboot-required` exists and Prometheus shows every node Ready, no
+crash-looping or image-pull-failing containers, and no Running pod stuck
+not-Ready. Otherwise it holds and posts a `NodeRebootHeld` alert to
+Alertmanager (health-monitor bridges it into a tm task), and retries the
+next day. Why: on 2026-11-12 the blind per-node timer rebooted all four
+nodes onto kernel 7.0.0-1023-raspi, which broke container AppArmor
+(see 0f-bis). k8s-1 broke isfdb-db at 04:32, and k8s-2/k8s-3 rebooted
+anyway. Replaying the gate's checks against Prometheus history showed it
+would have held k8s-2 at 04:45 (isfdb-db-0 Running, not Ready), and passed
+all 56 slots of the 14 nights before.
+```sh
+# same per-node slot as Automatic-Reboot-Time above
+sed "s/OnCalendar=\*-\*-\* 04:15:00/OnCalendar=*-*-* <this node's time>:00/" \
+  node-provisioning/k8s-gated-reboot.timer > /tmp/k8s-gated-reboot.timer
+scp node-provisioning/k8s-gated-reboot.sh node-provisioning/k8s-gated-reboot.service \
+  /tmp/k8s-gated-reboot.timer ubuntu@<node>:/tmp/
+ssh ubuntu@<node> "sudo install -m 0755 /tmp/k8s-gated-reboot.sh /usr/local/sbin/k8s-gated-reboot \
+  && sudo install -m 0644 /tmp/k8s-gated-reboot.service /tmp/k8s-gated-reboot.timer /etc/systemd/system/ \
+  && sudo systemctl daemon-reload && sudo systemctl enable --now k8s-gated-reboot.timer"
+```
+Verify per node: `systemctl list-timers k8s-gated-reboot.timer` shows the
+node's own slot, `apt-config dump | grep 'Automatic-Reboot '` says
+`"false"`, and `sudo k8s-gated-reboot --dry-run` prints the decision
+without posting or rebooting. The gate needs CoreDNS (`10.43.0.10`) and
+Prometheus up. If either is down it holds (fail closed), and if
+Alertmanager is down too the hold is only in the journal
+(`journalctl -t k8s-gated-reboot`).
+
 **Full reserved window: 04:15 (master) – 05:00 (k8s-3), done by ~05:05
 in practice.** Any new node-local cron entry or CronJob should avoid
 04:00–05:15 to leave headroom — see CLAUDE.md's CVE Patch Management

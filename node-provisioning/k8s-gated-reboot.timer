@@ -1,0 +1,13 @@
+# Host-local, NOT GitOps-managed: deploy to /etc/systemd/system/ on every node.
+# STAGGERED per node, same slots unattended-upgrades' Automatic-Reboot-Time used:
+#   master (k8s) 04:15, k8s-1 04:30, k8s-2 04:45, k8s-3 05:00
+# This copy: MASTER. Change OnCalendar before deploying to a worker.
+[Unit]
+Description=Daily health-gated reboot slot for pending updates
+
+[Timer]
+OnCalendar=*-*-* 04:15:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
