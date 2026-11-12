@@ -321,7 +321,7 @@ today is this repo — runs every 30min, though CVE/health work still only dispa
 1am/6am window) works the
 queue: an orchestrator selects the highest-priority eligible task and routes it by tag to an
 upgrade, health, or deploy specialist subagent. The upgrade specialist's prompt lives at
-`~/projects/agents/k8s/upgrade-prompt.md` (its own separate, tracked git repo — not part
+`~/projects/agents/k8s/upgrade-prompt.md` (its own separate git repo, private `ennui2342/agents` — not part
 of this one).
 
 Trivy's scan is container-image-only — it never sees the host OS itself, which is why the
