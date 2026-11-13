@@ -7388,7 +7388,7 @@ spec:
             resourceFieldRef:
               containerName: manager
               resource: limits.memory
-        image: ghcr.io/fluxcd/kustomize-controller:v1.10.1
+        image: 127.0.0.1:30500/kustomize-controller:v1.10.1-patched-20261113
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:

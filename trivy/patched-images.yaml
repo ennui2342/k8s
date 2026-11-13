@@ -41,6 +41,16 @@
   critical: 2
   high: 8
 
+- workload: flux-system/Deployment/kustomize-controller
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/kustomize-controller:v1.10.1-patched-20261113
+  upstream_image: ghcr.io/fluxcd/kustomize-controller:v1.10.1
+  build_recipe: trivy/patched-images/kustomize-controller/Dockerfile
+  reason: "Forked 2026-11-13 (tm 651d6773, cve-scanner). Plain v1.10.1 (Alpine 3.24.3) is still the newest kustomize-controller release (GitHub releases checked) and now carries 1 CRITICAL + 7 HIGH fixable OS-package CVEs: openssh-client/keygen 10.3_p1-r1 (CVE-2026-123158 CRITICAL, fix 10.3_p1-r2), git 2.54.0-r0 (CVE-2026-105437/111760/114466, fix 2.54.1-r0), libexpat 2.9.0-r0 (CVE-2026-113351/115506/117610/118370, fix 2.10.0-r0). Same-tag `apk upgrade` (verified via --simulate: also bumps alpine-release 3.24.4, zlib 1.4-r0, apk-tools 3.0.9) closes all of them; controller binary, entrypoint and USER 65534 untouched, so no controller behaviour change and no changelog to review. Local trivy 0.76.0 (--ignore-unfixed --severity CRITICAL,HIGH, gobinary included): plain v1.10.1 alpine layer 3 CRITICAL + 10 HIGH package findings, patched alpine layer 0 + 0. Residual 1 HIGH is in the Go binary (golang.org/x/net v0.61.0 CVE-2026-78661, fix 0.62.0) - out of scope for an apk-upgrade fork, same residual class as the other Flux/home-assistant forks; needs a new upstream release. Revert to plain upstream once fluxcd ships a kustomize-controller tag with openssh >= 10.3_p1-r2, git >= 2.54.1-r0 and libexpat >= 2.10.0-r0. Earlier fork lineage (v1.9.4 -> v1.10.0-patched) dropped 2026-11-03 in 2907eab; see git history."
+  patched_date: "2026-11-13"
+  critical: 1
+  high: 7
+
 - workload: default/DaemonSet/mdns-repeater-worker
   strategy: frozen-rebuild
   patched_image: 127.0.0.1:30500/mdns-repeater:latest-patched
