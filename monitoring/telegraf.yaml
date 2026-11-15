@@ -195,7 +195,7 @@ spec:
         # Digest-pinned: Docker Hub rebuilds official-image tags in place (e.g. 1.40.1
         # on 2026-10-06 for pcre2 CVE-2026-103111), and IfNotPresent would silently
         # reuse a node's cached pre-rebuild layer without the digest.
-        image: telegraf:1.40.2@sha256:3992a56245a9477dfad5b98d9354d3ea7c1bced0aab6630ba49f23ac9a4d269e
+        image: telegraf:1.40.3@sha256:2958e3cbdc22d702ebd4a1e2db004c564f52a866551a65817eea26011407ea66
         imagePullPolicy: IfNotPresent
         env:
         - name: HOSTNAME
