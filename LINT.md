@@ -88,6 +88,8 @@ covers the gap. Re-checked 2026-10-15: same 21 containers / 19 manifests, no dri
 containers / 18 manifests**. `nfs-subdir-external-provisioner` was fixed (`aa2a930`), the unreferenced
 `monitoring/node-exporter.yaml` was deleted, and `system-upgrade-controller` is new (vendored in
 `system-upgrade/upstream/`, so its fix belongs in that directory's kustomize patches). Noted on `c6e594d0`.
+Re-checked 2026-11-15: same 20 / 18, no drift. The new `mg-reporting/` (2026-11-10) sets resources on both its
+worker and Postgres containers.
 
 **No orphaned PVCs** (Bound, but no owning workload *and* no manifest reference anywhere in this
 repo). Audited repo-wide 2026-07-29: every Bound PVC was cross-checked against every manifest in
@@ -110,7 +112,7 @@ CR's own `volumeClaimTemplate` (not a StatefulSet this repo authors directly), s
 actively Bound to a `Running` pod. Before treating a no-owner, no-name-match PVC as orphaned,
 confirm no `Running` pod currently has it mounted (`kubectl get pod -A -o json` cross-referenced
 by volume claim name) — a live mount means "operator-managed", not "orphaned", regardless of what
-grep finds. Re-checked 2026-10-15 and 2026-11-01: only the two `resiliosync-*` PVCs flagged, `776f5af9` still open.
+grep finds. Re-checked 2026-10-15, 2026-11-01 and 2026-11-15: only the two `resiliosync-*` PVCs flagged, `776f5af9` still open.
 
 **Every `imagePullPolicy: Never` entry should have an explicit comment explaining why** it's on
 that pattern instead of the local registry (`registry/`, `127.0.0.1:30500`). Audited repo-wide
@@ -192,6 +194,10 @@ apply. Recorded as a note on `24344397`. Nodes now run Ubuntu 26.04 / kernel 7.0
 (cgroup v2 by default) with containerd 2.1.5, so the cgroup-v1/containerd-1.x removals in recent
 k8s minors shouldn't block the jump. See the deprecated-API rule below for the other pre-upgrade
 check. **Resolved 2026-10-24:** upgraded v1.32.13 → v1.33.13 → v1.34.12 → v1.35.9 → **v1.36.5+k3s1** via system-upgrade-controller (Kubernetes 1.36 EOL 2027-06-28), `24344397` closed. The declared version now lives in `k3s-upgrade/plans.yaml`; check that file *and* `kubectl get nodes` against endoflife.date. Re-checked 2026-11-01: compliant. v1.36.5+k3s1 is still k3s's `stable` channel; 1.37 is out, but there's no EOL pressure yet.
+Re-checked 2026-11-15: still compliant (all four nodes `v1.36.5+k3s1`). The `stable` channel has moved to
+`v1.37.2+k3s1`, and `v1.36.6+k3s1` was released 2026-11-03. It bundles Traefik 3.7.15 and klipper-helm/helm-controller
+v0.17.9, which addresses most of the bundled-image CVEs in `c2c2b99f` (noted there). Check the channel with
+`curl -s https://update.k3s.io/v1-release/channels | jq -r '.data[] | "\(.name) \(.latest)"'`.
 
 **Every app namespace should have an explicit answer on network segmentation, even if the answer
 is "not yet."** New rule 2026-09-15 (Phase 2 research pass). Check method: `git grep -l "kind:
@@ -207,7 +213,7 @@ of security-posture judgement call as Pod Security Admission above. Ticketed as 
 `eba39725` (untagged, human-review-only, `+cli.claude-code.k8s`) rather than adopted directly.
 Future audits: if this task is still open and still zero NetworkPolicies exist, note it in the
 report; if it's been closed but the gap is unaddressed, that's worth a fresh look. Re-checked
-2026-10-01, 2026-10-15 and 2026-11-01: still only Flux's three bootstrap policies, `eba39725` still open. No change.
+2026-10-01, 2026-10-15, 2026-11-01 and 2026-11-15: still only Flux's three bootstrap policies, `eba39725` still open. No change.
 
 **Every Deployment/StatefulSet/DaemonSet must include the soft worker-preference node affinity**
 from CLAUDE.md's Scheduling Constraints section (or, for a DaemonSet that must run on every node
@@ -293,7 +299,12 @@ No new violations; `cb71bb32` covers the remaining 16 (its "17/16" title is one 
 `librarium-*` caveat as the resources rule: those reference manifests no longer exist.
 Re-checked 2026-10-15: same 16 / 15, no drift. Re-checked 2026-11-01: still 16 / 15, but the
 composition changed: `node-exporter` went (manifest deleted, it was never deployed) and
-`system-upgrade-controller` came in. Noted on `cb71bb32`.
+`system-upgrade-controller` came in. Noted on `cb71bb32`. Re-checked 2026-11-15: **17 / 16**. The one new
+violation is `mg-reporting/worker-deployment.yaml`'s `mg-reporting-worker` (added 2026-11-10, `5e5d75b`). It's a
+worker-only Solid Queue supervisor with no HTTP port, the same shape as `opsimath-worker`, so both should get
+the same exec-style probe. Folded into `cb71bb32` (title and notes updated) rather than a new ticket. When
+adding any new worker-only Deployment, decide on its probe at creation time rather than leaving it for this
+rule to catch.
 
 **No manifest may use a deprecated API version, and the live apiserver must report no
 deprecated-API traffic.** New rule 2026-10-01 (Phase 2 pass). Currently fully compliant, so it's
@@ -340,6 +351,11 @@ live 2026-11-01, three series:
 Half 2 on 2026-11-01: `alerts`/`providers` v1beta3 are now deprecated-but-served and every tracked
 manifest uses `v1`, so it's compliant. The Gateway API deprecated versions are all `served: false`.
 
+Re-checked 2026-11-15: half 1 now shows only the `endpoints` v1 series (`removed_release` still empty). The
+notification v1beta3 series are gone. The gauge resets when the apiserver restarts, and master rebooted
+2026-11-12, so nothing has requested v1beta3 since then. The unidentified `WATCH` client noted above has
+stopped. Half 2 is unchanged and compliant.
+
 **No deployed image may use a floating/mutable tag.** New rule 2026-10-15 (closes `tm` task
 `c479debe`). Every `image:` in a tracked manifest, and every image tag set in HelmRelease
 values, must match `^v?[0-9]+\.[0-9]+(\.[0-9]+)*` (at least MAJOR.MINOR, tightened 2026-11-01, with
@@ -374,6 +390,14 @@ on every release, so it's as mutable as `latest`, and the old regex passed it.
   also picked up upstream's current 11.8.9 rebuild.
 - `registry/deployment.yaml`: `registry:2`. Tracked in `092fd102`, which replaces its EOL base.
 - `mdns-repeater` and `ring-mqtt` `latest-patched`: unchanged, still `f9bd4e02` and `6892ffca`.
+
+**Check-method caveat found 2026-11-15:** some images are now pinned as `tag@sha256:<digest>`
+(`monitoring/telegraf.yaml` `telegraf:1.40.3@sha256:…`, `website/nginx.yaml` `php:8.4.27-fpm@sha256:…`). This is
+compliant, and stricter than a bare tag. Strip any `@sha256:…` suffix *before* splitting on the last `:`. Otherwise
+the digest's hex is read as the tag and a naive scan flags these as false positives. Re-checked 2026-11-15: still
+only `mdns-repeater`/`ring-mqtt` `latest-patched` and `registry:2`, all ticketed as above. The tag values in
+HelmRelease `image.registry`/`repository`/`tag` blocks (grafana, k8s-sidecar, promtail, botkube, tailscale) are
+all versioned.
 
 The fix for a third-party image is to pin to the version tag whose digest matches what's
 currently running (compare `kubectl get pod … -o jsonpath='{..imageID}'` against the registry's
@@ -426,10 +450,33 @@ automated specialist at once. Found live: `/Volumes/SSD/sync/secure/kubeconfig` 
 `system:admin` cert, which expires 2027-03-09, and nothing tracked that. k3s renews its own leaf
 certs on restart, but that doesn't update the Mac's copy. Check method: `kubectl config view --raw
 --minify -o jsonpath='{.users[0].user.client-certificate-data}' | base64 -d | openssl x509 -noout
--enddate`. Ticketed as `tm` task `9da1734f`.
+-enddate`. Ticketed as `tm` task `9da1734f`. Re-checked 2026-11-15: 114 days left, compliant. k3s renewed
+`client-admin.crt` on master to 2027-11-12 at the 2026-11-12 reboot, so the stale Mac copy can be refreshed now
+(noted on `9da1734f`).
+
+**The k3s cluster CAs must have more than 1 year left.** New rule 2026-11-15 (Phase 2 pass). k3s renews its leaf
+certs automatically, but never the CAs that sign them. Expired CAs take down every node, kubelet and kubeconfig at
+once, and recovering from that is harder than rotating beforehand. Found live: `client-ca`, `server-ca`,
+`peer-ca` and `request-header-ca` all expire **2031-05-25** (created 2021-05-27, 10-year validity), so this is
+currently compliant and kept as a long-horizon guard. Check method: `ssh ubuntu@k8s.local 'sudo sh -c "for f in
+/var/lib/rancher/k3s/server/tls/*ca*.crt; do openssl x509 -noout -enddate -in \$f; done"'`. Fix, once under 1
+year: `k3s certificate rotate-ca` (see the k3s docs on CA rotation), human-scheduled since it restarts every
+node. Ticket it rather than doing it inline. Also, `client-cloud-controller.crt` in that directory expired
+2026-03-30. It's a stale leftover (k3s now uses `client-k3s-cloud-controller.crt`, renewed to 2027-11-12) and is
+not a violation: exclude it from leaf-cert checks.
+
+**Image tags cited in `CLAUDE.md`/`RUNBOOK.md` must match what's deployed.** New rule 2026-11-15, an extension
+of the docs rules above. The service table quotes exact fork tags so a reader knows what's running, and a
+stale one misleads anyone rebuilding from the docs. Found live: CLAUDE.md's `wallabag` row still said
+`wallabag:2.6.14-php8.4.27-20261024` after the 2026-11-04 rebase onto `2.6.15-php8.4.27-20261104` (`ef47bcb`).
+Fixed directly, in the same commit as this rule. Check method: for every
+`127\.0\.0\.1:30500/<name>:<tag>` in both files, require a tracked `*.yaml` containing that exact string *or* a
+`tag: "<tag>"` HelmRelease value. Anything else is stale, unless the surrounding prose is explicitly historical.
+Whoever rebases a fork (usually the upgrade specialist) should grep CLAUDE.md for the old tag in the same
+commit.
 
 ## Starter items — not yet verified repo-wide
 
-Empty as of 2026-11-01 (unchanged since 2026-09-01; the floating-tag rule and this run's five new rules were concrete enough to go straight into Confirmed rules). The next durable finding (from a future audit's research pass, or from
+Empty as of 2026-11-15 (unchanged since 2026-09-01; the 2026-11-15 CA-expiry and doc-image-tag rules, like 2026-11-01's, were concrete enough to go straight into Confirmed rules). The next durable finding (from a future audit's research pass, or from
 any session) seeds this list again. (2026-09-01 audit: the one Phase 2 finding — control-plane
 EOL — was concrete enough to go straight into "Confirmed rules" rather than land here first.)
