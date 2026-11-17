@@ -27,10 +27,10 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: wallabag
-          # Local build of upstream's own recipe on Alpine 3.24 + PHP 8.4.27 (the published
-          # 2.6.15 image is Alpine 3.22 + PHP 8.2 with a misplaced php.ini). See
-          # trivy/patched-images/wallabag/build.sh.
-          image: 127.0.0.1:30500/wallabag:2.6.15-php8.4.27-20261104
+          # Local build of upstream's own recipe on Alpine 3.24 + PHP 8.4.27 with
+          # session.upload_progress off (the published 2.6.17 image is Alpine 3.22 + PHP 8.2 with
+          # upload_progress still on). See trivy/patched-images/wallabag/build.sh.
+          image: 127.0.0.1:30500/wallabag:2.6.17-php8.4.27-20261117
           imagePullPolicy: IfNotPresent
           args: ["wallabag"]
           ports:
