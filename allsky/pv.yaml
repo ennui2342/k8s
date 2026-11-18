@@ -1,0 +1,114 @@
+# Static Retain PVs for everything stateful in this app (same pattern as
+# opsimath/postgres-pv.yaml and isfdb/db-pv.yaml): a fixed nfs.path + claimRef
+# keeps the data pinned on the NAS and lets the PVC re-bind after any
+# PVC/namespace churn, instead of sitting on the nfs-client StorageClass's
+# dynamic provisioning. The NAS directories were created by hand before first
+# apply (see RUNBOOK.md's "indi-allsky (all-sky camera)" section).
+#
+# 1. MariaDB datadir. Adopted by the StatefulSet's volumeClaimTemplate (`data`)
+#    because the PVC is pre-created with the name it would generate
+#    (data-<sts>-0).
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: allsky-db-pv
+spec:
+  accessModes: ["ReadWriteOnce"]
+  capacity:
+    storage: 5Gi
+  claimRef:
+    name: data-allsky-db-0
+    namespace: allsky
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-client
+  volumeMode: Filesystem
+  nfs:
+    path: /mnt/md0/k8s/indi-allsky-db
+    server: 192.168.0.76
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data-allsky-db-0
+  namespace: allsky
+spec:
+  volumeName: allsky-db-pv
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 5Gi
+---
+# 2. Image folder: everything the camera Pi uploads over SyncAPI (images,
+#    panoramas, timelapses, keograms, star trails). Mounted at
+#    /var/www/html/allsky by gunicorn (writes), the nginx sidecar (serves
+#    /indi-allsky/images statically) and the nightly allsky-expire CronJob
+#    (deletes past retention). ReadWriteMany because the CronJob pod can land
+#    on a different node from the web pod. Steady state is ~75 GB (30 days of
+#    images at ~1 GB/day + 1 year of videos at ~120 MB/day); 150Gi is the
+#    budget pvc-usage-monitor checks against.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: allsky-images-pv
+spec:
+  accessModes: ["ReadWriteMany"]
+  capacity:
+    storage: 150Gi
+  claimRef:
+    name: allsky-images
+    namespace: allsky
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-client
+  volumeMode: Filesystem
+  nfs:
+    path: /mnt/md0/k8s/indi-allsky-images
+    server: 192.168.0.76
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: allsky-images
+  namespace: allsky
+spec:
+  volumeName: allsky-images-pv
+  accessModes: ["ReadWriteMany"]
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 150Gi
+---
+# 3. /var/lib/indi-allsky: Flask-Migrate state. start_gunicorn.sh runs
+#    `flask db revision --autogenerate` + `flask db upgrade head` on every
+#    start against the migrations folder here, so it must match the DB and
+#    survive restarts.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: allsky-state-pv
+spec:
+  accessModes: ["ReadWriteOnce"]
+  capacity:
+    storage: 1Gi
+  claimRef:
+    name: allsky-state
+    namespace: allsky
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-client
+  volumeMode: Filesystem
+  nfs:
+    path: /mnt/md0/k8s/indi-allsky-state
+    server: 192.168.0.76
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: allsky-state
+  namespace: allsky
+spec:
+  volumeName: allsky-state-pv
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 1Gi

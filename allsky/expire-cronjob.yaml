@@ -1,0 +1,74 @@
+# Nightly retention: a SyncAPI receiver never expires anything itself (the
+# Pi's capture process does that on the Pi, and deletions aren't synced), so
+# this runs the image's /home/allsky/expire.sh (wraps upstream's
+# misc/expire_images.py; defaults images 30 days, videos 365 days, the
+# chosen retention). Midday, away from the Pi's dusk/dawn uploads and the
+# 04:15-05:15 node-reboot window. Needs the schema gunicorn creates on start.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: allsky-expire
+  namespace: allsky
+spec:
+  schedule: "0 12 * * *"
+  timeZone: Europe/London
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 604800
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          affinity:
+            nodeAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  preference:
+                    matchExpressions:
+                      - key: node-role.kubernetes.io/control-plane
+                        operator: DoesNotExist
+          securityContext:
+            fsGroup: 10001
+          containers:
+            - name: expire
+              image: ghcr.io/ennui2342/indi-allsky-web:1.20261118.1
+              imagePullPolicy: IfNotPresent
+              command: ["/home/allsky/expire.sh"]
+              envFrom:
+                - configMapRef:
+                    name: allsky-config
+              env:
+                - name: MARIADB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: allsky-secrets
+                      key: MARIADB_PASSWORD
+                - name: INDIALLSKY_FLASK_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: allsky-secrets
+                      key: INDIALLSKY_FLASK_SECRET_KEY
+                - name: INDIALLSKY_FLASK_PASSWORD_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: allsky-secrets
+                      key: INDIALLSKY_FLASK_PASSWORD_KEY
+              volumeMounts:
+                - name: images
+                  mountPath: /var/www/html/allsky
+                # expire.sh writes /etc/indi-allsky/flask.json.
+                - name: etc
+                  mountPath: /etc/indi-allsky
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  memory: 512Mi
+          volumes:
+            - name: images
+              persistentVolumeClaim:
+                claimName: allsky-images
+            - name: etc
+              emptyDir: {}

@@ -1,0 +1,108 @@
+# MariaDB for indi-allsky (upstream docker-compose's mariadb.indi.allsky,
+# which is just stock mariadb + apt upgrade). Not SQLite: the DB would sit on
+# NFS. Datadir is the static Retain PV in pv.yaml.
+apiVersion: v1
+kind: Service
+metadata:
+  name: allsky-db
+  namespace: allsky
+spec:
+  clusterIP: None
+  selector:
+    app: allsky-db
+  ports:
+    - port: 3306
+      targetPort: 3306
+      name: mysql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: allsky-db
+  namespace: allsky
+spec:
+  serviceName: allsky-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: allsky-db
+  template:
+    metadata:
+      labels:
+        app: allsky-db
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      containers:
+        - name: mariadb
+          # 11.8 LTS, same digest-pinned image as isfdb/mariadb-statefulset.yaml.
+          image: mariadb:11.8.9@sha256:d36f18d65a0459510b8b0f643b226a6d299e3206486e2b64ff20754a6d291707
+          ports:
+            - containerPort: 3306
+              name: mysql
+          env:
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: allsky-secrets
+                  key: MARIADB_ROOT_PASSWORD
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: allsky-secrets
+                  key: MARIADB_PASSWORD
+            - name: MARIADB_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: allsky-config
+                  key: MARIADB_DATABASE
+            - name: MARIADB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: allsky-config
+                  key: MARIADB_USER
+          args:
+            - --character-set-server=utf8mb4
+            - --collation-server=utf8mb4_unicode_ci
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - mariadb-admin ping -uroot -p"$MARIADB_ROOT_PASSWORD"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 15
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - mariadb-admin ping -uroot -p"$MARIADB_ROOT_PASSWORD"
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 15
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: nfs-client
+        resources:
+          requests:
+            storage: 5Gi
