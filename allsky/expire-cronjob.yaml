@@ -34,7 +34,13 @@ spec:
             - name: expire
               image: ghcr.io/ennui2342/indi-allsky-web:1.20261118.1
               imagePullPolicy: IfNotPresent
-              command: ["/home/allsky/expire.sh"]
+              # mkdir -p: expire_images.py crashes (FileNotFoundError) if the
+              # image folder doesn't exist yet, i.e. before the Pi's first
+              # upload, or after the NAS dir is ever recreated empty.
+              command:
+                - bash
+                - -c
+                - mkdir -p "$INDIALLSKY_IMAGE_FOLDER" && exec /home/allsky/expire.sh
               envFrom:
                 - configMapRef:
                     name: allsky-config
