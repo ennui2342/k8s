@@ -41,7 +41,7 @@ spec:
         fsGroup: 10001
       containers:
         - name: gunicorn
-          image: ghcr.io/ennui2342/indi-allsky-web:1.20261118.1
+          image: ghcr.io/ennui2342/indi-allsky-web:1.20261118.2
           imagePullPolicy: IfNotPresent
           # No runAsUser/allowPrivilegeEscalation override: start_gunicorn.sh
           # runs `sudo chown allsky:allsky` on /etc/indi-allsky and

@@ -61,6 +61,7 @@ too.
 
 | Namespace | Service | Manifests | Notes |
 |-----------|---------|-----------|-------|
+| `allsky` | indi-allsky (all-sky camera receiver) | `allsky/` | Web/SyncAPI side of indi-allsky: the garden camera Pi (`indi-allsky.local`) uploads every image, panorama, timelapse, keogram and star trail here over SyncAPI. Deliberately **not** `indi-allsky/` — that path is a stale, gitignored March-2024 upstream source clone. `allsky-web` Deployment (1 replica, `Recreate`): gunicorn (`ghcr.io/ennui2342/indi-allsky-web:<tag>`, upstream's `docker/Dockerfile.gunicorn` at the same indi-allsky commit as the Pi plus `expire.sh`; source `ennui2342/indi-allsky-web`, CI-built, **no Flux image automation**, so bump the tag by hand, in step with the Pi) + an nginx sidecar (the patched `127.0.0.1:30500/nginx` image) that serves `/indi-allsky/images` straight from the images PVC and proxies the rest. `allsky-db` MariaDB 11.8 StatefulSet. Static Retain PVs at `/mnt/md0/k8s/indi-allsky-{db,images,state}`: images is 150Gi RWX (≈75 GB steady state), state is the Flask-Migrate folder at `/var/lib/indi-allsky` (start_gunicorn.sh autogenerates and applies a revision on every start). gunicorn needs privilege escalation (its entrypoint `sudo chown`s). Nightly `allsky-expire` CronJob (12:00 Europe/London) runs `expire.sh` (images 30 d, videos 365 d), since a SyncAPI receiver never expires anything itself. `allsky.k8s.ecafe.org`, internal only on default web/websecure; the Pi uses `https://allsky.k8s.ecafe.org/indi-allsky` with cert verification off. Making it public on zephyr.ecafe.org is a separate task. Added 2026-11-18 (tm `2ebdb42c`). |
 | `botkube` | botkube | `botkube/` | Flux HelmRelease; Discord alerts + kubectl/helm/flux executors |
 | `cert-manager` | cert-manager | `cert-manager/` | Flux HelmRelease (v1.x.x); ClusterIssuer for ecafe.org |
 | `default` | mosquitto | `mosquitto/` | MQTT broker, anonymous access, port 31883 (NodePort) |
@@ -103,6 +104,7 @@ too.
 - `isfdb-adapter.k8s.ecafe.org` — ISFDB mirror adapter JSON API, internal DNS only
 - `epigone.ecafe.org` — public hostname for Home Assistant (TLS via cert-manager, real Let's Encrypt cert), routed by `epigone/`'s IngressRoute
 - `grafana.k8s.ecafe.org` — Grafana
+- `allsky.k8s.ecafe.org` — indi-allsky all-sky camera gallery + SyncAPI receiver (internal DNS only; the camera Pi uploads to `/indi-allsky` over HTTPS with Traefik's default cert, verification off)
 - `rss.k8s.ecafe.org` — FreshRSS (also on Tailscale, for PWA installability off-LAN)
 - `pinboard.k8s.ecafe.org` — linkding bookmark manager (also on Tailscale as `pinboard.tail611131.ts.net`)
 - `later.k8s.ecafe.org` — wallabag read-it-later (also on Tailscale, for PWA installability off-LAN)
@@ -142,6 +144,7 @@ The age public key is embedded there. The **private key** lives only at
 `/Volumes/SSD/sync/secure/k8s-flux-age.agekey` — never committed.
 
 **Secrets managed in git (SOPS-encrypted):**
+- `allsky/allsky-secret.yaml` — `allsky-secrets`: `MARIADB_ROOT_PASSWORD`/`MARIADB_PASSWORD`, `INDIALLSKY_FLASK_SECRET_KEY`, `INDIALLSKY_FLASK_PASSWORD_KEY` (a Fernet key that encrypts stored secrets such as API keys in the DB: **never change it** once set, or every stored API key becomes unreadable) and `INDIALLSKY_WEB_PASS`, the first web admin's (`ennui2342`) bootstrap password. All generated 2026-11-18. The SyncAPI user's API key is deliberately **not** stored here: it lives only in the DB (encrypted) and on the Pi
 - `flux-system/discord-webhook-secret.yaml` — Discord webhook for Flux notifications
 - `syncthing/discord-webhook-secret.yaml` — Discord webhook for SyncThing conflict monitor
 - `nas-monitor/discord-webhook-secret.yaml` — creates `discord-webhook` in the `monitoring` namespace; despite living in `nas-monitor/`, this is the shared secret `health-monitor`, `trivy`, and `pvc-usage-monitor` also read (each just references it by name, no separate copy) — don't assume it's NAS-specific or safe to remove if `nas-monitor` is ever decommissioned
@@ -365,6 +368,7 @@ see `RUNBOOK.md`'s "CVE Patch Management" section for the full mechanics.
 
 ```
 kustomizations/   — one Flux Kustomization CR per app dir (path ./<app>, own SOPS decryption, dependsOn) — see Flux Setup > Per-app Kustomizations; root kustomization.yaml lists ONLY flux-system/ + kustomizations/
+allsky/           — indi-allsky web/SyncAPI receiver for the garden all-sky camera: gunicorn + nginx-sidecar Deployment, MariaDB StatefulSet, static Retain PVs (db/images/state), nightly expire CronJob, internal ingress (not `indi-allsky/`, which is a gitignored stale upstream clone)
 botkube/          — Flux HelmRelease + Discord webhook secret; Discord alerts + kubectl/helm/flux executors
 cert-manager/     — Flux HelmRelease + HelmRepository (jetstack) + ClusterIssuer
 coredns/          — CoreDNS override resolving k8s.ecafe.org (apex + subdomains) straight to Traefik's ClusterIP, for Tailscale Split DNS clients — see Cluster Topology's DNS note above

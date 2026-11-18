@@ -1055,6 +1055,52 @@ first scheduled collector run (06:20 Europe/London daily), or it baselines an em
 task scales the Deployment to 1 in git. On a cluster rebuild where the NAS data survived, the
 worker can go straight to 1.
 
+### indi-allsky (all-sky camera)
+
+`allsky/` is the web/SyncAPI side of indi-allsky, which the garden camera Pi uploads to. The
+image is `ghcr.io/ennui2342/indi-allsky-web:<tag>`, CI-built from `ennui2342/indi-allsky-web`
+(upstream's own `docker/Dockerfile.gunicorn` at the commit in that repo's `UPSTREAM_REF`, plus
+`expire.sh`). There is no Flux image automation for it: **upgrade it together with the Pi**, so
+both sides speak the same SyncAPI. Bump `UPSTREAM_REF` there, let CI push a tag, change the tag in
+both `allsky/web-deployment.yaml` and `allsky/expire-cronjob.yaml`, then upgrade the Pi to the same
+commit.
+
+**Static PV dirs** were created by hand before first apply, the same as the other static-PV dirs:
+```sh
+ssh -p 9222 ennui2342@192.168.0.76 'for d in indi-allsky-db indi-allsky-images indi-allsky-state; do
+  mkdir /mnt/md0/k8s/$d && chmod 777 /mnt/md0/k8s/$d; done'
+```
+On a rebuild where the NAS data survived, there's nothing to do. `indi-allsky-state` holds the
+Flask-Migrate folder, and it has to stay consistent with `indi-allsky-db`. Restore or wipe the two
+together, never one alone.
+
+**First start** takes about 2 minutes: start_gunicorn.sh sleeps 60s "waiting on database", then
+runs `flask db init` (first time only), `flask db revision --autogenerate` and `flask db upgrade`,
+and creates the first admin user from `INDIALLSKY_WEB_USER`/`INDIALLSKY_WEB_PASS` if there's none yet.
+The gunicorn startupProbe allows 10 minutes for this.
+
+**Known log noise, harmless:** every log call prints a `--- Logging error ---` traceback, because
+the app also logs to syslog and the image symlinks `/dev/log` to `/dev/null`. `Unable to get
+CONFIG_ID` is logged on page loads because only a local capture process ever writes that state,
+and this server has none.
+
+**SyncAPI user for the Pi.** The admin password is `INDIALLSKY_WEB_PASS` in `allsky-secrets`
+(`kubectl get secret allsky-secrets -n allsky -o jsonpath='{.data.INDIALLSKY_WEB_PASS}' | base64 -d`).
+The sync user's API key is printed once, so put it straight onto the Pi:
+```sh
+kubectl exec -n allsky deploy/allsky-web -c gunicorn -- bash -c 'cd /home/allsky/indi-allsky &&
+  source /home/allsky/venv/bin/activate &&
+  ./misc/usertool.py adduser -u syncuser -p "$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")" -f "SyncAPI (camera Pi)" -e syncuser@allsky.local &&
+  ./misc/usertool.py setadmin -u syncuser &&
+  ./misc/usertool.py genapikey -u syncuser'
+```
+`genapikey` replaces the previous key, so it can also be used to rotate the key. Run
+`./misc/usertool.py list` the same way to see the users.
+
+**Retention:** nothing on a SyncAPI receiver expires files by itself, so the `allsky-expire`
+CronJob (12:00 Europe/London) runs `expire.sh` (images 30 days, videos 365 days). To run it
+by hand: `kubectl create job -n allsky --from=cronjob/allsky-expire allsky-expire-manual`.
+
 ### WebDAV (Zotero) — Tailscale Funnel
 
 `webdav/funnel-ingress.yaml` exposes webdav at a stable `*.ts.net` hostname via the
