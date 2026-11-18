@@ -61,7 +61,7 @@ too.
 
 | Namespace | Service | Manifests | Notes |
 |-----------|---------|-----------|-------|
-| `allsky` | indi-allsky (all-sky camera receiver) | `allsky/` | Web/SyncAPI side of indi-allsky: the garden camera Pi (`indi-allsky.local`) uploads every image, panorama, timelapse, keogram and star trail here over SyncAPI. Deliberately **not** `indi-allsky/` — that path is a stale, gitignored March-2024 upstream source clone. `allsky-web` Deployment (1 replica, `Recreate`): gunicorn (`ghcr.io/ennui2342/indi-allsky-web:<tag>`, upstream's `docker/Dockerfile.gunicorn` at the same indi-allsky commit as the Pi plus `expire.sh`; source `ennui2342/indi-allsky-web`, CI-built, **no Flux image automation**, so bump the tag by hand, in step with the Pi) + an nginx sidecar (the patched `127.0.0.1:30500/nginx` image) that serves `/indi-allsky/images` straight from the images PVC and proxies the rest. `allsky-db` MariaDB 11.8 StatefulSet. Static Retain PVs at `/mnt/md0/k8s/indi-allsky-{db,images,state}`: images is 150Gi RWX (≈75 GB steady state), state is the Flask-Migrate folder at `/var/lib/indi-allsky` (start_gunicorn.sh autogenerates and applies a revision on every start). gunicorn needs privilege escalation (its entrypoint `sudo chown`s). Nightly `allsky-expire` CronJob (12:00 Europe/London) runs `expire.sh` (images 30 d, videos 365 d), since a SyncAPI receiver never expires anything itself. `allsky.k8s.ecafe.org`, internal only on default web/websecure; the Pi uses `https://allsky.k8s.ecafe.org/indi-allsky` with cert verification off. Making it public on zephyr.ecafe.org is a separate task. Added 2026-11-18 (tm `2ebdb42c`). |
+| `allsky` | indi-allsky (all-sky camera receiver) | `allsky/` | Web/SyncAPI side of indi-allsky: the garden camera Pi (`indi-allsky.local`) uploads every image, panorama, timelapse, keogram and star trail here over SyncAPI. Deliberately **not** `indi-allsky/` — that path is a stale, gitignored March-2024 upstream source clone. `allsky-web` Deployment (1 replica, `Recreate`): gunicorn (`ghcr.io/ennui2342/indi-allsky-web:<tag>`, upstream's `docker/Dockerfile.gunicorn` at the same indi-allsky commit as the Pi plus `expire.sh`; source `ennui2342/indi-allsky-web`, CI-built, **no Flux image automation**, so bump the tag by hand, in step with the Pi) + an nginx sidecar (the patched `127.0.0.1:30500/nginx` image) that serves `/indi-allsky/images` straight from the images PVC and proxies the rest. `allsky-db` MariaDB 11.8 StatefulSet. Static Retain PVs at `/mnt/md0/k8s/indi-allsky-{db,images,state}`: images is 150Gi RWX (≈75 GB steady state), state is the Flask-Migrate folder at `/var/lib/indi-allsky` (start_gunicorn.sh autogenerates and applies a revision on every start). gunicorn needs privilege escalation (its entrypoint `sudo chown`s). Nightly `allsky-expire` CronJob (12:00 Europe/London) runs `expire.sh` (images 30 d, videos 365 d), since a SyncAPI receiver never expires anything itself. `allsky.k8s.ecafe.org`, internal only on default web/websecure; the Pi uses `https://allsky.k8s.ecafe.org/indi-allsky` with cert verification off. **Public, read-only gallery at `https://zephyr.ecafe.org`** (tm `4ad5606d`): `allsky/public-ingressroute.yaml` is an IngressRoute on `publictls` only (router 443 → master:8445 → `kube-system/traefik-publictls-alt` → `publictls`) that allowlists GET/HEAD on the no-login views only, so login, SyncAPI, admin/config and every POST 404 there (re-check the allowlist when the image's upstream commit moves); cert `allsky/zephyr.ecafe.org-production` (HTTP-01, CoreDNS `zephyr.override` for the hairpin); http:// redirects to https. Added 2026-11-18 (tm `2ebdb42c`). |
 | `botkube` | botkube | `botkube/` | Flux HelmRelease; Discord alerts + kubectl/helm/flux executors |
 | `cert-manager` | cert-manager | `cert-manager/` | Flux HelmRelease (v1.x.x); ClusterIssuer for ecafe.org |
 | `default` | mosquitto | `mosquitto/` | MQTT broker, anonymous access, port 31883 (NodePort) |
@@ -112,7 +112,7 @@ too.
 - `tasks.k8s.ecafe.org` — taskmgt frontend (also on Tailscale as `taskmgt`)
 - `webdav.k8s.ecafe.org` — WebDAV server, internal/Tailscale access (used by desktop Zotero)
 - `webdav.tail611131.ts.net` — WebDAV server via Tailscale Funnel (`webdav/funnel-ingress.yaml`), trusted cert, works on-LAN and off (used by Zotero for Android); root URL, no path suffix. Required two one-time settings in the Tailscale admin console (not managed in this repo): "HTTPS Certificates" enabled (DNS tab) and the `funnel` node attribute granted to `tag:k8s` in the ACL policy
-- `zephyr.ecafe.org` — DDNS endpoint
+- `zephyr.ecafe.org` — PUBLIC read-only all-sky gallery (`allsky/public-ingressroute.yaml`, publictls via router 443 → master:8445, real Let's Encrypt cert). Still a CNAME to the `ennui2342.ddns.net` DDNS name; no longer served by `website/`
 
 ### Traefik Customization
 The k3s-bundled Traefik is customized via `traefik/helmchartconfig.yaml` (a `HelmChartConfig`
@@ -122,7 +122,9 @@ to reference the `homeassistant-service` Service in the `home-assistant` namespa
 (brief downtime for all ingress hostnames).
 
 The same file defines the internet-facing entry points `public` (:8081) and `publictls` (:8444),
-the only ports the router forwards to (2026-10-24). `web`/`websecure` are `asDefault`, so a route
+the only entry points the router forwards to (2026-10-24). `traefik/publictls-alt-service.yaml` exposes
+`publictls` on a second port, :8445 (router 443, for zephyr.ecafe.org), since the router won't take two
+rules to 8444; a separate Service so the HelmChartConfig, and Traefik, stay untouched. `web`/`websecure` are `asDefault`, so a route
 is public only if it explicitly names `public`/`publictls`. See RUNBOOK's "Router port forwards".
 
 ## GitOps Principles
@@ -368,7 +370,7 @@ see `RUNBOOK.md`'s "CVE Patch Management" section for the full mechanics.
 
 ```
 kustomizations/   — one Flux Kustomization CR per app dir (path ./<app>, own SOPS decryption, dependsOn) — see Flux Setup > Per-app Kustomizations; root kustomization.yaml lists ONLY flux-system/ + kustomizations/
-allsky/           — indi-allsky web/SyncAPI receiver for the garden all-sky camera: gunicorn + nginx-sidecar Deployment, MariaDB StatefulSet, static Retain PVs (db/images/state), nightly expire CronJob, internal ingress (not `indi-allsky/`, which is a gitignored stale upstream clone)
+allsky/           — indi-allsky web/SyncAPI receiver for the garden all-sky camera: gunicorn + nginx-sidecar Deployment, MariaDB StatefulSet, static Retain PVs (db/images/state), nightly expire CronJob, internal ingress, public read-only zephyr.ecafe.org IngressRoute + Certificate (not `indi-allsky/`, which is a gitignored stale upstream clone)
 botkube/          — Flux HelmRelease + Discord webhook secret; Discord alerts + kubectl/helm/flux executors
 cert-manager/     — Flux HelmRelease + HelmRepository (jetstack) + ClusterIssuer
 coredns/          — CoreDNS override resolving k8s.ecafe.org (apex + subdomains) straight to Traefik's ClusterIP, for Tailscale Split DNS clients — see Cluster Topology's DNS note above
@@ -402,7 +404,7 @@ system-upgrade/   — rancher/system-upgrade-controller (upstream/ vendored + ku
 k3s-upgrade/      — server-plan + agent-plan: the cluster's declared k3s version (bump both, commit) — see RUNBOOK "Upgrading k3s"
 tailscale/        — Flux HelmRelease + HelmRepository (tailscale) + Connector CR
 taskmgt/          — taskmgt app manifests + Flux image automation
-traefik/          — HelmChartConfig customizing k3s's bundled Traefik (allowCrossNamespace)
+traefik/          — HelmChartConfig customizing k3s's bundled Traefik (allowCrossNamespace, public/publictls entry points) + the publictls :8445 alt LoadBalancer Service
 trivy/            — Weekly CVE scanner CronJob; patched-images.yaml tracks custom image forks + reconciliation
 wallabag/         — Self-hosted read-it-later app (Readwise Reader evaluation, phase 1): deployment, data/images PVCs, internal + Tailscale ingress, secret
 webdav/           — hacdias/webdav deployment, PV/PVC, service, internal ingress, Tailscale Funnel ingress, config secret (Zotero PDF sync)

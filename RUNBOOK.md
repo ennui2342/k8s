@@ -134,8 +134,18 @@ target master's wired `eth0`:
 
 | Public port | → master (`88:a2:9e:bd:35:b5`, `192.168.0.8`) | Traefik entry point | Used for |
 |---|---|---|---|
-| TCP 80 | **8081** | `public` (HTTP) | cert-manager HTTP-01 challenges for `epigone.ecafe.org` |
+| TCP 80 | **8081** | `public` (HTTP) | cert-manager HTTP-01 challenges for `epigone.ecafe.org` and `zephyr.ecafe.org`; `zephyr` otherwise redirects to https |
 | TCP 8123 | **8444** | `publictls` (HTTPS) | Home Assistant at `https://epigone.ecafe.org:8123` |
+| TCP 443 | **8445** | `publictls` (HTTPS, same entry point via `traefik/publictls-alt-service.yaml`) | Public read-only all-sky gallery at `https://zephyr.ecafe.org` (`allsky/public-ingressroute.yaml`) |
+
+**Why 443 goes to 8445, not 8444 (2026-11-18, tm 4ad5606d):** the router refuses a
+second rule to the same internal port, and 8123 → 8444 already exists. So
+`kube-system/traefik-publictls-alt` is a second LoadBalancer Service (port 8445 →
+Traefik's named `publictls` container port); klipper svclb listens on 8445 on every
+node. It's the same entry point, so the opt-in rule is identical: only routes naming
+`publictls` answer on 8445 or 8444 (today epigone and zephyr; epigone therefore also
+answers on public 443). Not added to `traefik/helmchartconfig.yaml` because editing
+that restarts Traefik.
 
 **Never forward to master's 80/443.** Those are Traefik's `web`/`websecure`, which
 serve *every* app by `Host` header. Forwarding there made the whole cluster
@@ -143,12 +153,13 @@ internet-reachable (Grafana, Syncthing, the PHP apps…) from 2026-10-14 to
 2026-10-24, found during the PHP2Shell response (see
 `~/incident-php2shell-20261024/FINDINGS.md`; no compromise found). The `public`/`publictls`
 entry points (`traefik/helmchartconfig.yaml`) serve only routes that explicitly
-opt in: today just the `epigone` IngressRoute and cert-manager's solver Ingress
-(via the ClusterIssuer's `ingressTemplate`). `web`/`websecure` are `asDefault`, so
+opt in: today the `epigone` IngressRoute, the `allsky-public`/`allsky-public-http`
+IngressRoutes (zephyr.ecafe.org) and cert-manager's solver Ingress (via the
+ClusterIssuer's `ingressTemplate`). `web`/`websecure` are `asDefault`, so
 any new Ingress stays LAN/Tailscale-only unless it names `public`/`publictls`.
 **To publish something new, add the entry point to its route deliberately.** Check
-with `curl -sk --resolve <host>:8444:192.168.0.8 https://<host>:8444/`: anything
-other than epigone should 404.
+with `curl -sk --resolve <host>:8444:192.168.0.8 https://<host>:8444/` (and the
+same on 8445): anything other than epigone and zephyr should 404.
 
 Master is the entry point on purpose: the router can forward to only one
 host, and master is already the cluster's single, non-interchangeable node,

@@ -55,28 +55,3 @@ data:
           #    deny  all;
           #}
       }
----
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: ddns-config
-data:
-  ddns.conf: |
-      server {
-          server_name  zephyr.ecafe.org;
-
-          location / {
-              root   /usr/share/nginx/html/zephyr;
-              index  index.html index.htm index.php;
-          }
-
-          # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
-          #
-          location ~ \.php$ {
-              root           /var/www/html;
-              include        /etc/nginx/fastcgi_params;
-              fastcgi_pass   127.0.0.1:9000;
-              fastcgi_index  index.php;
-              fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-          }
-      }

@@ -1,0 +1,79 @@
+# Public, read-only all-sky gallery at https://zephyr.ecafe.org (2026-11-18,
+# tm 4ad5606d). Internet path: router TCP 443 -> master:8445 ->
+# traefik/publictls-alt-service.yaml -> Traefik's `publictls` entry point.
+# Admin, login and the Pi's SyncAPI uploads stay on allsky.k8s.ecafe.org
+# (ingress.yaml, LAN/Tailscale only).
+#
+# Read-only is enforced HERE, at Traefik, by an ALLOWLIST rather than a
+# blocklist: only GET/HEAD, and only the paths below. Everything else on this
+# host (login/logout/oidc, /sync/*, /action/*, /config*, /system, /users,
+# /user, /tasks, /cameras, /notifications, /log*, /stream/*, /shell, /ws/*,
+# /network, /drives, /focus, /manual_gpio, /generate, /processing, darks/mask/
+# lag/adu, /support, /youtube/*, /ajax/* except two read-only GETs, any POST)
+# matches no router and gets Traefik's 404. The allowlist is the public,
+# no-login views of indi_allsky/flask/views.py at upstream 56910616 (the same
+# commit as ghcr.io/ennui2342/indi-allsky-web); re-check it when that image's
+# upstream commit moves. Unauthenticated views also need
+# INDIALLSKY_FLASK_AUTH_ALL_VIEWS=false (configmap.yaml).
+#
+# Known consequence of GET/HEAD-only: the gallery/imageviewer/videoviewer
+# pages fetch their image lists with read-only AJAX POSTs (/ajax/gallery,
+# /ajax/imageviewer, /ajax/videoviewer, /ajax/minivideoviewer), which are
+# refused here, so their date/hour pickers don't work publicly.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: allsky-public
+  namespace: allsky
+spec:
+  entryPoints:
+    - publictls   # internet only, via the router forward 443 -> master:8445
+  routes:
+    - kind: Rule
+      match: >-
+        Host(`zephyr.ecafe.org`) && (Method(`GET`) || Method(`HEAD`)) && (
+        Path(`/`) ||
+        PathRegexp(`^/indi-allsky/?$`) ||
+        PathRegexp(`^/indi-allsky/(static|images)/`) ||
+        PathRegexp(`^/indi-allsky/(sw\.js|manifest\.json)$`) ||
+        PathRegexp(`^/indi-allsky/(index_canvas|index_img|panorama|panorama_canvas|panorama_img|raw|raw_canvas|raw_img|realtime_keogram|loop|loop_canvas|loop_img|looppanorama|looppanorama_canvas|looppanorama_img|loopraw|loopraw_canvas|loopraw_img|sqm|charts|imageviewer|gallery|videoviewer|minivideoviewer|view_image|view_panorama|view_startrail|view_keogram|view_raw|watch_timelapse|watch_mini_timelapse|watch_startrail|watch_panorama|astropanel|longtermkeogram|camera|virtualsky|sensor_panel|public)$`) ||
+        PathRegexp(`^/indi-allsky/js/(latest|latest_panorama|latest_rawimage|loop|looppanorama|loopraw|charts|sensor_panel)$`) ||
+        PathRegexp(`^/indi-allsky/ajax/(status_update|astropanel)$`) ||
+        PathRegexp(`^/indi-allsky/latest(image|keogram|startrail|panorama|raw|thumbnail|timelapse|startrailvideo|panoramavideo|imageview|keogramview|startrailview|panoramaview|rawview|timelapsewatch|startrailvideowatch|panoramavideowatch)$`)
+        )
+      services:
+        - name: allsky-web
+          port: 80
+  tls:
+    secretName: zephyr.ecafe.org-production
+---
+# http://zephyr.ecafe.org (router TCP 80 -> master:8081, the `public` entry
+# point) -> https. cert-manager's HTTP-01 solver Ingress on the same host and
+# entry point still wins for /.well-known/acme-challenge/<token>: Traefik
+# prioritises the longer rule.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: https-redirect
+  namespace: allsky
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: false
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: allsky-public-http
+  namespace: allsky
+spec:
+  entryPoints:
+    - public
+  routes:
+    - kind: Rule
+      match: Host(`zephyr.ecafe.org`)
+      middlewares:
+        - name: https-redirect
+      services:
+        - name: allsky-web
+          port: 80

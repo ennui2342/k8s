@@ -9,3 +9,5 @@ resources:
   - web-deployment.yaml
   - expire-cronjob.yaml
   - ingress.yaml
+  - certificate.yaml
+  - public-ingressroute.yaml

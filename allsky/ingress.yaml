@@ -2,7 +2,8 @@
 # points, no TLS cert (*.k8s.ecafe.org is internal DNS, see CLAUDE.md). The
 # camera Pi uploads to https://allsky.k8s.ecafe.org/indi-allsky with
 # certificate verification off (Traefik's default cert). Not on the
-# public/publictls entry points; going public is a separate task.
+# public/publictls entry points: the public, read-only gallery is
+# zephyr.ecafe.org (public-ingressroute.yaml), and login/SyncAPI stay here.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

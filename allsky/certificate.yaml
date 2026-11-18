@@ -1,0 +1,16 @@
+# Let's Encrypt cert for the public gallery (public-ingressroute.yaml).
+# HTTP-01 via the ClusterIssuer's solver Ingress on the `public` entry point
+# (router TCP 80 -> master:8081). The in-cluster self-check relies on
+# coredns/coredns-custom.yaml's zephyr.override (NAT hairpin).
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: zephyr.ecafe.org-production
+  namespace: allsky
+spec:
+  secretName: zephyr.ecafe.org-production
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - zephyr.ecafe.org

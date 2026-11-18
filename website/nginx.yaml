@@ -38,9 +38,6 @@ spec:
           - name: nginx-config-volume
             mountPath: /etc/nginx/conf.d/default.conf
             subPath: default.conf
-          - name: ddns-config-volume
-            mountPath: /etc/nginx/conf.d/ddns.conf
-            subPath: ddns.conf
         - name: php
           # PHP 8.4 since 2026-10-24 (was php:7.0-fpm, EOL; PHP2Shell CVE-2026-109618/-109619
           # fixed in 8.4.27). Plain upstream since 2026-11-03 (local libbrotli1 fork dropped,
@@ -62,9 +59,6 @@ spec:
         - name: nginx-config-volume
           configMap:
             name: nginx-config
-        - name: ddns-config-volume
-          configMap:
-            name: ddns-config
         - name: php-ini-volume
           configMap:
             name: php-ini

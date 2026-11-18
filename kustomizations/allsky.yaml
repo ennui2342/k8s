@@ -19,3 +19,5 @@ spec:
       name: sops-age
   dependsOn:
     - name: nfs
+    - name: cert-manager
+    - name: traefik

@@ -1,0 +1,27 @@
+# A second internet-facing port for the SAME publictls entry point
+# (helmchartconfig.yaml), for zephyr.ecafe.org (2026-11-18, tm 4ad5606d).
+# The router forwards TCP 443 -> master:8445 here, because it refuses a second
+# rule to internal 8444 (Home Assistant's 8123 -> 8444 already uses it). k3s's
+# klipper servicelb listens on 8445 on every node and forwards to Traefik's
+# named `publictls` container port, so 8445 behaves exactly like 8444: only
+# routes that explicitly name `publictls` answer (today epigone.ecafe.org and
+# zephyr.ecafe.org), everything else 404s.
+#
+# Kept as a separate Service rather than a new port in helmchartconfig.yaml
+# because editing the HelmChartConfig restarts Traefik (every ingress down).
+# The selector must match the bundled `traefik` Service's selector.
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik-publictls-alt
+  namespace: kube-system
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/instance: traefik-kube-system
+    app.kubernetes.io/name: traefik
+  ports:
+    - name: publictls-alt
+      port: 8445
+      targetPort: publictls
+      protocol: TCP
