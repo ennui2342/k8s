@@ -232,3 +232,13 @@
   patched_date: "2026-10-25"
   critical: 5
   high: 114
+
+- workload: "monitoring/Deployment/kube-prometheus-stack-grafana (download-dashboards initContainer)"
+  strategy: frozen-rebuild
+  patched_image: 127.0.0.1:30500/curlimages-curl:8.23.0-patched-20261118
+  upstream_image: curlimages/curl:8.23.0
+  build_recipe: trivy/patched-images/curlimages-curl/Dockerfile
+  reason: "Forked 2026-11-18 (cve-scanner task ce5b697e): curlimages/curl:8.23.0 (Alpine 3.24.3, re-published 2026-10-28; still the newest upstream tag) ships krb5/krb5-libs 1.22.2-r1 — 16 HIGH fixable MIT krb5 KDC/kadmind DoS CVEs (CVE-2026-107364, CVE-2026-112315..112323, +6), fix 1.22.3-r0 already published in the same Alpine 3.24 repos. Same-base apk upgrade closes it (krb5/krb5-libs 1.22.3-r0, plus zlib 1.4-r0, apk-tools/libapk 3.0.9-r0, alpine-release 3.24.4-r0). No curl version change, so no breaking changes to assess; grafana's download_dashboards.sh is a plain `curl -skf` HTTPS GET piped to sed. Built linux/arm64. Local trivy (aquasec/trivy:latest, --ignore-unfixed --severity HIGH,CRITICAL): upstream 0 CRITICAL + 32 HIGH findings (16 CVEs x krb5 + krb5-libs), patched 0 CRITICAL + 0 HIGH. Dated tag so it can't overwrite the earlier 8.23.0-patched (brotli round, 2026-10-26..11-04). Revert to plain curlimages/curl once upstream ships krb5 >= 1.22.3-r0."
+  patched_date: "2026-11-18"
+  critical: 0
+  high: 16

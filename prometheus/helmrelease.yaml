@@ -73,9 +73,13 @@ spec:
         # re-published 8.23.0 on Alpine 3.24.3 with brotli-libs 1.2.1-r0 —
         # scans 0 CRITICAL + 0 HIGH, so the fork was dropped again and this
         # reverted to the plain image (see git history for the old recipe).
-        registry: "docker.io"
-        repository: "curlimages/curl"
-        tag: "8.23.0"
+        # 2026-11-18 (tm ce5b697e): 8.23.0 (still newest upstream) picked up
+        # 16 HIGH in krb5/krb5-libs 1.22.2-r1 (fix 1.22.3-r0, already in the
+        # Alpine 3.24 repos) — re-forked as a same-base apk upgrade, dated
+        # tag. See trivy/patched-images.yaml + trivy/patched-images/curlimages-curl/.
+        registry: "127.0.0.1:30500"
+        repository: "curlimages-curl"
+        tag: "8.23.0-patched-20261118"
         pullPolicy: IfNotPresent
 
       admin:
