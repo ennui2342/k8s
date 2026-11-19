@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zephyr All-Sky Camera</title>
+<meta name="description" content="Live all-sky camera and weather from near Cambridge, UK: the whole sky, every 15 seconds, with last night's timelapse, star trails and keogram.">
+<meta name="color-scheme" content="dark">
+<!--
+  Public landing page for zephyr.ecafe.org. Source of truth: ~/projects/allsky/zephyr-site/.
+  Served by the allsky-web nginx sidecar (k8s repo allsky/). Uses only read-only
+  endpoints on the public allowlist, plus /weather.json (written every 5 min by the
+  Zephyr WeeWX skin on weatherstation.local, ~/projects/weewx/zephyr/; nginx proxies
+  it). No external scripts, fonts or trackers.
+-->
+<style>
+  :root {
+    --bg: #070b14;
+    --panel: #0f1626;
+    --panel-2: #141d31;
+    --line: #22304d;
+    --text: #e6ebf5;
+    --muted: #8d9ab3;
+    --accent: #f2b45c;
+    --accent-2: #7fb2ff;
+    --good: #6fd29a;
+    --warn: #f2b45c;
+    --bad: #ff7a7a;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { background: var(--bg); }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #16234180, transparent 60%),
+      radial-gradient(900px 500px at -10% 10%, #1b162e80, transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  a { color: var(--accent-2); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+
+  header { padding: 28px 0 18px; display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; justify-content: space-between; }
+  header h1 { margin: 0; font-size: clamp(1.6rem, 3.5vw, 2.3rem); letter-spacing: .01em; font-weight: 650; }
+  header p { margin: 4px 0 0; color: var(--muted); }
+  .badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
+           background: var(--panel-2); border: 1px solid var(--line); font-size: .9rem; white-space: nowrap; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .dot.live { background: var(--good); box-shadow: 0 0 0 4px #6fd29a22; }
+  .dot.stale { background: var(--bad); }
+
+  .grid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+  .card { background: linear-gradient(180deg, var(--panel), #0c1220); border: 1px solid var(--line);
+          border-radius: var(--radius); padding: 18px; min-width: 0; }
+  .card h2 { margin: 0 0 12px; font-size: 1.05rem; font-weight: 600; color: var(--accent); letter-spacing: .02em; }
+  .card h2 small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+
+  .sky { padding: 0; overflow: hidden; }
+  .sky figure { margin: 0; position: relative; background: #000; aspect-ratio: 1304 / 976; }
+  .sky img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .sky figcaption { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+                    padding: 10px 16px; color: var(--muted); font-size: .9rem; border-top: 1px solid var(--line); }
+  .sky .placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+  .stat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+  .stat .k { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; }
+  .stat .v { font-size: 1.25rem; font-weight: 600; margin-top: 2px; overflow-wrap: anywhere; }
+  .stat .s { color: var(--muted); font-size: .82rem; }
+
+  .moon { display: flex; gap: 14px; align-items: center; margin-bottom: 12px; }
+  .moon svg { flex: none; }
+  .moon .v { font-size: 1.15rem; font-weight: 600; }
+  .muted { color: var(--muted); }
+  .planets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chip { padding: 3px 10px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); font-size: .85rem; }
+
+  .media { display: grid; gap: 16px; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); margin-top: 16px; }
+  @media (max-width: 900px) { .media { grid-template-columns: minmax(0, 1fr); } }
+  video, .media img { width: 100%; border-radius: 10px; background: #000; display: block; }
+  .keogram img { image-rendering: auto; }
+  .empty { padding: 28px 12px; text-align: center; color: var(--muted); background: var(--panel-2);
+           border: 1px dashed var(--line); border-radius: 10px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .tabs button { font: inherit; color: var(--text); background: var(--panel-2); border: 1px solid var(--line);
+                 border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+  .tabs button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+
+  .explain { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-top: 16px; }
+  .explain p { margin: 0; color: var(--muted); }
+  .explain h3 { margin: 0 0 6px; font-size: 1rem; }
+
+  footer { margin: 28px 0 40px; color: var(--muted); font-size: .9rem; display: flex; flex-wrap: wrap;
+           gap: 8px 24px; justify-content: space-between; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Zephyr All-Sky Camera</h1>
+      <p>The whole sky above a garden near Cambridge, UK &middot; 52.2&deg;N 0.1&deg;E</p>
+    </div>
+    <span class="badge" id="mode-badge"><span class="dot" id="live-dot"></span><span id="mode-text">Connecting&hellip;</span></span>
+  </header>
+
+  <div class="grid">
+    <section class="card sky" aria-label="Live sky">
+      <figure>
+        <a id="sky-link" href="#" target="_blank" rel="noopener"><img id="sky-img" alt="Latest all-sky image"></a>
+        <div class="placeholder" id="sky-placeholder">Loading the latest image&hellip;</div>
+      </figure>
+      <figcaption>
+        <span id="sky-time">&nbsp;</span>
+        <span>New image every 15&nbsp;seconds &middot; north at the top</span>
+      </figcaption>
+    </section>
+
+    <div style="display:grid; gap:16px; align-content:start; min-width:0">
+      <section class="card" aria-label="Tonight">
+        <h2>Tonight's sky</h2>
+        <div class="moon">
+          <svg id="moon-svg" width="54" height="54" viewBox="-1 -1 2 2" aria-hidden="true"></svg>
+          <div>
+            <div class="v" id="moon-phase">&nbsp;</div>
+            <div class="muted" id="moon-detail">&nbsp;</div>
+          </div>
+        </div>
+        <div class="stats">
+          <div class="stat"><div class="k">Sunset</div><div class="v" id="sun-set">&ndash;</div><div class="s" id="sun-dark">&nbsp;</div></div>
+          <div class="stat"><div class="k">Sunrise</div><div class="v" id="sun-rise">&ndash;</div><div class="s" id="sun-dawn">&nbsp;</div></div>
+          <div class="stat"><div class="k">Moon</div><div class="v" id="moon-alt">&ndash;</div><div class="s" id="moon-times">&nbsp;</div></div>
+        </div>
+        <div class="planets" id="planets"></div>
+      </section>
+
+      <section class="card" aria-label="Weather">
+        <h2>Weather <small id="wx-age"></small></h2>
+        <div class="stats" id="wx">
+          <div class="empty" style="grid-column:1/-1">Waiting for the weather station&hellip;</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="media">
+    <section class="card" aria-label="Timelapse">
+      <h2>Timelapse</h2>
+      <div class="tabs" role="group" aria-label="Choose timelapse">
+        <button type="button" data-night="1" aria-pressed="true">Last night</button>
+        <button type="button" data-night="0" aria-pressed="false">Daytime</button>
+      </div>
+      <video id="timelapse" controls muted playsinline preload="metadata"></video>
+      <div class="empty" id="timelapse-empty" hidden>No timelapse yet. They're built each morning and evening.</div>
+    </section>
+    <div style="display:grid; gap:16px; align-content:start; min-width:0">
+      <section class="card keogram" aria-label="Keogram">
+        <h2>Keogram <small>last night, dusk &rarr; dawn</small></h2>
+        <img id="keogram" alt="Keogram of last night">
+        <div class="empty" id="keogram-empty" hidden>No keogram yet. One is made each morning.</div>
+      </section>
+      <section class="card" aria-label="Star trails">
+        <h2>Star trails <small>last night</small></h2>
+        <img id="startrail" alt="Star trails from last night">
+        <div class="empty" id="startrail-empty" hidden>No star trails yet. They're made each morning.</div>
+      </section>
+    </div>
+  </div>
+
+  <div class="explain">
+    <section class="card">
+      <h3>What you're seeing</h3>
+      <p>A fisheye lens looking straight up captures the entire sky, horizon to horizon. North is at the top and, because we're looking up rather than down, east is on the left. At night each frame is up to a 15-second exposure, so stars, planets, satellites and meteors all show up.</p>
+    </section>
+    <section class="card">
+      <h3>Keograms</h3>
+      <p>A keogram takes the north&ndash;south strip through the middle of every frame and lines them up left to right, so a whole night fits in one picture. Clear spells, clouds rolling in, moonrise and dawn all show as bands. Aurora researchers invented them.</p>
+    </section>
+    <section class="card">
+      <h3>Star trails</h3>
+      <p>Stacking a night's frames shows the Earth's rotation: stars draw arcs around Polaris, near the top of the image. Gaps in the arcs are clouds passing over.</p>
+    </section>
+    <section class="card">
+      <h3>The kit</h3>
+      <p>A ZWO ASI224MC camera with a fisheye lens and dew heater, run by <a href="https://github.com/aaronwmorris/indi-allsky">indi-allsky</a> on a Raspberry Pi. Weather comes from a station in the same garden running <a href="https://weewx.com">WeeWX</a>.</p>
+    </section>
+  </div>
+
+  <footer>
+    <span>Images are kept for 30&nbsp;days and timelapses for a year.</span>
+  </footer>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const BASE = "/indi-allsky/";
+  const $ = (id) => document.getElementById(id);
+  const STALE_AFTER_S = 600;
+
+  function ago(seconds) {
+    if (seconds < 60) return `${Math.round(seconds)} s ago`;
+    if (seconds < 3600) return `${Math.round(seconds / 60)} min ago`;
+    if (seconds < 86400) return `${(seconds / 3600).toFixed(1)} h ago`;
+    return `${Math.round(seconds / 86400)} days ago`;
+  }
+  function hm(t) { return t ? String(t).slice(0, 5) : "–"; }
+  async function getJSON(url) {
+    const r = await fetch(url, { cache: "no-store" });
+    if (!r.ok) throw new Error(`${url}: ${r.status}`);
+    return r.json();
+  }
+  function num(v) { const n = parseFloat(v); return Number.isFinite(n) ? n : null; }
+
+  // ---- Live sky ---------------------------------------------------------
+  let lastUrl = null;
+  async function refreshSky() {
+    try {
+      const loop = await getJSON(BASE + "js/loop?camera_id=1&limit=1");
+      const img = loop.image_list && loop.image_list[0];
+      if (!img) throw new Error("no image");
+      const url = BASE + img.url;
+      const age = Date.now() / 1000 - img.timestamp;
+      $("sky-time").textContent = `Taken ${new Date(img.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })} (${ago(age)})`;
+      $("live-dot").className = "dot " + (age < STALE_AFTER_S ? "live" : "stale");
+      if (age >= STALE_AFTER_S) $("mode-text").textContent = `Camera offline since ${ago(age)}`;
+      if (url !== lastUrl) {
+        const pre = new Image();
+        pre.onload = () => {
+          $("sky-img").src = url;
+          $("sky-link").href = url;
+          $("sky-placeholder").hidden = true;
+          lastUrl = url;
+        };
+        pre.src = url;
+      }
+    } catch (e) {
+      $("sky-placeholder").textContent = "The camera isn't sending images right now.";
+      $("live-dot").className = "dot stale";
+    }
+  }
+
+  // ---- Sun, moon, planets ------------------------------------------------
+  function drawMoon(illum, waxing) {
+    // Lit fraction k in [0,1]; terminator is an ellipse with x-radius |1-2k|.
+    const k = Math.max(0, Math.min(1, illum / 100));
+    const rx = Math.abs(1 - 2 * k);
+    const litRight = waxing; // northern hemisphere: waxing is lit on the right
+    const outer = litRight ? "0 1 1" : "0 1 0";
+    const sweep = (k > 0.5) === litRight ? 1 : 0;
+    const d = `M0,-1 A1,1 ${outer} 0,1 A${rx},1 0 0 ${sweep} 0,-1 Z`;
+    $("moon-svg").innerHTML =
+      `<circle r="1" fill="#2a3350"/><path d="${d}" fill="#f3ecd2"/>`;
+  }
+  const PLANETS = ["mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune"];
+  async function refreshAstro() {
+    try {
+      const a = await getJSON(BASE + "ajax/astropanel?camera_id=1");
+      $("sun-set").textContent = hm(a.sun_set);
+      $("sun-rise").textContent = hm(a.sun_rise);
+      $("sun-dark").textContent = a.sun_at_end ? `Fully dark ${hm(a.sun_at_end)}` : "";
+      $("sun-dawn").textContent = a.sun_at_start ? `First light ${hm(a.sun_at_start)}` : "";
+      const night = num(a.sun_alt) !== null && a.sun_alt < -6;
+      if (!$("live-dot").classList.contains("stale")) {
+        $("mode-text").textContent = night ? "Live · night" : (a.sun_alt < 0 ? "Live · twilight" : "Live · daytime");
+      }
+      const phase = a.moon_phase || "";
+      $("moon-phase").textContent = `${phase} · ${a.moon_light}% lit`;
+      const fullD = a.moon_full ? new Date(a.moon_full.replace(" ", "T")) : null;
+      const newD = a.moon_new ? new Date(a.moon_new.replace(" ", "T")) : null;
+      const fmt = (d) => d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+      const next = [fullD && `Full ${fmt(fullD)}`, newD && `New ${fmt(newD)}`].filter(Boolean).join(" · ");
+      $("moon-detail").textContent = next;
+      drawMoon(a.moon_light, /wax/i.test(phase));
+      const malt = num(a.moon_alt);
+      $("moon-alt").textContent = malt === null ? "–" : (malt > 0 ? `Up ${Math.round(malt)}°` : "Below horizon");
+      $("moon-times").textContent = `Rises ${hm(a.moon_rise)} · sets ${hm(a.moon_set)}`;
+      const up = PLANETS.filter((p) => num(a[`${p}_alt`]) > 5);
+      $("planets").innerHTML = up.length
+        ? `<span class="muted" style="margin-right:4px">Above the horizon now:</span>` +
+          up.map((p) => `<span class="chip">${p[0].toUpperCase() + p.slice(1)} ${Math.round(a[p + "_alt"])}°</span>`).join("")
+        : `<span class="muted">No bright planets above the horizon right now.</span>`;
+    } catch (e) { /* keep last values */ }
+  }
+  // ---- Weather ------------------------------------------------------------
+  const COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+  function stat(k, v, s) {
+    return `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div>${s ? `<div class="s">${s}</div>` : ""}</div>`;
+  }
+  async function refreshWeather() {
+    try {
+      const w = await getJSON("/weather.json");
+      const t = num(w.temperature_c), feels = num(w.feels_like_c), hum = num(w.humidity_pct),
+            dew = num(w.dewpoint_c), p = num(w.pressure_hpa),
+            ws = num(w.wind_kph), wg = num(w.gust_kph), wd = num(w.wind_dir_deg),
+            rain = num(w.rain_today_mm), rate = num(w.rain_rate_mm_h),
+            cloud = num(w.cloud_cover_pct), sqm = num(w.sky_quality_mpsas),
+            base = num(w.cloudbase_m);
+      const cells = [];
+      if (t !== null) cells.push(stat("Temperature", `${t.toFixed(1)}°C`, feels !== null ? `Feels like ${feels.toFixed(0)}°C` : ""));
+      if (hum !== null) cells.push(stat("Humidity", `${Math.round(hum)}%`, dew !== null ? `Dew point ${dew.toFixed(1)}°C` : ""));
+      if (p !== null) cells.push(stat("Pressure", `${Math.round(p)} hPa`, ""));
+      if (ws !== null) cells.push(stat("Wind", `${Math.round(ws)} km/h`,
+        [wd !== null ? `from ${COMPASS[Math.round(wd / 22.5) % 16]}` : "", wg !== null ? `gusts ${Math.round(wg)}` : ""].filter(Boolean).join(", ")));
+      if (rain !== null) cells.push(stat("Rain today", `${rain.toFixed(1)} mm`, rate ? `${rate.toFixed(1)} mm/h now` : ""));
+      if (cloud !== null) cells.push(stat("Cloud cover", `${Math.round(cloud)}%`, ""));
+      if (sqm !== null) cells.push(stat("Sky darkness", `${sqm.toFixed(1)}`, "mag/arcsec²"));
+      else if (base !== null && hum !== null && hum > 60) cells.push(stat("Cloud base", `${Math.round(base / 10) * 10} m`, "estimated"));
+      $("wx").innerHTML = cells.join("") || `<div class="empty" style="grid-column:1/-1">No weather data right now.</div>`;
+      const ts = num(w.time);
+      $("wx-age").textContent = ts ? `· ${ago(Date.now() / 1000 - ts)}` : "";
+    } catch (e) {
+      $("wx").innerHTML = `<div class="empty" style="grid-column:1/-1">The weather station isn't reporting right now.</div>`;
+      $("wx-age").textContent = "";
+    }
+  }
+
+  // ---- Last night's media ---------------------------------------------------
+  function mediaWithFallback(el, emptyEl, url) {
+    emptyEl.hidden = true;
+    el.hidden = false;
+    el.onerror = () => { el.hidden = true; emptyEl.hidden = false; };
+    el.src = url;
+  }
+  function loadTimelapse(night) {
+    document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.night === String(night))));
+    mediaWithFallback($("timelapse"), $("timelapse-empty"), `${BASE}latesttimelapse?camera_id=1&night=${night}`);
+  }
+  document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => loadTimelapse(b.dataset.night)));
+
+  // ---- Start ------------------------------------------------------------------
+  refreshSky(); refreshAstro(); refreshWeather();
+  loadTimelapse(1);
+  mediaWithFallback($("keogram"), $("keogram-empty"), `${BASE}latestkeogram?camera_id=1&night=1`);
+  mediaWithFallback($("startrail"), $("startrail-empty"), `${BASE}lateststartrail?camera_id=1`);
+  setInterval(refreshSky, 15000);
+  setInterval(refreshAstro, 120000);
+  setInterval(refreshWeather, 60000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { refreshSky(); refreshWeather(); } });
+})();
+</script>
+</body>
+</html>

@@ -33,6 +33,7 @@ spec:
       match: >-
         Host(`zephyr.ecafe.org`) && (Method(`GET`) || Method(`HEAD`)) && (
         Path(`/`) ||
+        Path(`/weather.json`) ||
         PathRegexp(`^/indi-allsky/?$`) ||
         PathRegexp(`^/indi-allsky/(static|images)/`) ||
         PathRegexp(`^/indi-allsky/(sw\.js|manifest\.json)$`) ||

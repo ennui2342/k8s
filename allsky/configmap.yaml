@@ -46,10 +46,33 @@ data:
         # Relative Location headers, so a redirect keeps the client's scheme
         # (nginx only sees plain HTTP from Traefik).
         absolute_redirect off;
-        rewrite ^/$ /indi-allsky/ redirect;
 
         # The Pi uploads timelapse videos of ~50 MB over SyncAPI.
         client_max_body_size 1024M;
+
+        # Public landing page (tm c2ac591f), from the zephyr-site ConfigMap
+        # (kustomization.yaml configMapGenerator). Replaces the old 302 to
+        # /indi-allsky/; also applies on allsky.k8s.ecafe.org, whose admin
+        # UI is at /indi-allsky/.
+        location = / {
+            root /usr/share/nginx/zephyr-site;
+            try_files /index.html =404;
+            add_header Cache-Control "max-age=300";
+        }
+
+        # Live weather for the landing page: the garden WeeWX station
+        # (weatherstation.local, a standalone Pi, NOT a cluster node) rewrites
+        # this every 5 min. The cluster depends on it keeping 192.168.0.220.
+        # Station down -> 502/504, which the page shows as "isn't reporting".
+        location = /weather.json {
+            proxy_pass http://192.168.0.220/weewx/zephyr/weather.json;
+            proxy_connect_timeout 3s;
+            proxy_read_timeout 5s;
+            proxy_send_timeout 5s;
+            proxy_hide_header Cache-Control;
+            proxy_hide_header Expires;
+            add_header Cache-Control "no-cache" always;
+        }
 
         location /indi-allsky/images {
             alias /var/www/html/allsky/images;

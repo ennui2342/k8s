@@ -11,3 +11,12 @@ resources:
   - ingress.yaml
   - certificate.yaml
   - public-ingressroute.yaml
+# Public landing page for https://zephyr.ecafe.org/ (tm c2ac591f), served by
+# the allsky-web nginx sidecar at `location = /`. Master copy lives in
+# ~/projects/allsky/zephyr-site/index.html; changes come as new tasks.
+# Hash suffix kept on purpose: a new index.html rolls the pod by itself.
+configMapGenerator:
+  - name: zephyr-site
+    namespace: allsky
+    files:
+      - zephyr-site/index.html
