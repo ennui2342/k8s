@@ -1,0 +1,80 @@
+# Loki ruler alerts for the all-sky camera Pi (tm 1f493a81). Picked up by the
+# Loki chart's rules sidecar via the `loki_rule` label (see monitoring/loki.yaml),
+# evaluated every 1m, sent to the kube-prometheus-stack Alertmanager -> Discord
+# + health-monitor's tm bridge, same as every Prometheus alert.
+#
+# Source: the Pi's rsyslog -> monitoring/syslog-receiver.yaml (NodePort 30514).
+# Labels: host, facility, severity, app (app mapped from facility; local6 =
+# indi-allsky capture daemon, kern = kernel). Baselines from a week of the Pi's
+# logs, 2026-11. Deliberately not alerted: "Kernel DHT read failed" (~1 in 7
+# reads, normal for a DHT22), aurora/NOAA/TLE download errors (external), and
+# single upload errors.
+#
+# Silence while the camera is deliberately off or travelling: see RUNBOOK.md's
+# "All-sky camera log alerts" section.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-rules-allsky
+  namespace: monitoring
+  labels:
+    loki_rule: ""
+data:
+  allsky.yaml: |
+    groups:
+      - name: allsky
+        interval: 1m
+        rules:
+          - alert: AllskyNoFrames
+            # One miscDb.addImage() line per frame; frames every 15 s, day and
+            # night (~4/min). Covers camera off USB, capture hung/crashed, Pi down
+            # or off the network.
+            expr: |
+              absent_over_time({host="indi-allsky", app="indi-allsky"} |= "miscDb.addImage()" [10m])
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: no new frames for 10 min"
+              description: >-
+                No miscDb.addImage() line from indi-allsky.local in the last 10 minutes
+                (normally ~4/min). Camera off USB, capture hung or crashed, or the Pi is
+                down / off the network. Expected while the camera is deliberately off or
+                travelling - silence it then.
+          - alert: AllskyUploadsFailing
+            # "Tranfer" is upstream's spelling. Baseline ~5 one-off 503s/timeouts a
+            # week; the 2026-11-20 DNS outage ran ~3/min.
+            expr: |
+              sum(count_over_time({host="indi-allsky", app="indi-allsky"} |= "uploader.processUpload()" |~ "Connection failure|Tranfer failure" [15m])) > 10
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: uploads to the cluster are failing"
+              description: >-
+                More than 10 SyncAPI upload failures from indi-allsky.local in 15 minutes
+                (connection or transfer failures to allsky.k8s.ecafe.org). Check the Pi's
+                DNS / network and the allsky-web pod.
+          - alert: AllskyUndervoltage
+            expr: |
+              sum(count_over_time({host="indi-allsky", app="kernel"} |= "Undervoltage detected" [10m])) > 0
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: Pi reports undervoltage"
+              description: >-
+                The camera Pi's kernel logged "Undervoltage detected" in the last 10 minutes.
+                Check the power supply and wiring.
+          - alert: AllskyTraceback
+            expr: |
+              sum(count_over_time({host="indi-allsky"} |= "Traceback" [10m])) > 0
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: Python traceback in the Pi's logs"
+              description: >-
+                A Python traceback was logged on indi-allsky.local in the last 10 minutes
+                (normally none). Check the Pi's logs in Grafana Explore:
+                {host="indi-allsky"} |= "Traceback".

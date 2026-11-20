@@ -61,6 +61,23 @@ spec:
       limits_config:
         retention_period: 744h   # 31 days
 
+      # Ruler (tm 1f493a81): runs inside the SingleBinary (-target=all). Rules come
+      # from git as ConfigMaps labelled `loki_rule` (e.g. monitoring/loki-rules-allsky.yaml),
+      # which the chart's k8s-sidecar writes into /rules/fake ("fake" = the tenant ID
+      # when auth_enabled is false; local storage expects <directory>/<tenant>/*.yaml).
+      # Alerts go to the same Alertmanager as Prometheus's, so they hit the same
+      # Discord receiver, 24h repeat_interval and health-monitor -> tm bridge.
+      rulerConfig:
+        wal:
+          dir: /var/loki/ruler-wal
+        storage:
+          type: local
+          local:
+            directory: /rules
+        rule_path: /var/loki/rules-temp
+        alertmanager_url: http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093
+        enable_api: true
+
     singleBinary:
       replicas: 1
       affinity:
@@ -110,6 +127,9 @@ spec:
     # no app/config changes) — upstream still 0 CRITICAL / 5 HIGH in pip's vendored libs,
     # same pip-strip recipe -> 0 CRITICAL / 0 HIGH (reconcile-scanner task 3861ae0e).
     sidecar:
+      rules:
+        # Tenant subdirectory under the ruler's local /rules directory (see rulerConfig above).
+        folder: /rules/fake
       image:
         registry: "127.0.0.1:30500"
         repository: "k8s-sidecar"

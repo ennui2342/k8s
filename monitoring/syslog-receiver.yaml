@@ -1,0 +1,189 @@
+# LAN syslog receiver -> Loki (tm 1f493a81). Grafana Alloy, single replica,
+# listening for RFC 5424 over TCP (octet-counted or newline framing, both
+# auto-detected) on NodePort 30514 - any node IP works; the all-sky camera Pi
+# (indi-allsky.local) sends to 192.168.0.8:30514 via rsyslog omfwd with
+# RSYSLOG_SyslogProtocol23Format (see ~/projects/allsky/tools/).
+#
+# LAN-only by construction: a NodePort on the node IPs, which the router does
+# not forward and the Tailscale Connector does not advertise (it only routes
+# the pod/service CIDRs). No Ingress, no public entry point.
+#
+# Alloy rather than promtail's syslog target: promtail is EOL (see
+# monitoring/promtail.yaml), Alloy is its maintained replacement and ships
+# upstream CVE fixes, so this is a plain pinned upstream tag, no local fork.
+#
+# Labels (low-cardinality by design): job="syslog", host (syslog HOSTNAME),
+# facility, severity, app. app is mapped from facility for the indi-allsky
+# daemons, whose messages carry no useful syslog tag; anything else falls
+# back to the syslog APP-NAME.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: syslog-receiver
+  namespace: monitoring
+data:
+  config.alloy: |
+    loki.source.syslog "lan" {
+      listener {
+        address                = "0.0.0.0:1514"
+        protocol               = "tcp"
+        syslog_format          = "rfc5424"
+        use_incoming_timestamp = true
+        labels                 = { job = "syslog" }
+      }
+      relabel_rules = loki.relabel.syslog.rules
+      forward_to    = [loki.write.default.receiver]
+    }
+
+    loki.relabel "syslog" {
+      forward_to = []
+
+      rule {
+        source_labels = ["__syslog_message_hostname"]
+        target_label  = "host"
+      }
+      rule {
+        source_labels = ["__syslog_message_facility"]
+        target_label  = "facility"
+      }
+      rule {
+        source_labels = ["__syslog_message_severity"]
+        target_label  = "severity"
+      }
+      // Default app = syslog APP-NAME, then overridden per facility below.
+      rule {
+        source_labels = ["__syslog_message_app_name"]
+        target_label  = "app"
+      }
+      rule {
+        source_labels = ["__syslog_message_facility"]
+        regex         = "local6"
+        target_label  = "app"
+        replacement   = "indi-allsky"
+      }
+      rule {
+        source_labels = ["__syslog_message_facility"]
+        regex         = "local5"
+        target_label  = "app"
+        replacement   = "indiserver"
+      }
+      rule {
+        source_labels = ["__syslog_message_facility"]
+        regex         = "local7"
+        target_label  = "app"
+        replacement   = "indi-allsky-web"
+      }
+      rule {
+        source_labels = ["__syslog_message_facility"]
+        regex         = "local4"
+        target_label  = "app"
+        replacement   = "indi-allsky-upgrade"
+      }
+      rule {
+        source_labels = ["__syslog_message_facility"]
+        regex         = "kern"
+        target_label  = "app"
+        replacement   = "kernel"
+      }
+    }
+
+    loki.write "default" {
+      endpoint {
+        url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: syslog-receiver
+  namespace: monitoring
+  labels:
+    app: syslog-receiver
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: syslog-receiver
+  template:
+    metadata:
+      labels:
+        app: syslog-receiver
+      annotations:
+        # Bump when the ConfigMap above changes (Flux won't restart the pod).
+        checksum/config: "2026-11-20-1"
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      containers:
+        - name: alloy
+          image: docker.io/grafana/alloy:v1.22.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - run
+            - /etc/alloy/config.alloy
+            - --server.http.listen-addr=0.0.0.0:12345
+            - --storage.path=/var/lib/alloy/data
+            - --disable-reporting
+          ports:
+            - name: syslog
+              containerPort: 1514
+              protocol: TCP
+            - name: http
+              containerPort: 12345
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 20m
+              memory: 96Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/alloy/data
+      volumes:
+        - name: config
+          configMap:
+            name: syslog-receiver
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: syslog-receiver
+  namespace: monitoring
+spec:
+  type: NodePort
+  selector:
+    app: syslog-receiver
+  ports:
+    - name: syslog
+      port: 1514
+      targetPort: syslog
+      nodePort: 30514
+      protocol: TCP
