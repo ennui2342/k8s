@@ -5,10 +5,12 @@ metadata:
   name: discord
   namespace: flux-system
 spec:
-  type: discord
-  username: k8s homelab
-  secretRef:
-    name: discord-webhook  # created manually: kubectl create secret generic discord-webhook -n flux-system --from-literal=address=<webhook-url>
+  # Not Flux's own `discord` type: that renders every event's metadata (revision,
+  # token sha256, app-version) as embed fields with no way to trim them. Events go
+  # to discord-relay/ instead, which batches and formats them and posts to the
+  # discord-webhook secret (discord-webhook-secret.yaml).
+  type: generic
+  address: http://flux-discord-relay.flux-system.svc.cluster.local:8080/
 ---
 apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Alert
@@ -18,8 +20,6 @@ metadata:
 spec:
   providerRef:
     name: discord
-  eventMetadata:
-    summary: "k8s homelab"
   eventSeverity: info
   # Suppresses routine chatter that isn't actionable:
   #  - "artifact up-to-date" / "stored fetched index of size": HelmRepository index-fetch

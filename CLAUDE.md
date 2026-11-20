@@ -227,6 +227,12 @@ Manifests: `flux-system/taskmgt-image-automation.yaml`
 ### Discord Notifications
 
 Flux alerts on deployment events via Discord webhook. Manifests: `flux-system/discord-alert.yaml`.
+The Provider is `type: generic`, pointing at `flux-system/discord-relay/` (`flux-discord-relay`,
+a stdlib-Python Deployment on `k8s-toolbox`, script in a `configMapGenerator` ConfigMap), not Flux's
+own `discord` type, which can't be templated and attaches every event's metadata (revision, token
+sha256, app-version) as embed fields. The relay batches events for 20s and posts one compact embed,
+one line per event (`✅ **opsimath** · Deployment/opsimath-web configured · 4129a52`), failures first.
+If the relay is down, Flux notifications are dropped (the pod is covered by the usual Prometheus alerts).
 The `Alert`'s `exclusionList` suppresses non-actionable chatter — HelmRepository index polling,
 the GitRepository per-commit "stored artifact for commit" line, the per-Kustomization
 "Reconciliation finished in Xs" heartbeat (fires on every reconcile; with 33 per-app
@@ -375,7 +381,7 @@ allsky/           — indi-allsky web/SyncAPI receiver for the garden all-sky ca
 botkube/          — Flux HelmRelease + Discord webhook secret; Discord alerts + kubectl/helm/flux executors
 cert-manager/     — Flux HelmRelease + HelmRepository (jetstack) + ClusterIssuer
 coredns/          — CoreDNS override resolving k8s.ecafe.org (apex + subdomains) straight to Traefik's ClusterIP, for Tailscale Split DNS clients — see Cluster Topology's DNS note above
-flux-system/      — Flux bootstrap output + SOPS patch + alert config
+flux-system/      — Flux bootstrap output + SOPS patch + alert config + discord-relay/ (compact Flux→Discord formatter)
 dashboards/       — Custom Grafana dashboard ConfigMaps (Solar, Observatory, NAS Monitor, Weather Station)
 epigone/          — epigone.ecafe.org namespace: cert-manager Certificate + IngressRoute fronting Home Assistant
 freshrss/         — Self-hosted RSS reader (Readwise Reader evaluation, phase 1): deployment, data/extensions PVCs, internal + Tailscale ingress, bootstrap secret

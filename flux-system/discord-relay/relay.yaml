@@ -1,0 +1,85 @@
+# Compact Flux -> Discord notifications. notification-controller posts raw
+# events to this relay (generic Provider in ../discord-alert.yaml), which
+# batches them and posts one short embed per burst. See relay.py for why Flux's
+# own discord provider is too verbose. If this pod is down, Flux notifications
+# are dropped (notification-controller logs the failed POST); the pod itself is
+# covered by the usual Prometheus pod/deployment alerts.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flux-discord-relay
+  namespace: flux-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flux-discord-relay
+  template:
+    metadata:
+      labels:
+        app: flux-discord-relay
+    spec:
+      # Soft worker-preference affinity comes from the Deployment-wide patch in
+      # ./kustomization.yaml.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: relay
+          image: 127.0.0.1:30500/k8s-toolbox:1.36.5-20261024
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "-u", "/app/relay.py"]
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: DISCORD_WEBHOOK
+              valueFrom:
+                secretKeyRef:
+                  name: discord-webhook
+                  key: address
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 5m
+              memory: 24Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: app
+              mountPath: /app
+      volumes:
+        - name: app
+          configMap:
+            name: flux-discord-relay
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flux-discord-relay
+  namespace: flux-system
+spec:
+  selector:
+    app: flux-discord-relay
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

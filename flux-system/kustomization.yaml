@@ -9,6 +9,12 @@ resources:
 - mg-reporting-ghcr-secret.yaml
 - discord-alert.yaml
 - discord-webhook-secret.yaml
+- discord-relay/relay.yaml
+configMapGenerator:
+- name: flux-discord-relay
+  namespace: flux-system
+  files:
+  - discord-relay/relay.py
 patches:
 - path: gotk-patches.yaml
   target:
