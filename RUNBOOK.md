@@ -1112,6 +1112,50 @@ kubectl exec -n allsky deploy/allsky-web -c gunicorn -- bash -c 'cd /home/allsky
 CronJob (12:00 Europe/London) runs `expire.sh` (images 30 days, videos 365 days). To run it
 by hand: `kubectl create job -n allsky --from=cronjob/allsky-expire allsky-expire-manual`.
 
+#### All-sky camera log alerts (tm 1f493a81)
+
+The Pi (`indi-allsky.local`, 192.168.0.121) ships its syslog with rsyslog `omfwd` (TCP,
+`RSYSLOG_SyslogProtocol23Format`, octet-counted) to **`192.168.0.8:30514`**, the NodePort of
+`monitoring/syslog-receiver` (Grafana Alloy, `monitoring/syslog-receiver.yaml`). Any node IP
+works. It is LAN-only: the router doesn't forward it and the Tailscale Connector only advertises
+the pod and service CIDRs. The Pi-side file is `~/projects/allsky/tools/rsyslog-05-remote-loki.conf`.
+
+Loki labels: `job="syslog"`, `host` (syslog HOSTNAME, `indi-allsky` for the Pi), `facility`,
+`severity` (rsyslog names: `informational`, `warning`, ...), `app` (local6 → `indi-allsky`,
+local5 → `indiserver`, local7 → `indi-allsky-web`, local4 → `indi-allsky-upgrade`, kern →
+`kernel`, else the syslog APP-NAME). Loki adds `service_name` (same value as `app`) itself.
+Explore: `{host="indi-allsky"}`.
+
+The rules are in `monitoring/loki-rules-allsky.yaml`, a ConfigMap labelled `loki_rule` that the
+Loki chart's sidecar writes into `/rules/fake`. They are `AllskyNoFrames`, `AllskyUploadsFailing`,
+`AllskyUndervoltage` and `AllskyTraceback`, all `severity=warning, namespace=allsky`. The Loki ruler
+sends them to the kube-prometheus-stack Alertmanager, so they reach Discord and health-monitor's
+tm bridge like any other alert. Check they loaded:
+`kubectl port-forward -n monitoring svc/loki 3100` and then
+`curl -s localhost:3100/prometheus/api/v1/rules`.
+
+To test the receiver from the Mac (macOS `logger` can't do RFC 5424 to a remote host; use a
+host other than `indi-allsky` so no real alert fires):
+```sh
+python3 -c 'import socket,datetime as d;t=d.datetime.now(d.timezone.utc).isoformat();m=f"<182>1 {t} allsky-test - - - - hello".encode();s=socket.create_connection(("192.168.0.8",30514));s.sendall(str(len(m)).encode()+b" "+m)'
+```
+On Linux the util-linux equivalent is `logger -n 192.168.0.8 -P 30514 -T --rfc5424 --octet-count -H allsky-test -p local6.info hello`.
+
+**Silencing while the camera is off or travelling.** Silence every all-sky alert, or just
+`AllskyNoFrames`, for the trip. Silenced alerts reach neither Discord nor the tm bridge (it queries
+`silenced=false`). Either use the Alertmanager UI (`kubectl port-forward -n monitoring
+svc/kube-prometheus-stack-alertmanager 9093`, then http://localhost:9093 → New Silence, matcher
+`namespace="allsky"`), or amtool:
+```sh
+kubectl port-forward -n monitoring svc/kube-prometheus-stack-alertmanager 9093 &
+amtool --alertmanager.url=http://localhost:9093 silence add namespace=allsky \
+  --duration=14d --author=mark --comment="all-sky camera travelling"
+amtool --alertmanager.url=http://localhost:9093 silence query            # list
+amtool --alertmanager.url=http://localhost:9093 silence expire <id>      # when it's back
+```
+(`brew install prometheus` provides `amtool`; alternatively use
+`kubectl exec -n monitoring alertmanager-kube-prometheus-stack-alertmanager-0 -c alertmanager -- amtool --alertmanager.url=http://localhost:9093 ...`.)
+
 ### WebDAV (Zotero) — Tailscale Funnel
 
 `webdav/funnel-ingress.yaml` exposes webdav at a stable `*.ts.net` hostname via the

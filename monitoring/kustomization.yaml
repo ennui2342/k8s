@@ -9,4 +9,3 @@ resources:
   - promtail.yaml
   - syslog-receiver.yaml
   - loki-rules-allsky.yaml
-  - loki-rules-test.yaml
