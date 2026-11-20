@@ -92,7 +92,7 @@ def post(payload):
             "Content-Type": "application/json", "User-Agent": "flux-discord-relay"})
         try:
             urllib.request.urlopen(req, timeout=10).read()
-            return
+            return True
         except urllib.error.HTTPError as e:
             if e.code == 429:
                 time.sleep(float(json.loads(e.read() or b"{}").get("retry_after", 2)))
@@ -103,6 +103,7 @@ def post(payload):
             log(f"discord post failed: {e}")
             time.sleep(2)
     log("discord post gave up after retries")
+    return False
 
 
 def flush():
@@ -126,9 +127,10 @@ def flush():
         title = "Flux: reconcile failed"
     else:
         title = f"Flux: {n_err} failed, {len(formatted) - n_err} ok"
-    post({"username": USERNAME, "embeds": [{
-        "title": title, "description": "\n".join(lines),
-        "color": RED if n_err else GREEN}]})
+    if post({"username": USERNAME, "embeds": [{
+            "title": title, "description": "\n".join(lines),
+            "color": RED if n_err else GREEN}]}):
+        log(f"posted {len(formatted)} event(s): {title}")
 
 
 class Handler(BaseHTTPRequestHandler):
