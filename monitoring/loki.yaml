@@ -61,6 +61,19 @@ spec:
       limits_config:
         retention_period: 744h   # 31 days
 
+      # TSDB active index (head WAL + not-yet-shipped tables) on a memory-backed
+      # emptyDir, NOT the NFS PVC. On NFS, Loki deletes head-WAL segments while it
+      # still holds them open, so the client silly-renames them to .nfsXXXX and the
+      # directory removal fails with "unlinkat ...: directory not empty" - fatal at
+      # startup (buildTSDBFromWALs), so every Loki restart crash-looped. Hit live
+      # 2026-11-20 (tm 1f493a81): Loki down ~13:13-13:22 and two Helm rollbacks.
+      # Cost of emptyDir: index for chunks flushed in the few minutes before a
+      # restart is lost (the ingester WAL in /var/loki/wal, still on NFS, replays
+      # unflushed chunks). A homelab log store, an acceptable trade.
+      storage_config:
+        tsdb_shipper:
+          active_index_directory: /var/loki-local/tsdb-index
+
       # Ruler (tm 1f493a81): runs inside the SingleBinary (-target=all). Rules come
       # from git as ConfigMaps labelled `loki_rule` (e.g. monitoring/loki-rules-allsky.yaml),
       # which the chart's k8s-sidecar writes into /rules/fake ("fake" = the tenant ID
@@ -92,6 +105,16 @@ spec:
         enabled: true
         storageClass: nfs-client
         size: 10Gi
+      # See loki.storage_config.tsdb_shipper above. Memory-backed so it doesn't
+      # write to a Pi worker's SD card; the active index is ~10 MB.
+      extraVolumes:
+        - name: loki-local
+          emptyDir:
+            medium: Memory
+            sizeLimit: 128Mi
+      extraVolumeMounts:
+        - name: loki-local
+          mountPath: /var/loki-local
 
     # Disable distributed-mode components
     backend:
