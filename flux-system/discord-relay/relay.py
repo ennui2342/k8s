@@ -15,6 +15,7 @@ Stdlib only (runs on k8s-toolbox). Filtering (exclusionList) stays on the Alert.
 import json
 import os
 import re
+import signal
 import sys
 import threading
 import time
@@ -161,6 +162,16 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+def shutdown(signum, frame):
+    # Rollouts (including of this relay) send events while the old pod is
+    # terminating; post the pending batch rather than drop it.
+    if timer is not None:
+        timer.cancel()
+    flush()
+    sys.exit(0)
+
+
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, shutdown)
     log(f"flux-discord-relay listening on :8080, batch {BATCH_SECONDS}s")
     ThreadingHTTPServer(("", 8080), Handler).serve_forever()
