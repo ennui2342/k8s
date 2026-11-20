@@ -244,6 +244,51 @@ spec:
                     - key: node-role.kubernetes.io/control-plane
                       operator: DoesNotExist
 
+      # Loaded via the chart's default config.templates glob
+      # (/etc/alertmanager/config/*.tmpl). Test changes with amtool before
+      # pushing, e.g.:
+      #   docker run --rm -v $PWD:/t --entrypoint amtool prom/alertmanager:v0.28.1 \
+      #     template render --template.glob=/t/discord.tmpl --template.data=/t/data.json \
+      #     --template.text='{{ template "discord.compact.message" . }}'
+      templateFiles:
+        discord.tmpl: |
+          {{ define "discord.compact.title" -}}
+          {{ if eq .Status "resolved" }}✅{{ else if eq .CommonLabels.severity "critical" }}🚨{{ else }}⚠️{{ end }}
+          {{- if .CommonLabels.alertname }} {{ .CommonLabels.alertname }}{{ with .CommonLabels.namespace }} · {{ . }}{{ end }}
+          {{- else }} {{ or .CommonLabels.namespace "Mixed" }} alerts{{ end }}
+          {{- if eq .Status "resolved" }} resolved{{ else if gt (len .Alerts.Firing) 1 }} ×{{ len .Alerts.Firing }}{{ end }}
+          {{- end }}
+
+          {{/* One firing alert: summary + description. Several sharing a summary
+               (same rule, e.g. N crash-looping pods): the summary once, then each
+               alert's labels that aren't common to the group. Several different
+               rules (the allsky route): one summary line each. Capped at 10. */}}
+          {{ define "discord.compact.message" -}}
+          {{ if eq (len .Alerts.Firing) 1 -}}
+          {{ with index .Alerts.Firing 0 -}}
+          **{{ or .Annotations.summary .Labels.alertname }}**
+          {{ .Annotations.description }}{{ with .Annotations.runbook_url }} · [runbook]({{ . }}){{ end }}
+          {{ end -}}
+          {{ else if .Alerts.Firing -}}
+          {{ with .CommonAnnotations.summary }}**{{ . }}**
+          {{ end -}}
+          {{ range $i, $a := .Alerts.Firing -}}
+          {{ if lt $i 10 -}}
+          • {{ if $.CommonAnnotations.summary -}}
+          `{{ range $j, $p := ((.Labels.Remove $.CommonLabels.Names).Remove (stringSlice "prometheus" "endpoint" "service" "uid")).SortedPairs }}{{ if $j }} {{ end }}{{ $p.Name }}={{ $p.Value }}{{ end }}`
+          {{- else }}{{ or .Annotations.summary .Labels.alertname }}{{ end }}
+          {{ end -}}
+          {{ end -}}
+          {{ if gt (len .Alerts.Firing) 10 }}…showing 10 of {{ len .Alerts.Firing }}
+          {{ end -}}
+          {{ end -}}
+          {{ if .Alerts.Resolved -}}
+          {{ if .Alerts.Firing }}
+          {{ end }}✅ Resolved: {{ if .CommonAnnotations.summary }}{{ .CommonAnnotations.summary }}{{ if gt (len .Alerts.Resolved) 1 }} ×{{ len .Alerts.Resolved }}{{ end }}
+          {{- else }}{{ range $i, $a := .Alerts.Resolved }}{{ if lt $i 10 }}{{ if $i }}; {{ end }}{{ or .Annotations.summary .Labels.alertname }}{{ end }}{{ end }}{{ if gt (len .Alerts.Resolved) 10 }} …({{ len .Alerts.Resolved }} total){{ end }}{{ end }}
+          {{ end -}}
+          {{ end }}
+
       config:
         global:
           resolve_timeout: 5m
@@ -266,6 +311,11 @@ spec:
                 - alertname="InfoInhibitor"
               receiver: "null"  # fires by design to mute severity=info alerts; never actionable
                                 # (also skipped by health-monitor's tm bridge, 2026-10-24)
+            - matchers:
+                - namespace="allsky"
+              group_by: ['namespace']  # one camera Pi fault fires several rules at once
+                                       # (e.g. NoFrames + HealthLogMissing); one message, not one each
+              receiver: discord
 
         receivers:
           - name: "null"
@@ -273,6 +323,10 @@ spec:
             discord_configs:
               - webhook_url: ""  # overwritten at deploy time by spec.valuesFrom above
                 send_resolved: true
+                # Compact format from templateFiles below; the default lists every
+                # label, annotation and Source URL per alert.
+                title: '{{ template "discord.compact.title" . }}'
+                message: '{{ template "discord.compact.message" . }}'
 
         inhibit_rules:
           # Standard: critical suppresses warning/info for same alert in same namespace
