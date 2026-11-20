@@ -78,3 +78,219 @@ data:
                 A Python traceback was logged on indi-allsky.local in the last 10 minutes
                 (normally none). Check the Pi's logs in Grafana Explore:
                 {host="indi-allsky"} |= "Traceback".
+          # ---- Pi health check coverage (tm 034f40c5) ----------------------
+          # Mirrors ~/projects/allsky/tools/healthcheck.sh. Most of these read the
+          # Pi's 5-minutely logfmt health line (syslog tag allsky-health, facility
+          # user), e.g.:
+          #   uptime_s=9732 soc_temp_c=49.6 throttled=0x0 undervolt_now=0
+          #   undervolt_since_boot=0 throttled_now=0 temp_limit_now=0 disk_pct=56
+          #   dht_ok_5m=13 dht_err_5m=7 heater_source=weather ffmpeg_oldest_s=0
+          #   hotspot=active
+          # `| logfmt` turns every field into a label, so each unwrap/count is
+          # wrapped in max()/min()/sum() to collapse to one series. Deliberately not
+          # alerted: RTC "SET TIME" at boot (a note in the health check) and
+          # undervolt_since_boot (AllskyUndervoltage already catches the kernel line).
+          - alert: AllskyHealthLogMissing
+            # Fires alongside AllskyNoFrames when the Pi is down; on its own it means
+            # the health timer stopped.
+            expr: |
+              absent_over_time({host="indi-allsky", app="allsky-health"}[20m])
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: health check line missing for 20 min"
+              description: >-
+                No allsky-health line from indi-allsky.local in 20 minutes (normally one
+                every 5 minutes). If frames are also missing, the Pi is down or off the
+                network; otherwise the health timer has stopped and the other health
+                alerts are blind.
+          - alert: AllskyRebooted
+            # Fires once per boot (first line ~2 min after boot), including
+            # deliberate reboots.
+            expr: |
+              min(min_over_time({host="indi-allsky", app="allsky-health"} | logfmt | unwrap uptime_s [10m])) < 1200
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: the Pi has just rebooted"
+              description: >-
+                indi-allsky.local reports less than 20 minutes of uptime. Expected after a
+                deliberate reboot; otherwise check for a power cut, a crash or a watchdog
+                reset.
+          - alert: AllskySocHot
+            # Normal 42-55 C; briefly near the soft limit during the dawn timelapse.
+            expr: |
+              max(max_over_time({host="indi-allsky", app="allsky-health"} | logfmt | unwrap soc_temp_c [10m])) >= 75
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: Pi CPU at 75 C or hotter"
+              description: >-
+                The camera Pi's SoC temperature reached 75 C or more in the last 10 minutes
+                (normally 42-55 C). Check the enclosure's ventilation and the sun on it.
+          - alert: AllskyCpuThrottled
+            # The dawn encode can touch the soft temperature limit briefly (only a
+            # note in the health check), so only sustained throttling alerts.
+            expr: |
+              max(max_over_time({host="indi-allsky", app="allsky-health"} | logfmt | unwrap throttled_now [15m])) > 0
+              or
+              max(max_over_time({host="indi-allsky", app="allsky-health"} | logfmt | unwrap temp_limit_now [15m])) > 0
+            for: 10m
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: Pi CPU is being throttled"
+              description: >-
+                The camera Pi has reported active throttling or the soft temperature limit
+                for over 10 minutes. It's too hot or short of power, and captures and
+                encodes will slow down.
+          - alert: AllskyDiskFilling
+            expr: |
+              max(max_over_time({host="indi-allsky", app="allsky-health"} | logfmt | unwrap disk_pct [15m])) >= 80
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: Pi disk is 80% full"
+              description: >-
+                The camera Pi's root filesystem is at least 80% full (normally ~56%). Check
+                that local expiry is running and uploads aren't backing up.
+          - alert: AllskyDhtNoReads
+            # Only while the dew heater runs off the DHT (heater_source="dht"); with
+            # heater_source=weather no series exists, so nothing fires.
+            expr: |
+              sum(sum_over_time({host="indi-allsky", app="allsky-health"} | logfmt | heater_source="dht" | unwrap dht_ok_5m [1h])) == 0
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: no good DHT sensor reads for an hour"
+              description: >-
+                The dew heater is running off the DHT22 sensor, but it hasn't returned a
+                good reading in the last hour, so the heater isn't being controlled. Check
+                the sensor and its wiring.
+          - alert: AllskyDhtFailing
+            # Normal is ~14% of reads failing (DHT22).
+            expr: |
+              sum(sum_over_time({host="indi-allsky", app="allsky-health"} | logfmt | heater_source="dht" | unwrap dht_err_5m [1h]))
+              /
+              (
+                sum(sum_over_time({host="indi-allsky", app="allsky-health"} | logfmt | heater_source="dht" | unwrap dht_ok_5m [1h]))
+                +
+                sum(sum_over_time({host="indi-allsky", app="allsky-health"} | logfmt | heater_source="dht" | unwrap dht_err_5m [1h]))
+              ) > 0.4
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: over 40% of DHT sensor reads failing"
+              description: >-
+                The dew heater is running off the DHT22 sensor and more than 40% of its
+                reads failed in the last hour (normally ~14%). The sensor or its wiring is
+                degrading.
+          - alert: AllskyEncodeHung
+            # A normal timelapse encode takes a few minutes.
+            expr: |
+              max(max_over_time({host="indi-allsky", app="allsky-health"} | logfmt | unwrap ffmpeg_oldest_s [10m])) > 900
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: a video encode has run for over 15 min"
+              description: >-
+                An ffmpeg process on the camera Pi has been running for more than 15 minutes
+                (a normal timelapse encode takes a few). It's probably hung; the USB camera
+                watchdog will kill it eventually.
+          - alert: AllskyEncodeKilled
+            # ~1 in 2 months.
+            expr: |
+              sum(count_over_time({host="indi-allsky", app="usb-camera-watchdog"} |= "killing hung encode" [10m])) > 0
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: a hung video encode was killed"
+              description: >-
+                The USB camera watchdog killed a hung timelapse encode on the camera Pi, so
+                that video is lost. Check the Pi's logs around the kill.
+          - alert: AllskyCameraDropped
+            # Matches "MISSING - rebinding" and "STILL MISSING after rebind". The
+            # watchdog usually recovers within 5 min, before AllskyNoFrames would
+            # fire. ~1 in 2 months.
+            expr: |
+              sum(count_over_time({host="indi-allsky", app="usb-camera-watchdog"} |= "MISSING" [10m])) > 0
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: camera dropped off USB"
+              description: >-
+                The USB camera watchdog found the camera missing from the Pi's USB bus and
+                tried to rebind it. If AllskyNoFrames follows, the rebind didn't work and
+                the camera needs a power cycle.
+          - alert: AllskyCaptureException
+            expr: |
+              sum(count_over_time({host="indi-allsky", app="indi-allsky"} |= "Capture worker exception" [10m])) > 0
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: capture worker exception"
+              description: >-
+                indi-allsky's capture worker logged an exception in the last 10 minutes
+                (normally none). Check the Pi's logs:
+                {host="indi-allsky", app="indi-allsky"} |= "Capture worker exception".
+          - alert: AllskyHeaterGpioBusy
+            expr: |
+              sum(count_over_time({host="indi-allsky", app="indi-allsky"} |= "GPIO busy" [10m])) > 0
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: dew heater GPIO busy"
+              description: >-
+                indi-allsky couldn't claim the dew heater's GPIO pin, so the heater isn't
+                under control. Usually another process holds the pin; a restart of
+                indi-allsky normally clears it.
+          - alert: AllskyWifiDriverError
+            # The Pi runs an AP+client hotspot on its BCM43455; a firmware crash is
+            # the known risk. txcap_blob is a harmless boot-time message. Baseline 0.
+            expr: |
+              sum(count_over_time({host="indi-allsky", app="kernel"} |~ "brcmf" != "txcap_blob" |~ "(?i)error|fail|halt|timeout" [10m])) > 0
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: Wi-Fi driver error"
+              description: >-
+                The camera Pi's Wi-Fi driver (brcmfmac) logged an error, failure or timeout.
+                The Wi-Fi chip runs both the client link and the hotspot, so a firmware
+                crash can take both down. Check {host="indi-allsky", app="kernel"} |~ "brcmf".
+          - alert: AllskyHotspotDown
+            # Two consecutive samples. hotspot=none means not installed: no alert.
+            expr: |
+              sum(count_over_time({host="indi-allsky", app="allsky-health"} | logfmt | hotspot=~"inactive|failed" [15m])) >= 2
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: Wi-Fi hotspot is down"
+              description: >-
+                The camera Pi's "allsky" hotspot has been inactive or failed for two
+                health checks in a row. Check the allsky-ap service on the Pi.
+          - alert: AllskyHotspotFlapping
+            expr: |
+              sum(count_over_time({host="indi-allsky", app="allsky-ap"} |= "restarting" [1h])) > 3
+            labels:
+              severity: warning
+              namespace: allsky
+            annotations:
+              summary: "All-sky camera: Wi-Fi hotspot keeps restarting"
+              description: >-
+                The camera Pi's hotspot restarted more than 3 times in the last hour. The
+                Wi-Fi chip may be struggling to run the client link and the hotspot
+                together; check {host="indi-allsky", app=~"allsky-ap|hostapd|kernel"}.
