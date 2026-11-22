@@ -53,6 +53,14 @@ spec:
           args:
             - --max_allowed_packet=256M
             - --key_buffer_size=1200M
+            # Full-text search over titles/authors (MyISAM): index words of
+            # 2+ chars and disable the built-in stopword list (empty value),
+            # so short/common title words (Vor, War, Eye, It, Second) are
+            # searchable. FULLTEXT indexes only pick these up once rebuilt
+            # (REPAIR TABLE ... QUICK, or the weekly isfdb-refresh, which
+            # builds them fresh on its staging DB). See isfdb-adapter 9abf061.
+            - --ft_min_word_len=2
+            - --ft_stopword_file=
           volumeMounts:
             - name: data
               mountPath: /var/lib/mysql
