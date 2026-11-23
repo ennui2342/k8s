@@ -23,9 +23,11 @@ configMapGenerator:
       - zephyr-site/index.html
 # allsky-meteors camera settings + detection mask (binaryData). Master copy
 # in ~/projects/allsky/meteors-deploy/. Hash suffix: a change applies to the
-# next CronJob run.
+# next CronJob run. The mask is stored as .png.bin because Flux's
+# source-controller excludes *.png (and other images) from its artifact by
+# default; the ConfigMap key is still detect_mask.png.
   - name: allsky-meteors-config
     namespace: allsky
     files:
       - meteors-config/meteors.json
-      - meteors-config/detect_mask.png
+      - detect_mask.png=meteors-config/detect_mask.png.bin
