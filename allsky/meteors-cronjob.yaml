@@ -45,7 +45,7 @@ spec:
             fsGroup: 10001
           containers:
             - name: meteors
-              image: ghcr.io/ennui2342/allsky-meteors:1.20261123.1
+              image: ghcr.io/ennui2342/allsky-meteors:1.20261123.4
               imagePullPolicy: IfNotPresent
               # Default args: the image's CMD is `run`.
               env:
