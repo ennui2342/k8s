@@ -1078,12 +1078,27 @@ commit.
 
 **Static PV dirs** were created by hand before first apply, the same as the other static-PV dirs:
 ```sh
-ssh -p 9222 ennui2342@192.168.0.76 'for d in indi-allsky-db indi-allsky-images indi-allsky-state; do
+ssh -p 9222 ennui2342@192.168.0.76 'for d in indi-allsky-db indi-allsky-images indi-allsky-state indi-allsky-meteors; do
   mkdir /mnt/md0/k8s/$d && chmod 777 /mnt/md0/k8s/$d; done'
 ```
 On a rebuild where the NAS data survived, there's nothing to do. `indi-allsky-state` holds the
 Flask-Migrate folder, and it has to stay consistent with `indi-allsky-db`. Restore or wipe the two
 together, never one alone.
+
+(`indi-allsky-meteors` was added 2026-11-23 for the `allsky-meteors` CronJob, below.)
+
+**allsky-meteors** (`allsky/meteors-cronjob.yaml`, tm a2316080): meteor scorer, image
+`ghcr.io/ennui2342/allsky-meteors:<tag>` (public repo `ennui2342/allsky-meteors`, CI-built, no Flux
+image automation, bump the tag by hand). Every 10 min it scores the frames added since the last pass,
+read-only on the DB (`image`/`tle_data` SELECTs, as the app user `indi_allsky_own`) and the images PVC,
+and writes sqlite + crops to the `allsky-meteors` PVC (`/data`). Its config (`meteors.json`, incl. the
+site location, and `detect_mask.png`) is the `allsky-meteors-config` configMapGenerator from
+`allsky/meteors-config/` (master copy `~/projects/allsky/meteors-deploy/`). Rescore one night:
+```sh
+kubectl -n allsky create job meteors-night --from=cronjob/allsky-meteors --dry-run=client -o json \
+  | jq '.spec.template.spec.containers[0].args = ["night","2026-11-22","--force"]' | kubectl create -f -
+kubectl -n allsky logs -f job/meteors-night
+```
 
 **First start** takes about 2 minutes: start_gunicorn.sh sleeps 60s "waiting on database", then
 runs `flask db init` (first time only), `flask db revision --autogenerate` and `flask db upgrade`,

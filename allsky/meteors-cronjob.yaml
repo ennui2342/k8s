@@ -1,0 +1,104 @@
+# allsky-meteors (github.com/ennui2342/allsky-meteors): meteor scorer for the
+# all-sky camera. Each pass reads the night frames SyncAPI has added since the
+# last one (SELECTs on the indi-allsky `image` and `tle_data` tables, frames
+# from the images PVC mounted read-only), scores meteor candidates, writes
+# results (sqlite + JPEG crops) to /data, and exits. Once a day it fetches
+# satellite TLEs from celestrak.org over HTTPS (cached in /data; if that
+# fails the satellite check is skipped). CI-built public image, no Flux image
+# automation: bump the tag by hand. Added 2026-11-23 (tm a2316080).
+#
+# Ad-hoc rescore of one night (frames are kept 30 days):
+#   kubectl -n allsky create job meteors-night --from=cronjob/allsky-meteors \
+#     --dry-run=client -o json | jq '.spec.template.spec.containers[0].args =
+#     ["night","2026-11-22","--force"]' | kubectl create -f -
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: allsky-meteors
+  namespace: allsky
+spec:
+  schedule: "*/10 * * * *"
+  timeZone: Europe/London
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      # Sub-daily, and the only PVCs are RWX NFS (see LINT.md).
+      ttlSecondsAfterFinished: 3600
+      backoffLimit: 1
+      # A pass normally takes seconds (the first, 400 frames, a few minutes);
+      # with Forbid, a hung pass would otherwise block every later one.
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          restartPolicy: Never
+          affinity:
+            nodeAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  preference:
+                    matchExpressions:
+                      - key: node-role.kubernetes.io/control-plane
+                        operator: DoesNotExist
+          securityContext:
+            # The image runs as uid 1000; the frames are owned by the web
+            # pod's uid/gid 10001, so join that group to read them.
+            fsGroup: 10001
+          containers:
+            - name: meteors
+              image: ghcr.io/ennui2342/allsky-meteors:1.20261123.1
+              imagePullPolicy: IfNotPresent
+              # Default args: the image's CMD is `run`.
+              env:
+                # Must match the receiver: SyncAPI stores frame times in its
+                # local time.
+                - name: TZ
+                  value: Europe/London
+                - name: MARIADB_USER
+                  valueFrom:
+                    configMapKeyRef:
+                      name: allsky-config
+                      key: MARIADB_USER
+                - name: MARIADB_DATABASE
+                  valueFrom:
+                    configMapKeyRef:
+                      name: allsky-config
+                      key: MARIADB_DATABASE
+                - name: INDI_DB
+                  value: mysql://$(MARIADB_USER)@allsky-db:3306/$(MARIADB_DATABASE)
+                - name: INDI_DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: allsky-secrets
+                      key: MARIADB_PASSWORD
+                - name: ALLSKY_METEORS_CONFIG
+                  value: /config/meteors.json
+                - name: ALLSKY_METEORS_HOME
+                  value: /data
+              volumeMounts:
+                - name: images
+                  mountPath: /var/www/html/allsky
+                  readOnly: true
+                - name: config
+                  mountPath: /config
+                  readOnly: true
+                - name: data
+                  mountPath: /data
+              resources:
+                requests:
+                  cpu: 200m
+                  memory: 512Mi
+                limits:
+                  memory: 1Gi
+          volumes:
+            - name: images
+              persistentVolumeClaim:
+                claimName: allsky-images
+                readOnly: true
+            # meteors.json (camera settings incl. the site location, which is
+            # why it lives here and not in the public repo) + detect_mask.png.
+            - name: config
+              configMap:
+                name: allsky-meteors-config
+            - name: data
+              persistentVolumeClaim:
+                claimName: allsky-meteors

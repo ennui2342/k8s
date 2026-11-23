@@ -1,0 +1,15 @@
+{
+ "LOCATION_LATITUDE": 52.2,
+ "LOCATION_LONGITUDE": 0.11,
+ "LOCATION_ELEVATION": 10,
+ "IMAGE_FLIP_V": true,
+ "IMAGE_FLIP_H": true,
+ "IMAGE_FOLDER": "/var/www/html/allsky/images",
+ "DETECT_MASK": "/config/detect_mask.png",
+ "LENS_AZIMUTH": 7.0,
+ "VIRTUALSKY": {
+  "IMAGE_CIRCLE_DIAMETER": 937,
+  "OFFSET_X": 0,
+  "OFFSET_Y": 40
+ }
+}

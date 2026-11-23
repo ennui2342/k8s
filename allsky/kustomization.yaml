@@ -8,6 +8,7 @@ resources:
   - mariadb.yaml
   - web-deployment.yaml
   - expire-cronjob.yaml
+  - meteors-cronjob.yaml
   - ingress.yaml
   - certificate.yaml
   - public-ingressroute.yaml
@@ -20,3 +21,11 @@ configMapGenerator:
     namespace: allsky
     files:
       - zephyr-site/index.html
+# allsky-meteors camera settings + detection mask (binaryData). Master copy
+# in ~/projects/allsky/meteors-deploy/. Hash suffix: a change applies to the
+# next CronJob run.
+  - name: allsky-meteors-config
+    namespace: allsky
+    files:
+      - meteors-config/meteors.json
+      - meteors-config/detect_mask.png
