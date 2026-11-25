@@ -1,0 +1,53 @@
+---
+# Watch ghcr.io/ennui2342/home-energy for new 1.YYYYMMDD.RUN tags (daily monitor CronJob, ./home-energy).
+# Public package (code only, no secrets or personal data) - no pull credential needed.
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  name: home-energy
+  namespace: flux-system
+spec:
+  image: ghcr.io/ennui2342/home-energy
+  interval: 5m
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  name: home-energy
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: home-energy
+  policy:
+    semver:
+      range: ">=1.0.0"
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageUpdateAutomation
+metadata:
+  name: home-energy
+  namespace: flux-system
+spec:
+  interval: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  git:
+    checkout:
+      ref:
+        branch: main
+    commit:
+      author:
+        email: fluxcdbot@users.noreply.github.com
+        name: Flux
+      messageTemplate: |
+        chore: update home-energy image tag(s)
+
+        {{range .Changed.Changes -}}
+        - {{.OldValue}} -> {{.NewValue}}
+        {{end -}}
+    push:
+      branch: main
+  update:
+    path: ./home-energy
+    strategy: Setters

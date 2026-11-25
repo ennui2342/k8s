@@ -10,6 +10,7 @@ resources:
   - freshrss.yaml
   - health-monitor.yaml
   - home-assistant.yaml
+  - home-energy.yaml
   - isfdb.yaml
   - k3s-upgrade.yaml
   - linkding.yaml

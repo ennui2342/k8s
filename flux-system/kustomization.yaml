@@ -7,6 +7,7 @@ resources:
 - opsimath-image-automation.yaml
 - mg-reporting-image-automation.yaml
 - mg-reporting-ghcr-secret.yaml
+- home-energy-image-automation.yaml
 - discord-alert.yaml
 - discord-webhook-secret.yaml
 - discord-relay/relay.yaml

@@ -1,0 +1,50 @@
+# home-energy monitor (source: github.com/ennui2342/home-energy, bin/monitor.rb). Added 2026-11-25.
+# Daily: Octopus tariff/rate change check (Discord on change), records the 01:50 HA solar-forecast
+# snapshots and yesterday's PV into InfluxDB energy_5y. On the 1st: monthly model-vs-meter report
+# (savings vs old battery behaviour, model drift, forecast scores) to Discord + energy_5y.monthly_report.
+# Reads InfluxDB energy_5y.foxess_30m (cq_foxess_30m, RUNBOOK "InfluxDB retention policies") and HA REST.
+# Quiet on success except the monthly report; failures post to Discord and exit non-zero.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: home-energy-monitor
+  namespace: monitoring
+spec:
+  schedule: "15 6 * * *"
+  timeZone: Europe/London
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 604800   # daily job: LINT.md
+      activeDeadlineSeconds: 900
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          affinity:
+            nodeAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  preference:
+                    matchExpressions:
+                      - key: node-role.kubernetes.io/control-plane
+                        operator: DoesNotExist
+          containers:
+            - name: monitor
+              image: ghcr.io/ennui2342/home-energy:1.20261125.4 # {"$imagepolicy": "flux-system:home-energy"}
+              args: ["auto"]
+              envFrom:
+                - secretRef:
+                    name: home-energy-secrets
+              env:
+                - name: INFLUX_URL
+                  value: http://influxdb.monitoring.svc:8086
+                - name: HA_URL
+                  value: http://homeassistant-service.home-assistant.svc:8123
+              resources:
+                requests: { cpu: 50m, memory: 96Mi }
+                limits: { memory: 256Mi }
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 10001   # image's USER is the name "app"; kubelet can't verify runAsNonRoot without a numeric UID
+                allowPrivilegeEscalation: false
