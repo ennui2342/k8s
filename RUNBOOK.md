@@ -1437,8 +1437,8 @@ kubectl get cronjob nas-raid-monitor -n monitoring
 
 ### InfluxDB retention policies
 
-The `telegraf` database uses two retention policies that must be created
-after InfluxDB starts. The NFS volume persists these across pod restarts,
+The `telegraf` database uses three retention policies and one continuous query that
+must be created after InfluxDB starts. The NFS volume persists these across pod restarts,
 but they must be recreated on a fresh cluster build:
 
 ```sh
@@ -1449,7 +1449,21 @@ kubectl exec -n monitoring influxdb-0 -- influx -execute \
 # NAS SNMP metrics: separate long-term policy
 kubectl exec -n monitoring influxdb-0 -- influx -execute \
   "CREATE RETENTION POLICY nas_30d ON telegraf DURATION 30d REPLICATION 1"
+
+# FoxESS solar/battery: permanent 30-minute summaries (added 2026-11-25).
+# Raw 10 s data stays in autogen (7 days). InfluxDB itself runs the CQ every
+# 30 min (no external job), writing mean_/min_/max_<field> to
+# telegraf.energy_5y.foxess_30m (~1-2 MB/yr). Used for tariff/battery
+# analysis in ~/projects/home-energy.
+kubectl exec -n monitoring influxdb-0 -- influx -execute \
+  "CREATE RETENTION POLICY energy_5y ON telegraf DURATION 1825d REPLICATION 1"
+kubectl exec -n monitoring influxdb-0 -- influx -execute \
+  "CREATE CONTINUOUS QUERY cq_foxess_30m ON telegraf BEGIN SELECT mean(*), min(*), max(*) INTO telegraf.energy_5y.foxess_30m FROM telegraf.autogen.mqtt_consumer WHERE topic='solar/foxess' GROUP BY time(30m) END"
 ```
+
+The CQ only summarises data from the moment it exists. On a fresh volume,
+recreate both, then backfill whatever autogen still holds (at most 7 days):
+`SELECT mean(*), min(*), max(*) INTO telegraf.energy_5y.foxess_30m FROM telegraf.autogen.mqtt_consumer WHERE topic='solar/foxess' AND time > now() - 7d GROUP BY time(30m)`.
 
 ---
 
