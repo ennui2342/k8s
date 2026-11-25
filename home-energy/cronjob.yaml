@@ -15,7 +15,7 @@ spec:
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
-      ttlSecondsAfterFinished: 604800   # daily job: LINT.md
+      ttlSecondsAfterFinished: 604800 # daily job: LINT.md
       activeDeadlineSeconds: 900
       backoffLimit: 1
       template:
@@ -31,7 +31,7 @@ spec:
                         operator: DoesNotExist
           containers:
             - name: monitor
-              image: ghcr.io/ennui2342/home-energy:1.20261125.4 # {"$imagepolicy": "flux-system:home-energy"}
+              image: ghcr.io/ennui2342/home-energy:1.20261125.6 # {"$imagepolicy": "flux-system:home-energy"}
               args: ["auto"]
               envFrom:
                 - secretRef:
@@ -42,9 +42,9 @@ spec:
                 - name: HA_URL
                   value: http://homeassistant-service.home-assistant.svc:8123
               resources:
-                requests: { cpu: 50m, memory: 96Mi }
-                limits: { memory: 256Mi }
+                requests: {cpu: 50m, memory: 96Mi}
+                limits: {memory: 256Mi}
               securityContext:
                 runAsNonRoot: true
-                runAsUser: 10001   # image's USER is the name "app"; kubelet can't verify runAsNonRoot without a numeric UID
+                runAsUser: 10001 # image's USER is the name "app"; kubelet can't verify runAsNonRoot without a numeric UID
                 allowPrivilegeEscalation: false
