@@ -27,10 +27,9 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: wallabag
-          # Local build of upstream's own recipe on Alpine 3.24 + PHP 8.4.27 with
-          # session.upload_progress off (the published 2.6.17 image is Alpine 3.22 + PHP 8.2 with
-          # upload_progress still on). See trivy/patched-images/wallabag/build.sh.
-          image: 127.0.0.1:30500/wallabag:2.6.17-php8.4.27-20261117
+          # Plain upstream again since 2026-11-25 (tm 38a8a4ab): 2.6.18+ is Alpine 3.24 + PHP 8.3
+          # with session.upload_progress off, which retired the local php84 fork.
+          image: wallabag/wallabag:2.6.19
           imagePullPolicy: IfNotPresent
           args: ["wallabag"]
           ports:
