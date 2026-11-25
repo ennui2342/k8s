@@ -1459,7 +1459,7 @@ kubectl get cronjob nas-raid-monitor -n monitoring
 
 ### InfluxDB retention policies
 
-The `telegraf` database uses three retention policies and one continuous query that
+The `telegraf` database uses three retention policies and two continuous queries that
 must be created after InfluxDB starts. The NFS volume persists these across pod restarts,
 but they must be recreated on a fresh cluster build:
 
@@ -1481,11 +1481,22 @@ kubectl exec -n monitoring influxdb-0 -- influx -execute \
   "CREATE RETENTION POLICY energy_5y ON telegraf DURATION 1825d REPLICATION 1"
 kubectl exec -n monitoring influxdb-0 -- influx -execute \
   "CREATE CONTINUOUS QUERY cq_foxess_30m ON telegraf BEGIN SELECT mean(*), min(*), max(*) INTO telegraf.energy_5y.foxess_30m FROM telegraf.autogen.mqtt_consumer WHERE topic='solar/foxess' GROUP BY time(30m) END"
+
+# Weather station (WeeWX MQTT topic weather/loop): permanent 30-minute
+# summaries (added 2026-11-25, tm d3486716). Explicit field list, not mean(*),
+# because the topic carries many unrelated fields. Writes
+# telegraf.energy_5y.weather_30m (~1 MB/yr). Used for the gas-vs-outdoor-
+# temperature heat-loss baseline in ~/projects/home-energy (analysis/gas_hdd.rb).
+kubectl exec -n monitoring influxdb-0 -- influx -execute \
+  "CREATE CONTINUOUS QUERY cq_weather_30m ON telegraf BEGIN SELECT mean(outTemp_C) AS mean_outTemp_C, min(outTemp_C) AS min_outTemp_C, max(outTemp_C) AS max_outTemp_C, mean(outHumidity) AS mean_outHumidity, mean(windSpeed_kph) AS mean_windSpeed_kph, mean(barometer_mbar) AS mean_barometer_mbar INTO telegraf.energy_5y.weather_30m FROM telegraf.autogen.mqtt_consumer WHERE topic='weather/loop' GROUP BY time(30m) END"
 ```
 
-The CQ only summarises data from the moment it exists. On a fresh volume,
-recreate both, then backfill whatever autogen still holds (at most 7 days):
-`SELECT mean(*), min(*), max(*) INTO telegraf.energy_5y.foxess_30m FROM telegraf.autogen.mqtt_consumer WHERE topic='solar/foxess' AND time > now() - 7d GROUP BY time(30m)`.
+A CQ only summarises data from the moment it exists. On a fresh volume,
+recreate the RP and both CQs, then backfill whatever autogen still holds (at most 7 days):
+`SELECT mean(*), min(*), max(*) INTO telegraf.energy_5y.foxess_30m FROM telegraf.autogen.mqtt_consumer WHERE topic='solar/foxess' AND time > now() - 7d GROUP BY time(30m)`
+and
+`SELECT mean(outTemp_C) AS mean_outTemp_C, min(outTemp_C) AS min_outTemp_C, max(outTemp_C) AS max_outTemp_C, mean(outHumidity) AS mean_outHumidity, mean(windSpeed_kph) AS mean_windSpeed_kph, mean(barometer_mbar) AS mean_barometer_mbar INTO telegraf.energy_5y.weather_30m FROM telegraf.autogen.mqtt_consumer WHERE topic='weather/loop' AND time > now() - 7d GROUP BY time(30m)`
+(the weather one was run once on 2026-11-25, writing 337 points).
 
 ---
 
