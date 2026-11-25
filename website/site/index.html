@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<!-- Homelab landing page for k8s.ecafe.org. Source of truth: this file in the k8s repo (website/site/index.html),
+     served via the website-index configMapGenerator subPath-mounted over /usr/share/nginx/html/index.html.
+     Edit here and commit; the volume's copy is shadowed. Originally from ~/projects/home-energy d1f9e09.
+     Self-contained: no external fonts, scripts or CDNs (LAN/Tailscale page). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>k8s.ecafe.org</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1c2330; --muted: #6a7486; --line: #e3e6eb;
+    --accent: #2f6fdf; --accent-bg: #eaf1fd; --shadow: 0 1px 2px rgba(20,30,50,.06), 0 4px 14px rgba(20,30,50,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #11151c; --card: #1a2029; --text: #e6e9ee; --muted: #8e98a8; --line: #2a313d;
+            --accent: #7aa7ff; --accent-bg: #1f2a3d; --shadow: none; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  header { max-width: 1180px; margin: 0 auto; padding: 28px 16px 8px; display: flex; align-items: baseline;
+           justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 22px; letter-spacing: -.01em; }
+  h1 span { color: var(--muted); font-weight: 400; }
+  .search { flex: 1 1 220px; max-width: 320px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px;
+            background: var(--card); color: var(--text); font: inherit; }
+  main { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px;
+         display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); align-items: start; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 14px 10px; box-shadow: var(--shadow); }
+  h2 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  h2 .ico { margin-right: 6px; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { margin: 0; }
+  a, .plain { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 8px;
+              margin: 0 -8px; border-radius: 8px; color: var(--text); text-decoration: none; }
+  a:hover, a:focus-visible { background: var(--accent-bg); color: var(--accent); outline: none; }
+  .plain { color: var(--muted); }
+  .tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
+  .new { color: var(--accent); border-color: var(--accent); }
+  .sub { padding-left: 14px; }
+  footer { max-width: 1180px; margin: 0 auto; padding: 0 16px 28px; color: var(--muted); font-size: 12px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>k8s.ecafe.org <span>· homelab</span></h1>
+  <input class="search" id="q" type="search" placeholder="Filter links…" aria-label="Filter links" autocomplete="off">
+</header>
+
+<main id="grid">
+  <section>
+    <h2><span class="ico">⚡</span>Solar &amp; battery</h2>
+    <ul>
+      <li><a href="https://predbat.k8s.ecafe.org/">Predbat: battery plan &amp; control <span class="tag new">new</span></a></li>
+      <li><a href="http://home-assistant.k8s.ecafe.org/101-elizabeth-way/battery">HA Battery tab: status &amp; rollback <span class="tag new">new</span></a></li>
+      <li><a href="http://grafana.k8s.ecafe.org/d/1-GoRoH4z/solar?orgId=1&amp;refresh=10s&amp;from=now-24h&amp;to=now">Grafana solar dashboard</a></li>
+      <li><a href="http://home-assistant.k8s.ecafe.org/energy">Home Assistant energy</a></li>
+      <li><a href="http://192.168.0.188/">EW11 (Modbus gateway) <span class="tag">192.168.0.188</span></a></li>
+      <li><a href="http://192.168.0.105/">espressif <span class="tag">192.168.0.105</span></a></li>
+      <li><a href="http://www.foxesscloud.com/">FoxESS Cloud</a></li>
+      <li><span class="plain">modpoll container</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="ico">🏠</span>Home</h2>
+    <ul>
+      <li><a href="http://home-assistant.k8s.ecafe.org/">Home Assistant</a></li>
+      <li><a href="http://mac-studio.local:5001/">Frigate cameras</a></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="ico">📈</span>Monitoring</h2>
+    <ul>
+      <li><a href="http://grafana.k8s.ecafe.org/">Grafana dashboards</a></li>
+      <li><span class="plain">InfluxDB / Telegraf</span></li>
+      <li><span class="plain">Mosquitto</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="ico">✅</span>Productivity</h2>
+    <ul>
+      <li><a href="http://tasks.k8s.ecafe.org/">Tasks</a></li>
+      <li><a href="http://pinboard.k8s.ecafe.org/">Bookmarks</a></li>
+      <li><a href="http://later.k8s.ecafe.org/">Read later</a></li>
+      <li><a href="http://rss.k8s.ecafe.org/">Feeds</a></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="ico">📚</span>Back office</h2>
+    <ul>
+      <li><a href="http://opsimath.k8s.ecafe.org/">Opsimath: books</a></li>
+      <li><a href="https://docs.google.com/spreadsheets/d/1GtEcn_bVVb3Xs7y8DdRd0Tb4nmebCtlX53NPWS8FRW8/edit?pli=1&amp;gid=1961314296#gid=1961314296">Morat Games sheet</a></li>
+      <li><a href="https://admin.shopify.com/store/morat-games/">Morat Games Shopify</a></li>
+      <li><a href="https://go.zero.com/">Zero accounting</a></li>
+      <li><a href="https://app.linkmybooks.com/">Link My Books</a></li>
+      <li><a href="https://business.parcel.royalmail.com/">Post office</a></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="ico">🔭</span>Observatory</h2>
+    <ul>
+      <li><a href="http://grafana.k8s.ecafe.org/d/98rU06mRk/observatory?orgId=1&amp;refresh=1m&amp;from=now-2d&amp;to=now">Observatory dashboard</a></li>
+      <li><a href="/zephyr/">All-sky camera</a></li>
+      <li class="sub"><a href="http://allsky.local/indi-allsky/">All-sky admin</a></li>
+      <li><a href="http://zephyr.ecafe.org/">zephyr.ecafe.org <span class="tag">public</span></a></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="ico">🌦️</span>Weather station</h2>
+    <ul>
+      <li><a href="http://weatherstation.local/weewx/">WeeWX</a></li>
+      <li><a href="http://weatherstation.local/weewx/weather34/">Weather34</a></li>
+      <li><a href="http://weatherstation.local:8624/">INDI web manager</a></li>
+      <li><a href="http://weatherstation.local:8080/">Weather Radio API</a></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="ico">💾</span>NAS</h2>
+    <ul>
+      <li><a href="http://nas.local/">NAS admin</a></li>
+      <li><a href="http://grafana.k8s.ecafe.org/d/nas-monitor/nas-monitor?orgId=1&amp;from=now-6h&amp;to=now&amp;timezone=browser&amp;refresh=1m">NAS monitoring</a></li>
+      <li><a href="http://nas.local:32400/web/index.html#!/">Plex</a></li>
+      <li><a href="http://syncthing.k8s.ecafe.org">Syncthing</a></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="ico">🌐</span>Network</h2>
+    <ul>
+      <li><a href="https://my.noip.com/">DDNS (No-IP)</a></li>
+      <li><a href="http://192.168.0.1/">Vodafone router <span class="tag">.1</span></a></li>
+      <li><a href="http://192.168.0.50/">Archer router <span class="tag">.50</span></a></li>
+      <li><a href="http://192.168.0.51/">TL-WPA4220 lounge wifi <span class="tag">.51</span></a></li>
+      <li><a href="http://192.168.0.52/">TL-WPA4220 workshop wifi <span class="tag">.52</span></a></li>
+      <li><a href="http://localhost:631/">CUPS printing <span class="tag">localhost</span></a></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="ico">📍</span>Other static IPs</h2>
+    <ul>
+      <li><span class="plain">LG webOS TV <span class="tag">192.168.0.86</span></span></li>
+      <li><a href="http://grafana.k8s.ecafe.org/d/orrdjQlnk/weather-station?orgId=1&amp;refresh=1m&amp;from=now-2d&amp;to=now">Magic mirror <span class="tag">192.168.0.168</span></a></li>
+      <li><a href="http://192.168.0.167/">Sonoff RF Bridge <span class="tag">192.168.0.167</span></a></li>
+    </ul>
+  </section>
+</main>
+
+<footer>Served by nginx on k8s (192.168.0.8).</footer>
+
+<script>
+  // Type-to-filter: hides links (and empty sections) that don't match. Press "/" to focus the box.
+  const q = document.getElementById('q');
+  const sections = [...document.querySelectorAll('main section')];
+  function filter() {
+    const term = q.value.trim().toLowerCase();
+    for (const s of sections) {
+      let shown = 0;
+      for (const li of s.querySelectorAll('li')) {
+        const hit = !term || li.textContent.toLowerCase().includes(term) || s.querySelector('h2').textContent.toLowerCase().includes(term);
+        li.classList.toggle('hidden', !hit); if (hit) shown++;
+      }
+      s.classList.toggle('hidden', shown === 0);
+    }
+  }
+  q.addEventListener('input', filter);
+  document.addEventListener('keydown', e => { if (e.key === '/' && document.activeElement !== q) { e.preventDefault(); q.focus(); } });
+</script>
+</body>
+</html>

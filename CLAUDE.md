@@ -70,7 +70,7 @@ too.
 | `default` | nfs-provisioner | `nfs/template.yaml` | NFS subdir external provisioner |
 | `default` | syncthing | `syncthing/` | SyncThing file sync; config + data on NFS |
 | `default` | webdav | `webdav/` | hacdias/webdav server for Zotero PDF attachment sync; 20Gi NFS PV; `webdav.k8s.ecafe.org` ingress (internal/Tailscale, used by desktop Zotero) plus a Tailscale-operator Funnel Ingress (`webdav-funnel`) giving a trusted `*.ts.net` cert that works identically on-LAN and off — needed because Zotero for Android refuses self-signed/internal certs and the epigone.ecafe.org path hit home-router NAT-hairpin issues when accessed from inside the LAN; basic-auth user `zotero`, bcrypt password in `webdav-secret.yaml` |
-| `default` | web | `website/` | nginx + PHP-FPM StatefulSet; serves k8s.ecafe.org |
+| `default` | web | `website/` | nginx + PHP-FPM StatefulSet; serves k8s.ecafe.org. The landing page `index.html` lives in git (`website/site/index.html`, `website-index` configMapGenerator subPath-mounted over `/usr/share/nginx/html/index.html` in the nginx container, tm `5e7d2b5e`, 2026-11-25): edit it there, not on the volume. Everything else on the `web-data` NFS volume (`favicon.svg`, `/zephyr/`, ...) is still served from the volume |
 | `epigone` | epigone routing | `epigone/` | Owns the `epigone.ecafe.org` cert-manager Certificate + Traefik IngressRoute for Home Assistant. Kept as its own namespace (decoupled from home-assistant) since it was briefly shared with webdav too; webdav now uses Tailscale Funnel instead (see below), so this currently only fronts Home Assistant, but stays separate in case another service needs the same public hostname later. |
 | `freshrss` | freshrss | `freshrss/` | Self-hosted RSS reader, replacing Feedly — phase 1 of a Readwise Reader self-hosted evaluation (see `linkding`/`wallabag` below for the other phases). NFS-backed data + extensions PVCs; `rss.k8s.ecafe.org` ingress plus a Tailscale ingress for PWA/app installability testing. Custom `User-Agent` override (see recent commits) to fix bot-blocked feeds. Runs a locally-patched image (`127.0.0.1:30500/freshrss:1.31.0-patched-20261124`, see `trivy/patched-images.yaml`), upstream 1.31.0 plus a trixie-security dist-upgrade (zlib1g CVE-2026-85091). |
 | `home-assistant` | homeassistant | `home-assistant/ha-*.yaml` | HA 2026.11 (local fork `127.0.0.1:30500/home-assistant:2026.11-patched-20261110`; HACS is now the built-in Marketplace), ClusterIP Service (not `hostNetwork` — corrected 2026-07-29, `ha-deployment.yaml` doesn't set it, only the `mdns-repeater` DaemonSet in this repo does), config on NFS; reachable at `home-assistant.k8s.ecafe.org` and, via `epigone/`, at `epigone.ecafe.org` |
@@ -442,7 +442,7 @@ traefik/          — HelmChartConfig customizing k3s's bundled Traefik (allowCr
 trivy/            — Weekly CVE scanner CronJob; patched-images.yaml tracks custom image forks + reconciliation
 wallabag/         — Self-hosted read-it-later app (Readwise Reader evaluation, phase 1): deployment, data/images PVCs, internal + Tailscale ingress, secret
 webdav/           — hacdias/webdav deployment, PV/PVC, service, internal ingress, Tailscale Funnel ingress, config secret (Zotero PDF sync)
-website/          — nginx/PHP StatefulSet, configmaps, ingress
+website/          — nginx/PHP StatefulSet, configmaps, ingress; site/index.html is the landing page source (configMapGenerator)
 ```
 
 ## Orienting a New Claude Instance

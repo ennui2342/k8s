@@ -8,3 +8,10 @@ resources:
   - phpconfigmap.yaml
   - pv.yaml
   - svc.yaml
+configMapGenerator:
+  # Landing page source of truth (tm 5e7d2b5e). Subpath-mounted over index.html on the
+  # web-data volume, so everything else there (favicon.svg, /zephyr/, ...) is untouched.
+  # The name hash rolls the StatefulSet pod on every content change.
+  - name: website-index
+    files:
+      - index.html=site/index.html
