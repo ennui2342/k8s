@@ -17,6 +17,12 @@ pred_bat:
   ha_url: 'http://homeassistant-service.home-assistant.svc:8123'
   ha_key: !secret ha_key
 
+  # Web UI login for the settings/control pages. Required before Predbat controls the inverter: without it
+  # anyone on the LAN could change Predbat's settings. Password in secrets.yaml. Basic auth, so serve the UI
+  # through the internal HTTPS ingress.
+  web_username: admin
+  web_password: !secret web_password
+
   # Today-resetting energy counters (foxess_modbus)
   load_today:
     - sensor.load_energy_today

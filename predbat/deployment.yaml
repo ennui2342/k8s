@@ -4,7 +4,7 @@
 # services), but starts in Monitor mode, which does not control the inverter. The switch to
 # Control (select.predbat_mode) is a manual, watched step with Mark (CUTOVER.md); until then HA's
 # flux_mode_controller automation is still the inverter's only writer. Never flip it from here.
-# apps.yaml comes from the ConfigMap (read-only, git is the source of truth); secrets.yaml (ha_key) from a Secret.
+# apps.yaml comes from the ConfigMap (read-only, git is the source of truth); secrets.yaml (ha_key, web_password) from a Secret.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,6 +19,10 @@ spec:
   template:
     metadata:
       labels: { app: predbat }
+      annotations:
+        # Bump on any predbat-secrets change: a Secret edit doesn't roll the pod on its own
+        # (apps.yaml's configMapGenerator hash does that for the ConfigMap).
+        checksum/secrets: "2026-11-25-1"
     spec:
       affinity:
         nodeAffinity:
