@@ -30,3 +30,6 @@ package-lock.json
 
 # Claude per-project memory (local only)
 .claude/
+
+# local-only values (e.g. DISCORD_HOMELAB_WEBHOOK); never commit, this repo is public
+.env

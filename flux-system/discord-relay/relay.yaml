@@ -18,6 +18,10 @@ spec:
     metadata:
       labels:
         app: flux-discord-relay
+      annotations:
+        # The webhook comes in as an env var, so a change to the discord-webhook
+        # secret only takes effect on a pod restart: bump this when it changes.
+        discord-webhook/changed: "2026-11-25"  # moved to #homelab
     spec:
       # Soft worker-preference affinity comes from the Deployment-wide patch in
       # ./kustomization.yaml.
