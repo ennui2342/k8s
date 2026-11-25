@@ -118,12 +118,15 @@ pred_bat:
 
   num_cars: 0
 
-  # Octopus (BottlecapDave integration v19). Predbat joins Power Downs itself and plans around joined
-  # Power Downs / Power Ups (our own join automations are retired at cutover). 8 Octopoints = 1p.
-  octopus_saving_session: 're:(event.octopus_energy([0-9a-z_]+|)_(saving_session_events?|power_down_events))'
+  # Octopus (BottlecapDave integration v19). Predbat auto-joins Power Downs (switch.predbat_octopus_saving_auto_join)
+  # and plans around joined Power Downs and joined Weekend Happy Hours (priced 0p). Happy Hours are BOOKED by our HA
+  # automation octoplus_join_happy_hour (Predbat has no booking; maintainers prefer it outside - batpred #5404).
+  # Explicit entity ids, not regexes: a regex that can't match at startup (integration not ready yet) is disabled
+  # until Predbat restarts, silently pricing booked Happy Hours at full rate (batpred #6299). 8 Octopoints = 1p.
+  octopus_saving_session: event.octopus_energy_a_2c17795e_octoplus_power_down_events
   octopus_saving_session_octopoints_per_penny: 8
   octopus_saving_session_min_octopoints_per_kwh: 0
-  octopus_free_session: 're:(event.octopus_energy_([0-9a-z_]+|)_octoplus_(free_electricity_session_events|power_up_events))'
+  octopus_free_session: event.octopus_energy_a_2c17795e_octoplus_power_up_events
   metric_octopus_import: 're:(sensor.(octopus_energy_|)electricity_[0-9a-z]+_[0-9a-z]+_current_rate)'
   metric_octopus_export: 're:(sensor.(octopus_energy_|)electricity_[0-9a-z]+_[0-9a-z]+_export_current_rate)'
   metric_standing_charge: 're:(sensor.(octopus_energy_|)electricity_[0-9a-z]+_[0-9a-z]+_current_standing_charge)'
@@ -163,9 +166,9 @@ pred_bat:
 
 # Settings that live in Predbat's HA entities (set once after first start; see predbat/CUTOVER.md):
 #   select.predbat_mode                       Monitor -> (after plan check) Control charge & discharge
-#   input_number.predbat_battery_loss         0.08   (AC->stored: 0.95 x sqrt(0.946))
-#   input_number.predbat_battery_loss_discharge 0.10 (stored->AC: 0.93 x sqrt(0.946))
-#   input_number.predbat_inverter_loss        0.04   (PV DC->AC)
+#   input_number.predbat_battery_loss         0.03   (battery-only: sqrt of DC round trip 0.946)
+#   input_number.predbat_battery_loss_discharge 0.03 (battery-only; inverter conversion is separate, below)
+#   input_number.predbat_inverter_loss        0.06   (AC<->DC conversion: avg of 5% charge / 7% discharge). NB Predbat applies this ON TOP of the battery losses: putting conversion into battery_loss too double-counts (~76% round trip) and it stops planning the 16.18p charge.
 #   input_number.predbat_metric_battery_cycle 4      (p/kWh wear, as used in our model)
 #   switch.predbat_octopus_saving_auto_join   on (Power Downs; our own join automation is disabled at cutover)
 #   Fox calibration: battery must reach 100% at least weekly (see CUTOVER.md)
