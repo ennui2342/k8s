@@ -1,0 +1,12 @@
+# Web UI (plan, history, tariff comparison). Internal only - add an internal IngressRoute
+# (e.g. predbat.k8s.ecafe.org on the web/websecure entry points, NOT public/publictls) per cluster conventions.
+apiVersion: v1
+kind: Service
+metadata:
+  name: predbat
+spec:
+  selector: { app: predbat }
+  ports:
+    - name: web
+      port: 5052
+      targetPort: 5052

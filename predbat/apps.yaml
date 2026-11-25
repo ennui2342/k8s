@@ -1,0 +1,165 @@
+# Predbat configuration for 101's FoxESS H1-3.7-E (3x HV2600) on Octopus Flux, written 2026-11-25.
+# Based on springfall2008/batpred templates/fox.yaml (v9.10.0), adapted to this site's foxess_modbus entity
+# names (no "foxess_" prefix) and limits. Source of truth: github.com/ennui2342/home-energy predbat/apps.yaml.
+# Secrets (ha_key) live in secrets.yaml next to this file (PREDBAT_SECRETS_FILE), never in git.
+# All literal power limits are in WATTS (Predbat docs: a literal 3.68 would mean 3.68 W).
+pred_bat:
+  module: predbat
+  class: PredBat
+  prefix: predbat
+  timezone: Europe/London
+  currency_symbols:
+    - '£'
+    - 'p'
+  threads: 2                       # k8s pod: keep CPU bounded
+
+  # Home Assistant connection (in-cluster service; token from secrets.yaml)
+  ha_url: 'http://homeassistant-service.home-assistant.svc:8123'
+  ha_key: !secret ha_key
+
+  # Today-resetting energy counters (foxess_modbus)
+  load_today:
+    - sensor.load_energy_today
+  import_today:
+    - sensor.grid_consumption_energy_today
+  export_today:
+    - sensor.feed_in_energy_today
+  pv_today:
+    - sensor.solar_energy_today
+
+  num_inverters: 1
+  inverter_type: FoxESS
+
+  # Work-mode control (same modes our old controller used: Back-up = hold, Force Charge/Discharge, Self Use)
+  charge_start_service:
+    service: select.select_option
+    entity_id: select.work_mode
+    option: "Force Charge"
+  charge_freeze_service:
+    service: select.select_option
+    entity_id: select.work_mode
+    option: "Back-up"
+  charge_stop_service:
+    service: select.select_option
+    entity_id: select.work_mode
+    option: "Self Use"
+  discharge_start_service:
+    service: select.select_option
+    entity_id: select.work_mode
+    option: "Force Discharge"
+  discharge_stop_service:
+    service: select.select_option
+    entity_id: select.work_mode
+    option: "Self Use"
+  discharge_freeze_service:
+    service: select.select_option
+    entity_id: select.work_mode
+    option: "Feed-in First"
+
+  charge_rate:
+    - number.force_charge_power
+  discharge_rate:
+    - number.force_discharge_power
+  battery_power:
+    - sensor.invbatpower
+  pv_power:
+    - sensor.pv_power
+  load_power:
+    - sensor.load_power
+  grid_power:
+    - sensor.grid_ct                # foxess_modbus: + export / - import, hence invert
+  grid_power_invert:
+    - True
+  soc_percent:
+    - sensor.battery_soc
+  soc_max:
+    - sensor.battery_capacity_kwh   # template sensor, 6.23 kWh (BMS at 100%)
+  soc_kw:
+    - sensor.bms_kwh_remaining
+  reserve:
+    - number.min_soc_on_grid
+  battery_min_soc:
+    - input_number.battery_min_soc
+  battery_temperature:
+    - sensor.battery_temp
+  battery_temperature_history:
+    - sensor.battery_temp
+
+  # Limits (W). Inverter 3.68 kW; observed 3.57 kW DC charge / 3.87 kW DC discharge; G98 agreed export 3.6 kW.
+  inverter_limit:
+    - 3680
+  inverter_limit_charge:
+    - 3680
+  inverter_limit_discharge:
+    - 3680
+  battery_rate_max:
+    - 3500
+  export_limit:
+    - 3600
+
+  inverter_clock_skew_start: 0
+  inverter_clock_skew_end: 0
+  inverter_clock_skew_discharge_start: 0
+  inverter_clock_skew_discharge_end: 0
+  clock_skew: 0
+
+  # Solar forecast: Solcast HA integration (site 45 deg / azimuth 231 / 3.12 kWp). Forecast.Solar keeps running
+  # in HA and both are scored by the home-energy monitor; switch these four lines if Forecast.Solar wins.
+  pv_forecast_today: sensor.solcast_pv_forecast_forecast_today
+  pv_forecast_tomorrow: sensor.solcast_pv_forecast_forecast_tomorrow
+  pv_forecast_d3: sensor.solcast_pv_forecast_forecast_day_3
+  pv_forecast_d4: sensor.solcast_pv_forecast_forecast_day_4
+
+  num_cars: 0
+
+  # Octopus (BottlecapDave integration v19). Predbat joins Power Downs itself and plans around joined
+  # Power Downs / Power Ups (our own join automations are retired at cutover). 8 Octopoints = 1p.
+  octopus_saving_session: 're:(event.octopus_energy([0-9a-z_]+|)_(saving_session_events?|power_down_events))'
+  octopus_saving_session_octopoints_per_penny: 8
+  octopus_saving_session_min_octopoints_per_kwh: 0
+  octopus_free_session: 're:(event.octopus_energy_([0-9a-z_]+|)_octoplus_(free_electricity_session_events|power_up_events))'
+  metric_octopus_import: 're:(sensor.(octopus_energy_|)electricity_[0-9a-z]+_[0-9a-z]+_current_rate)'
+  metric_octopus_export: 're:(sensor.(octopus_energy_|)electricity_[0-9a-z]+_[0-9a-z]+_export_current_rate)'
+  metric_standing_charge: 're:(sensor.(octopus_energy_|)electricity_[0-9a-z]+_[0-9a-z]+_current_standing_charge)'
+
+  days_previous:
+    - 7
+  forecast_hours: 48
+  battery_scaling:
+    - 1.0
+  import_export_scaling: 1.0
+
+  export_triggers:
+    - name: 'large'
+      minutes: 60
+      energy: 1.0
+    - name: 'small'
+      minutes: 15
+      energy: 0.25
+
+  # Tariff comparison (nightly, analysis only). Standing charges excluded by Predbat. Region A (Eastern).
+  dno_region: "A"
+  compare_list:
+    - id: 'current'
+      name: 'Flux import/Flux export (current)'
+    - id: 'agile_agile'
+      name: 'Agile import/Agile export'
+      rates_import_octopus_url: 'https://api.oegb-kraken.energy/v1/products/AGILE-24-10-01/electricity-tariffs/E-1R-AGILE-24-10-01-{dno_region}/standard-unit-rates/'
+      rates_export_octopus_url: 'https://api.oegb-kraken.energy/v1/products/AGILE-OUTGOING-19-05-13/electricity-tariffs/E-1R-AGILE-OUTGOING-19-05-13-{dno_region}/standard-unit-rates/'
+    - id: 'go_outgoing'
+      name: 'GO import/Outgoing fixed export (needs an EV)'
+      rates_import_octopus_url: 'https://api.oegb-kraken.energy/v1/products/GO-VAR-22-10-14/electricity-tariffs/E-1R-GO-VAR-22-10-14-{dno_region}/standard-unit-rates/'
+      rates_export_octopus_url: 'https://api.oegb-kraken.energy/v1/products/OUTGOING-VAR-24-10-26/electricity-tariffs/E-1R-OUTGOING-VAR-24-10-26-{dno_region}/standard-unit-rates/'
+    - id: 'flexible_agile_out'
+      name: 'Flexible import/Agile export'
+      rates_import_octopus_url: 'https://api.oegb-kraken.energy/v1/products/VAR-22-11-01/electricity-tariffs/E-1R-VAR-22-11-01-{dno_region}/standard-unit-rates/'
+      rates_export_octopus_url: 'https://api.oegb-kraken.energy/v1/products/AGILE-OUTGOING-19-05-13/electricity-tariffs/E-1R-AGILE-OUTGOING-19-05-13-{dno_region}/standard-unit-rates/'
+
+# Settings that live in Predbat's HA entities (set once after first start; see predbat/CUTOVER.md):
+#   select.predbat_mode                       Monitor -> (after plan check) Control charge & discharge
+#   input_number.predbat_battery_loss         0.08   (AC->stored: 0.95 x sqrt(0.946))
+#   input_number.predbat_battery_loss_discharge 0.10 (stored->AC: 0.93 x sqrt(0.946))
+#   input_number.predbat_inverter_loss        0.04   (PV DC->AC)
+#   input_number.predbat_metric_battery_cycle 4      (p/kWh wear, as used in our model)
+#   switch.predbat_octopus_saving_auto_join   on (Power Downs; our own join automation is disabled at cutover)
+#   Fox calibration: battery must reach 100% at least weekly (see CUTOVER.md)

@@ -1,0 +1,84 @@
+# Predbat battery planner/controller (springfall2008/batpred via the nipar44/predbat_addon container).
+# Source/config of record: github.com/ennui2342/home-energy predbat/ (apps.yaml, CUTOVER.md).
+# Will replace the home-energy HA automations as the ONLY writer to the FoxESS inverter (via HA
+# services), but starts in Monitor mode, which does not control the inverter. The switch to
+# Control (select.predbat_mode) is a manual, watched step with Mark (CUTOVER.md); until then HA's
+# flux_mode_controller automation is still the inverter's only writer. Never flip it from here.
+# apps.yaml comes from the ConfigMap (read-only, git is the source of truth); secrets.yaml (ha_key) from a Secret.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: predbat
+  labels: { app: predbat }
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate          # never two Predbats talking to the inverter at once
+  selector:
+    matchLabels: { app: predbat }
+  template:
+    metadata:
+      labels: { app: predbat }
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      containers:
+        - name: predbat
+          # Plain upstream, pinned release. No Flux image automation on purpose: Predbat ships
+          # several releases a week, so upgrades are deliberate (bump this tag by hand).
+          image: nipar44/predbat_addon:v9.10.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: web
+              containerPort: 5052
+          env:
+            - name: TZ
+              value: Europe/London
+            - name: PREDBAT_SECRETS_FILE
+              value: /secrets/secrets.yaml
+            - name: WAIT_FOR_HA_HOST
+              value: homeassistant-service.home-assistant.svc
+            - name: WAIT_FOR_HA_PORT
+              value: "8123"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: apps
+              mountPath: /config/apps.yaml
+              subPath: apps.yaml
+              readOnly: true
+            - name: secrets
+              mountPath: /secrets
+              readOnly: true
+          # Same endpoint as the image's own Docker HEALTHCHECK (/dash). Generous liveness:
+          # a plan calculation is CPU-heavy and can briefly starve the web thread.
+          readinessProbe:
+            httpGet: { path: /dash, port: web }
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+          livenessProbe:
+            httpGet: { path: /dash, port: web }
+            initialDelaySeconds: 300
+            periodSeconds: 60
+            timeoutSeconds: 15
+            failureThreshold: 5
+          resources:
+            requests: { cpu: 200m, memory: 512Mi }
+            limits: { memory: 2Gi }      # docs recommend >=3 GB on the host; plan calc is the peak
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: predbat-config
+        - name: apps
+          configMap:
+            name: predbat-apps
+        - name: secrets
+          secret:
+            secretName: predbat-secrets

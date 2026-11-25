@@ -23,6 +23,7 @@ resources:
   - nfs.yaml
   - opsimath.yaml
   - os-eol-scanner.yaml
+  - predbat.yaml
   - prometheus.yaml
   - pvc-usage-monitor.yaml
   - registry.yaml

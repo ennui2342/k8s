@@ -1,0 +1,36 @@
+# Predbat working directory (/config): plan history, learned rate grids, logs, web UI state,
+# plus the Python program files the entrypoint copies in from /addon on first start.
+# Static Retain PV, same shape as ring-mqtt/pvc.yaml. The NAS dir was created by hand before
+# first apply (mkdir /mnt/md0/k8s/predbat-config && chmod 777, see RUNBOOK "Predbat").
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: predbat-config
+spec:
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: 2Gi
+  claimRef:
+    name: predbat-config
+    namespace: home-assistant
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-client
+  volumeMode: Filesystem
+  nfs:
+    path: /mnt/md0/k8s/predbat-config
+    server: 192.168.0.76
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: predbat-config
+  namespace: home-assistant
+spec:
+  volumeName: predbat-config
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 2Gi

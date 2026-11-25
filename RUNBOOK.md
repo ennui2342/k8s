@@ -1171,6 +1171,28 @@ amtool --alertmanager.url=http://localhost:9093 silence expire <id>      # when 
 (`brew install prometheus` provides `amtool`; alternatively use
 `kubectl exec -n monitoring alertmanager-kube-prometheus-stack-alertmanager-0 -c alertmanager -- amtool --alertmanager.url=http://localhost:9093 ...`.)
 
+### Predbat (battery planner)
+
+`predbat/` runs Predbat (springfall2008/batpred) from the community container
+`nipar44/predbat_addon:<tag>` in the `home-assistant` namespace, plain upstream, pinned, **no Flux
+image automation** (Predbat releases several times a week; bump the tag by hand). Its config of
+record is `predbat/apps.yaml` in `ennui2342/home-energy`; copy it into `predbat/apps.yaml` here
+whenever it changes (the `configMapGenerator` hash rolls the pod). It reaches HA in-cluster at
+`http://homeassistant-service.home-assistant.svc:8123` with its own long-lived token (`predbat`),
+held in `predbat/predbat-secret.yaml` (`secrets.yaml` key, Predbat's `!secret` file).
+
+**Mode safety:** deployed 2026-11-25 in Monitor mode (plans, never writes to the inverter). The
+cutover to Control is a manual, watched step (home-energy `predbat/CUTOVER.md`); HA's
+`flux_mode_controller` automation is the inverter's only writer until then. Don't change
+`select.predbat_mode` or any `switch.predbat_*` from automation. The web UI
+(`predbat.k8s.ecafe.org`, internal only) has no login and can change those settings.
+
+**Static PV dir:** `/mnt/md0/k8s/predbat-config` was created by hand before first apply
+(`ssh -p 9222 ennui2342@192.168.0.76 'mkdir /mnt/md0/k8s/predbat-config && chmod 777
+/mnt/md0/k8s/predbat-config'`). On first start the entrypoint (`/addon/run.standalone.sh`) copies
+Predbat's Python files into `/config`; it skips `apps.yaml` there because the ConfigMap subPath
+mount already occupies it. On a rebuild where the NAS data survived, there's nothing to do.
+
 ### WebDAV (Zotero) — Tailscale Funnel
 
 `webdav/funnel-ingress.yaml` exposes webdav at a stable `*.ts.net` hostname via the

@@ -1,0 +1,23 @@
+# Predbat web UI (plan, history, tariff comparison). Internal only (LAN/Tailscale Split DNS):
+# a plain Ingress lands on the default web + websecure entry points, same shape as
+# allsky/ingress.yaml and home-assistant/ha-ingress.yaml. No TLS cert (*.k8s.ecafe.org is
+# internal DNS). Never add public/publictls: the UI has no login (apps.yaml sets no
+# web_username/web_password) and can change Predbat's settings, including select.predbat_mode.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: predbat
+  namespace: home-assistant
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: predbat.k8s.ecafe.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: predbat
+                port:
+                  number: 5052
