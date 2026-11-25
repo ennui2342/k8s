@@ -169,7 +169,7 @@ The age public key is embedded there. The **private key** lives only at
 - `predbat/predbat-secret.yaml` — `predbat-secrets` in `home-assistant`: one key, `secrets.yaml` (Predbat's `!secret` file: `ha_key: <HA long-lived token named 'predbat'>` and `web_password` for the web UI login, added 2026-11-25), mounted at `/secrets` with `PREDBAT_SECRETS_FILE=/secrets/secrets.yaml`. Added 2026-11-25
 - `mg-reporting/mg-reporting-secret.yaml` — `mg-reporting-secrets`: `APP_DATABASE_PASSWORD` + `SECRET_KEY_BASE` (both generated), plus `AI_GATEWAY_KEY`/`ANTHROPIC_API_KEY`/`GMAIL_USERNAME`/`GMAIL_APP_PASSWORD`/`DIGEST_TO` copied from `~/projects/mg-reporting/.env`. No `RAILS_MASTER_KEY` — the app takes everything from env
 - `mg-reporting/ghcr-pull-secret.yaml` + `flux-system/mg-reporting-ghcr-secret.yaml` — `docker-registry` pull secrets for the private `ghcr.io/ennui2342/mg-reporting` image (`ghcr-pull` for the pod, `mg-reporting-ghcr` for the Flux `ImageRepository`); username `ennui2342`, password the read:packages-only classic PAT `GHCR_READ_TOKEN` from `~/projects/mg-reporting/.env`. The first private-image pull secrets in this repo
-- `opsimath/opsimath-secret.yaml` — `RAILS_MASTER_KEY` (decrypts `config/credentials.yml.enc`, which holds `secret_key_base` plus real Goodreads and Discord bot secrets — never baked into the image or committed anywhere, per the source repo's own `config/master.key`, itself gitignored there too) and `APP_DATABASE_PASSWORD` for the bundled Postgres
+- `opsimath/opsimath-secret.yaml` — `RAILS_MASTER_KEY` (decrypts `config/credentials.yml.enc`, which holds `secret_key_base` plus real Goodreads and Discord bot secrets — never baked into the image or committed anywhere, per the source repo's own `config/master.key`, itself gitignored there too) and `APP_DATABASE_PASSWORD` for the bundled Postgres, plus `DISCORD_WEBHOOK` (the `#opsimath` incoming webhook, from opsimath's gitignored `.env`; replaced the Rails-credentials bot token for notifications 2026-11-25)
 
 **Secrets NOT in git (provisioned imperatively or auto-managed):**
 - `epigone/epigone.ecafe.org-production` — TLS cert (managed by cert-manager, auto-renewed)
@@ -248,8 +248,8 @@ Manifests: `flux-system/taskmgt-image-automation.yaml`
 Prefer an incoming webhook for anything that only posts: a webhook URL can only post to its one
 channel, while a bot token can act anywhere the bot can.
 
-Not homelab ops, so deliberately elsewhere: opsimath's own app notifications (`#general`, set in
-its Rails credentials), home-energy (`#home`), mg-reporting (`#mg-reports`).
+Not homelab ops, so deliberately elsewhere: opsimath's own app notifications (`#opsimath`, the
+`DISCORD_WEBHOOK` in `opsimath-secrets`), home-energy (`#home`), mg-reporting (`#mg-reports`).
 
 Flux alerts on deployment events via Discord webhook. Manifests: `flux-system/discord-alert.yaml`.
 The Provider is `type: generic`, pointing at `flux-system/discord-relay/` (`flux-discord-relay`,
