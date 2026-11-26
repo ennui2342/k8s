@@ -48,6 +48,42 @@ tolerations:
     effect: NoSchedule
 ```
 
+### Nightly schedule: one maintenance window, two protected windows
+**All times Europe/London.** These apply to anything that runs on or touches the cluster: CronJobs,
+node-local cron/timers, recurring jobs inside apps (opsimath's and mg-reporting's Solid Queue
+`config/recurring.yml`), the Mac's aswarm pipelines, and agent work.
+
+- **Maintenance window: 05:10–05:55 daily.** Reserved for disruptive maintenance, today the
+  health-gated node reboots (`node-provisioning/`): master 05:10, `k8s-1` 05:20, `k8s-2` 05:30,
+  `k8s-3` 05:40. **Nothing else may be scheduled to start in it**, and a job that starts before
+  it must be expected to finish by 05:10. Only jobs that run hourly or more often and are harmless
+  to miss once are exempt (the NAS monitors, health-monitor, allsky-meteors, hourly cache warms).
+- **Protected windows: 02:00–05:00 and 16:00–19:00.** Predbat (and HA, which it drives the
+  inverter through) runs the home battery live, with no fallback schedule on the inverter: the
+  Octopus Flux cheap charge is 02:00–05:00, the peak 16:00–19:00, and Predbat switches modes at
+  02:00, 05:00, 16:00 and 19:00. **No planned disruption to `home-assistant` (HA, Predbat,
+  ring-mqtt), `default/mosquitto` or `default/modpoll`, or to the nodes they run on**, in those
+  windows: no reboots, drains, k3s upgrades, rollouts or restarts. Unattended agents defer such
+  work to outside the windows; a human may override for a genuine emergency.
+- **Use `timeZone: Europe/London`** on any CronJob tied to these windows. A UTC schedule drifts an
+  hour against them every summer (BST). `LINT.md` checks CronJobs against all of this.
+- **Keep this table current** when you add or move anything that runs overnight:
+
+| Europe/London | What |
+|---|---|
+| every 30 min | agent-orchestrator (Mac); deploy every tick, upgrade/health specialists dispatch only at **01:00** and **06:00** (each up to 3h, so they must respect the protected windows themselves) |
+| **02:00–05:00** | **protected: Flux cheap charge** |
+| 02:30–05:00 | opsimath nightly batch (known editions 02:30, wishlist 02:40, eBay 02:50, anchored refresh 03:30, sweep 03:45, snapshot 03:55, eBay 04:00, digest 04:30, line wants 05:00). **These are UTC** (no app or container time zone), so in BST they run an hour later and the 04:30 digest lands at 05:30, inside the maintenance window, until tm `15f1e314` pins them to Europe/London |
+| 03:30 | master datastore backup (node-local cron) |
+| **05:10–05:55** | **maintenance window: node reboots, if one is pending** |
+| ~06:00–07:00 | `apt-daily-upgrade` on every node (jittered; a kernel it installs reboots at the next night's slot) |
+| 06:15 | home-energy-monitor |
+| 06:20 onwards | mg-reporting collectors (06:20–21:55) |
+| 06:30 | isfdb-weekly-monitor (Mac, daily despite the name) |
+| Mon 07:00 / 07:30 UTC | cve-scanner / os-eol-scanner |
+| Sun 08:00 UTC | isfdb-refresh |
+| **16:00–19:00** | **protected: peak** |
+
 ## Cluster Hygiene Checklist
 
 See `LINT.md` — the mechanically-checkable manifest standard for this repo, deliberately kept
@@ -381,15 +417,16 @@ healthy** (all nodes Ready, nothing crash-looping, no Running pod stuck not-Read
 kube-state-metrics actually reporting), otherwise holds and posts a `NodeRebootHeld` alert that
 health-monitor turns into a task. Added after 2026-11-12, when the old blind timer rebooted all
 four nodes onto a kernel (7.0.0-1023) that broke container AppArmor, k8s-1 first and the rest
-anyway (tm 17f100eb). **Reserves 04:15–05:15 daily, staggered per node (master 04:15, `k8s-1` 04:30, `k8s-2` 04:45,
-`k8s-3` 05:00, ~5min each in practice), for an automatic reboot** if one's pending — avoid
-scheduling any new node-local cron entry or CronJob in that window. Staggered deliberately, not
-a single shared time: every node runs the identical OS image, so an update needing a reboot
-tends to land on all four within the same day or two, and a shared time would mean the whole
-cluster going down simultaneously with no cross-node awareness — a smaller-scale echo of the
-exact problem this fleet's 2026-08-19/22 rebuild was about. Master first so it's stable before
-any worker needs to rejoin it. Chosen to sit clear of the two windows below and master's own
-03:30 backup cron.
+anyway (tm 17f100eb). **Reboots happen only in the nightly maintenance window, 05:10–05:55, staggered per node (master
+05:10, `k8s-1` 05:20, `k8s-2` 05:30, `k8s-3` 05:40), if one's pending** — see "Nightly schedule"
+under Scheduling Constraints for the window and what must stay out of it. (Was 04:15–05:00 until
+2026-11-26; moved out of the battery's 02:00–05:00 charge window, tm `6687a9cb`.) Staggered
+deliberately, not a single shared time: every node runs the identical OS image, so an update
+needing a reboot tends to land on all four within the same day or two, and a shared time would
+mean the whole cluster going down simultaneously with no cross-node awareness — a smaller-scale
+echo of the exact problem this fleet's 2026-08-19/22 rebuild was about. Master first so it's
+stable before any worker needs to rejoin it; each node's gate holds if the previous one didn't
+come back healthy.
 
 Images with no upstream fix get rebuilt locally and forked (`127.0.0.1:30500/*-patched`,
 `imagePullPolicy: IfNotPresent`, pushed to the local registry). Every fork

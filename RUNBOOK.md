@@ -378,10 +378,10 @@ once" problem this fleet spent 2026-08-19 through -22 dealing with —
 caught live during review, not something to reintroduce by accident.
 Master goes first so it's stable before any worker needs to rejoin it:
 ```sh
-# master: 04:15, k8s-1: 04:30, k8s-2: 04:45, k8s-3: 05:00 (15min apart,
+# master: 05:10, k8s-1: 05:20, k8s-2: 05:30, k8s-3: 05:40 (10min apart,
 # comfortably more than the ~1-3min a Pi actually takes to reboot and
-# reconnect, confirmed live during the rebuild)
-sed "s/Automatic-Reboot-Time \"04:15\"/Automatic-Reboot-Time \"<this node's time>\"/" \
+# reconnect; moved from 04:15-05:00 on 2026-11-26, tm 6687a9cb)
+sed "s/Automatic-Reboot-Time \"05:10\"/Automatic-Reboot-Time \"<this node's time>\"/" \
   node-provisioning/52unattended-upgrades-local.conf > /tmp/local.conf
 scp /tmp/local.conf ubuntu@<node>:/tmp/52unattended-upgrades-local.conf
 ssh ubuntu@<node> "sudo mv /tmp/52unattended-upgrades-local.conf /etc/apt/apt.conf.d/ && sudo chown root:root /etc/apt/apt.conf.d/52unattended-upgrades-local.conf"
@@ -406,7 +406,7 @@ would have held k8s-2 at 04:45 (isfdb-db-0 Running, not Ready), and passed
 all 56 slots of the 14 nights before.
 ```sh
 # same per-node slot as Automatic-Reboot-Time above
-sed "s/OnCalendar=\*-\*-\* 04:15:00/OnCalendar=*-*-* <this node's time>:00/" \
+sed "s/OnCalendar=\*-\*-\* 05:10:00 Europe\/London/OnCalendar=*-*-* <this node's time>:00 Europe\/London/" \
   node-provisioning/k8s-gated-reboot.timer > /tmp/k8s-gated-reboot.timer
 scp node-provisioning/k8s-gated-reboot.sh node-provisioning/k8s-gated-reboot.service \
   /tmp/k8s-gated-reboot.timer ubuntu@<node>:/tmp/
@@ -422,11 +422,12 @@ Prometheus up. If either is down it holds (fail closed), and if
 Alertmanager is down too the hold is only in the journal
 (`journalctl -t k8s-gated-reboot`).
 
-**Full reserved window: 04:15 (master) – 05:00 (k8s-3), done by ~05:05
-in practice.** Any new node-local cron entry or CronJob should avoid
-04:00–05:15 to leave headroom — see CLAUDE.md's CVE Patch Management
-section for the other nightly windows (01:00/06:00 agent-orchestrator
-dispatch, 03:30 master backup) this was chosen to sit clear of.
+**These slots are the nightly maintenance window, 05:10–05:55 Europe/London**, done by ~05:45
+in practice. Nothing else may be scheduled to start in it, and the battery's protected windows
+(02:00–05:00, 16:00–19:00) must stay free of reboots: see CLAUDE.md's "Nightly schedule" under
+Scheduling Constraints for the full rules and the current overnight table, and `LINT.md` for the
+CronJob check. Moved here from 04:15–05:00 on 2026-11-26 (tm `6687a9cb`), when Predbat started
+driving the battery through the cheap-charge window.
 
 ### 0f-bis. AppArmor sysctl: let runc apply container profiles unstacked
 

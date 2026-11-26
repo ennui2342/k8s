@@ -1,12 +1,14 @@
 # Host-local, NOT GitOps-managed: deploy to /etc/systemd/system/ on every node.
-# STAGGERED per node, same slots unattended-upgrades' Automatic-Reboot-Time used:
-#   master (k8s) 04:15, k8s-1 04:30, k8s-2 04:45, k8s-3 05:00
+# STAGGERED per node, inside the nightly maintenance window (CLAUDE.md, "Nightly
+# schedule"), 05:10-05:55 Europe/London, clear of the 02:00-05:00 battery charge:
+#   master (k8s) 05:10, k8s-1 05:20, k8s-2 05:30, k8s-3 05:40
+# (moved from 04:15/04:30/04:45/05:00 on 2026-11-26, tm 6687a9cb)
 # This copy: MASTER. Change OnCalendar before deploying to a worker.
 [Unit]
 Description=Daily health-gated reboot slot for pending updates
 
 [Timer]
-OnCalendar=*-*-* 04:15:00
+OnCalendar=*-*-* 05:10:00 Europe/London
 AccuracySec=1s
 
 [Install]

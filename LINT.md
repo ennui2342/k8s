@@ -475,6 +475,23 @@ Fixed directly, in the same commit as this rule. Check method: for every
 Whoever rebases a fork (usually the upgrade specialist) should grep CLAUDE.md for the old tag in the same
 commit.
 
+**Every CronJob's schedule must respect the nightly schedule (CLAUDE.md, "Nightly schedule").**
+Check each `spec.schedule` against these, in Europe/London:
+- If it runs **daily or less often**, it must not start inside the **maintenance window,
+  05:10–05:55**, and must be expected to finish before 05:10 if it starts earlier. Jobs running
+  hourly or more often and harmless to miss once are exempt.
+- If it can restart or disrupt `home-assistant` (HA, Predbat, ring-mqtt), `default/mosquitto`,
+  `default/modpoll`, or the node they run on, it must not run in the **protected windows,
+  02:00–05:00 and 16:00–19:00**.
+- It should set `spec.timeZone: Europe/London`. A schedule left on UTC moves an hour against
+  these windows every BST: check its local time in **both** GMT and BST.
+- Adding or moving a daily-or-rarer job means adding or updating its row in CLAUDE.md's
+  nightly table.
+
+Added 2026-11-26 (tm `6687a9cb`): the node reboot slots (then 04:15–05:00) sat inside the
+battery's 02:00–05:00 cheap-charge window, rebooting Predbat's and HA's nodes mid-charge, and
+nothing checked new schedules against anything else running overnight.
+
 ## Starter items — not yet verified repo-wide
 
 Empty as of 2026-11-15 (unchanged since 2026-09-01; the 2026-11-15 CA-expiry and doc-image-tag rules, like 2026-11-01's, were concrete enough to go straight into Confirmed rules). The next durable finding (from a future audit's research pass, or from
