@@ -17,6 +17,10 @@ spec:
     metadata:
       labels:
         app: mg-reporting-worker
+      annotations:
+        # Bump when mg-reporting-secrets/-config change: envFrom is read only
+        # at container start, so a Secret edit alone never reaches the pod.
+        checksum/secrets: "2026-11-26-1" # dropped AI_GATEWAY_KEY/ANTHROPIC_API_KEY (tm cfde5935)
     spec:
       affinity:
         nodeAffinity:
