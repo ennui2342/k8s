@@ -73,7 +73,7 @@ node-local cron/timers, recurring jobs inside apps (opsimath's and mg-reporting'
 |---|---|
 | every 30 min | agent-orchestrator (Mac); deploy every tick, upgrade/health specialists dispatch only at **01:00** and **06:00** (each up to 3h, so they must respect the protected windows themselves) |
 | **02:00–05:00** | **protected: Flux cheap charge** |
-| 02:30–05:00 | opsimath nightly batch (known editions 02:30, wishlist 02:40, eBay 02:50, anchored refresh 03:30, sweep 03:45, snapshot 03:55, eBay 04:00, digest 04:30, line wants 05:00). **These are UTC** (no app or container time zone), so in BST they run an hour later and the 04:30 digest lands at 05:30, inside the maintenance window, until tm `15f1e314` pins them to Europe/London |
+| 02:30–04:50 | opsimath nightly batch, Europe/London since 2026-11-26 (tm `15f1e314`): line wants 02:30, known editions 02:40, wishlist 02:50, anchored refresh 03:30, decision sweep 03:45, mobile snapshot 03:55, eBay sweep 04:00 (~15 min), digest 04:30, cover warm-up 04:40 (~9 min). A test in opsimath keeps every nightly job starting before 05:00 UK time |
 | 03:30 | master datastore backup (node-local cron) |
 | **05:10–05:55** | **maintenance window: node reboots, if one is pending** |
 | ~06:00–07:00 | `apt-daily-upgrade` on every node (jittered; a kernel it installs reboots at the next night's slot) |
