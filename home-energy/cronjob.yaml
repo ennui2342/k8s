@@ -31,7 +31,7 @@ spec:
                         operator: DoesNotExist
           containers:
             - name: monitor
-              image: ghcr.io/ennui2342/home-energy:1.20261126.32 # {"$imagepolicy": "flux-system:home-energy"}
+              image: ghcr.io/ennui2342/home-energy:1.20261126.33 # {"$imagepolicy": "flux-system:home-energy"}
               args: ["auto"]
               envFrom:
                 - secretRef:
