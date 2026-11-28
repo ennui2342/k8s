@@ -140,7 +140,8 @@ too.
 
 Frigate is **not** on the cluster: it runs in Docker Desktop on the Mac Studio (compose project
 `/Volumes/SSD/sync/projects/frigate/`, local-only git repo, UI `http://mac-studio.local:5001/`,
-go2rtc RTSP restream on the Mac's `:8554`). Live since 2026-07-16. It depends on two cluster NodePorts
+go2rtc RTSP restream on the Mac's `:8554`). Live since 2026-07-16. Its job is to filter Ring
+doorbell motion down to people (without a Ring subscription the Ring app alerts on any movement). It depends on two cluster NodePorts
 on master: ring-mqtt's RTSP restream (`192.168.0.8:30002`) and mosquitto (`192.168.0.8:31883`),
 and HA consumes it through the `frigate` custom integration (in HA's `custom_components`). So
 changing those NodePorts, or moving ring-mqtt/mosquitto, breaks Frigate and HA's driveway alerts.
