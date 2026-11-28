@@ -136,6 +136,22 @@ too.
 | `taskmgt` | api + frontend | `taskmgt/` | Task management app; see Flux image automation below |
 | `wallabag` | wallabag | `wallabag/` | Self-hosted read-it-later app, replacing Instapaper — phase 1 of the Readwise Reader self-hosted evaluation alongside `freshrss`. NFS-backed data + images PVCs; `later.k8s.ecafe.org` ingress plus a Tailscale ingress for PWA installability testing. Runs plain upstream `wallabag/wallabag:2.6.19` (Alpine 3.24 + PHP 8.3, no Flux image automation, bump by hand); the 2026-10-24 to 2026-11-25 local php84 fork was retired once upstream shipped Alpine 3.24 with `session.upload_progress` off (tm `38a8a4ab`). |
 
+### Off-cluster: Frigate NVR on the Mac Studio
+
+Frigate is **not** on the cluster: it runs in Docker Desktop on the Mac Studio (compose project
+`/Volumes/SSD/sync/projects/frigate/`, local-only git repo, UI `http://mac-studio.local:5001/`,
+go2rtc RTSP restream on the Mac's `:8554`). Live since 2026-07-16. It depends on two cluster NodePorts
+on master: ring-mqtt's RTSP restream (`192.168.0.8:30002`) and mosquitto (`192.168.0.8:31883`),
+and HA consumes it through the `frigate` custom integration (in HA's `custom_components`). So
+changing those NodePorts, or moving ring-mqtt/mosquitto, breaks Frigate and HA's driveway alerts.
+
+**Why not on the cluster** (reconstructed 2026-11-28, not recorded at the time; Mark recalls
+"processing / ARM"): every node is a Raspberry Pi 4 (4 cores, 8 GB, arm64) with no detector
+accelerator (no Coral, no GPU Frigate can use), and Frigate's object detection plus ffmpeg decode
+is CPU-heavy (the config uses `detectors: cpu` with 4 threads). That load on Pi 4s would
+compete with everything else and with the NFS-latency-sensitive workloads. Before proposing a move
+to the cluster, solve the detector (e.g. a USB Coral on a worker) first.
+
 ### Key Ingress Hostnames
 - `k8s.ecafe.org` — website
 - `syncthing.k8s.ecafe.org` — SyncThing web UI, internal DNS only
